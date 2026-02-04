@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ThesisSearch - Local Search UI</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f2eb;
+        --panel: #ffffff;
+        --ink: #1a1a1a;
+        --muted: #6b6b6b;
+        --accent: #0f4c5c;
+        --accent-2: #e36414;
+        --border: #ded6c9;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Georgia", "Times New Roman", serif;
+        color: var(--ink);
+        background: radial-gradient(circle at top left, #fff8ee, var(--bg));
+      }
+      header {
+        padding: 2.5rem 1.5rem 1rem;
+        text-align: center;
+      }
+      header h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(2rem, 4vw, 3.25rem);
+        letter-spacing: 0.02em;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+      .container {
+        max-width: 980px;
+        margin: 0 auto 3rem;
+        padding: 0 1.5rem 3rem;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 1.5rem;
+        box-shadow: 0 10px 30px rgba(15, 76, 92, 0.08);
+      }
+      form {
+        display: grid;
+        gap: 1rem;
+      }
+      .row {
+        display: grid;
+        gap: 1rem;
+      }
+      @media (min-width: 800px) {
+        .row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      label {
+        display: block;
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin-bottom: 0.35rem;
+      }
+      input[type="text"],
+      input[type="number"],
+      select {
+        width: 100%;
+        padding: 0.75rem 0.85rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font-size: 1rem;
+        background: #fffdf8;
+      }
+      .search-row {
+        display: grid;
+        gap: 1rem;
+      }
+      @media (min-width: 800px) {
+        .search-row {
+          grid-template-columns: 1fr auto;
+        }
+      }
+      button {
+        border: none;
+        border-radius: 12px;
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(120deg, var(--accent), #0b7285);
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover {
+        background: linear-gradient(120deg, #0b7285, var(--accent));
+      }
+      .method-toggle {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .method-toggle label {
+        margin: 0;
+      }
+      .method-pill {
+        padding: 0.4rem 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: #fffdf8;
+        font-size: 0.9rem;
+      }
+      .results {
+        margin-top: 2rem;
+        display: grid;
+        gap: 1rem;
+      }
+      .result-card {
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: #fffdf8;
+      }
+      .result-meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-bottom: 0.5rem;
+      }
+      .error {
+        background: #fff0e6;
+        border: 1px solid #ffc9a7;
+        color: #7a2e0d;
+        border-radius: 12px;
+        padding: 0.75rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>ThesisSearch Test Bench</h1>
+      <p>Quick UI for BM25 and vector search over parsed Docplus files.</p>
+    </header>
+    <main class="container">
+      <section class="panel">
+        <form action="/search" method="post">
+          <div class="method-toggle">
+            <span class="method-pill">
+              <input
+                type="radio"
+                id="method-bm25"
+                name="method"
+                value="bm25"
+                {% if method != "vector" %}checked{% endif %}
+              />
+              <label for="method-bm25">BM25</label>
+            </span>
+            <span class="method-pill">
+              <input
+                type="radio"
+                id="method-vector"
+                name="method"
+                value="vector"
+                {% if method == "vector" %}checked{% endif %}
+              />
+              <label for="method-vector">Vector (FAISS)</label>
+            </span>
+          </div>
+
+          <div class="search-row">
+            <div>
+              <label for="query">Search query</label>
+              <input
+                id="query"
+                type="text"
+                name="query"
+                placeholder="Enter search query"
+                value="{{ query or '' }}"
+                required
+              />
+            </div>
+            <div style="align-self: end;">
+              <button type="submit">Search</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="parsed_dir">Parsed dir (BM25)</label>
+              <input
+                id="parsed_dir"
+                type="text"
+                name="parsed_dir"
+                value="{{ defaults.parsed_dir }}"
+              />
+            </div>
+            <div>
+              <label for="top_k">Top-k</label>
+              <input id="top_k" type="number" name="top_k" value="{{ defaults.top_k }}" min="1" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="index_path">FAISS index path</label>
+              <input
+                id="index_path"
+                type="text"
+                name="index_path"
+                value="{{ defaults.index_path }}"
+              />
+            </div>
+            <div>
+              <label for="metadata_path">Metadata JSONL path</label>
+              <input
+                id="metadata_path"
+                type="text"
+                name="metadata_path"
+                value="{{ defaults.metadata_path }}"
+              />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="model_name">Model name</label>
+              <input
+                id="model_name"
+                type="text"
+                name="model_name"
+                value="{{ defaults.model_name }}"
+              />
+            </div>
+            <div>
+              <label for="device">Device</label>
+              <select id="device" name="device">
+                <option value="auto" {% if defaults.device == "auto" %}selected{% endif %}>auto</option>
+                <option value="cpu" {% if defaults.device == "cpu" %}selected{% endif %}>cpu</option>
+                <option value="cuda" {% if defaults.device == "cuda" %}selected{% endif %}>cuda</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      {% if errors %}
+      <div class="results">
+        {% for error in errors %}
+        <div class="error">{{ error }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if results %}
+      <section class="results">
+        {% for result in results %}
+        <article class="result-card">
+          <div class="result-meta">
+            Score: {{ "%.4f" | format(result.score) }}
+            | Chunk: {{ result.chunk_id }}
+          </div>
+          <div class="result-meta">{{ result.source_path }}</div>
+          <div>{{ result.text }}</div>
+        </article>
+        {% endfor %}
+      </section>
+      {% endif %}
+    </main>
+  </body>
+</html>

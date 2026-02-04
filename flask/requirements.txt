@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+pdfminer.six
+python-docx
+faiss-cpu
+numpy
+torch
+transformers
+flask
