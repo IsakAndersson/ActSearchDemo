@@ -239,3 +239,5 @@ yarn-error.log*
 # Ignore the files in the output directory
 output/
 **/output/
+
+requirements_lock.txt
