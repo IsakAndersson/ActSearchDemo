@@ -1,12 +1,16 @@
-from ranx import Qrels, Run
+import ir_measures
+from ir_measures import *
+from qrels import qrels
+from run import run
 
-qrels_dict = { "q_1": { "d_12": 5, "d_25": 3 },
-               "q_2": { "d_11": 6, "d_22": 1 } }
+#metrics: 
+#Judged@k: Percentage of results in the top k (cutoff) results that have relevance judgments.
+#nDCG: The normalized Discounted Cumulative Gain (nDCG)
+#P: Precision
+#P(rel=2): Precision in the top k, considering only documents with relevance level 2 as relevant.
 
-run_dict = { "q_1": { "d_12": 0.9, "d_23": 0.8, "d_25": 0.7,
-                      "d_36": 0.6, "d_32": 0.5, "d_35": 0.4  },
-             "q_2": { "d_12": 0.9, "d_11": 0.8, "d_25": 0.7,
-                      "d_36": 0.6, "d_22": 0.5, "d_35": 0.4  } }
+#returns a python dictionary 
+results = ir_measures.calc_aggregate([nDCG@10, P@5, P(rel=2)@5, Judged@10], qrels, run)
 
-qrels = Qrels(qrels_dict)
-run = Run(run_dict)
+print("--- Utvärderingsresultat ---")
+print(results)
