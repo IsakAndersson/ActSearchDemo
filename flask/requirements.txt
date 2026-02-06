@@ -4,6 +4,7 @@ pdfminer.six
 python-docx
 faiss-cpu
 numpy
-torch
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.3.1+cu118
 transformers
 flask

@@ -98,15 +98,20 @@ python -m search.bm25_search \
   --query "I vilka fall behöver patienter adrenalin"
 ```
 
-## Flask test server
+## Flask API server
 
-Run a local UI for both BM25 and vector search:
+Run the local API used by the Next.js frontend:
 
 ```bash
 python app.py
 ```
 
-Set defaults via environment variables if needed:
+API endpoints:
+
+- `GET /` health/info endpoint
+- `POST /search` search endpoint (JSON body or form body)
+
+Set defaults and CORS via environment variables if needed:
 
 ```bash
 export DOCPLUS_PARSED_DIR=output/parsed
@@ -115,6 +120,7 @@ export DOCPLUS_METADATA_PATH=output/vector_index/docplus_metadata.jsonl
 export DOCPLUS_MODEL_NAME=KBLab/bert-base-swedish-cased
 export DOCPLUS_DEVICE=auto
 export DOCPLUS_TOP_K=5
+export DOCPLUS_ALLOWED_ORIGIN=https://your-vercel-app.vercel.app
 ```
 
 ### Notes

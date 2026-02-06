@@ -1,0 +1,292 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+const SESSION_KEY = "actsearch-authenticated";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:5000";
+
+type SearchMethod = "bm25" | "vector";
+
+type SearchResult = {
+  score?: number;
+  text?: string;
+  chunk_text?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export default function SearchPage() {
+  const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [method, setMethod] = useState<SearchMethod>("bm25");
+  const [query, setQuery] = useState("");
+  const [parsedDir, setParsedDir] = useState("output/parsed");
+  const [indexPath, setIndexPath] = useState("output/vector_index/docplus.faiss");
+  const [metadataPath, setMetadataPath] = useState(
+    "output/vector_index/docplus_metadata.jsonl",
+  );
+  const [modelName, setModelName] = useState("KBLab/bert-base-swedish-cased");
+  const [device, setDevice] = useState("auto");
+  const [topK, setTopK] = useState("5");
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem(SESSION_KEY) === "true";
+    if (!isAuthenticated) {
+      router.replace("/");
+      return;
+    }
+    setIsReady(true);
+  }, [router]);
+
+  const canSubmit = useMemo(() => query.trim().length > 0 && !isLoading, [isLoading, query]);
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setErrors([]);
+    setResults([]);
+
+    try {
+      const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method,
+          query,
+          parsed_dir: parsedDir,
+          index_path: indexPath,
+          metadata_path: metadataPath,
+          model_name: modelName,
+          device,
+          top_k: topK,
+        }),
+      });
+
+      const payload = (await response.json()) as { errors?: string[]; results?: SearchResult[] };
+
+      if (!response.ok) {
+        setErrors(payload.errors && payload.errors.length ? payload.errors : ["Search failed."]);
+        return;
+      }
+
+      setErrors(payload.errors ?? []);
+      setResults(payload.results ?? []);
+    } catch (error) {
+      setErrors([
+        error instanceof Error
+          ? `Request failed: ${error.message}`
+          : "Request failed with an unknown error.",
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isReady) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen px-4 py-10 md:px-8">
+      <main className="mx-auto w-full max-w-5xl">
+        <div className="card border border-base-300 bg-base-100 shadow-xl">
+          <div className="card-body gap-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+                  Docplus Search
+                </h1>
+                <p className="mt-1 text-sm text-base-content/70">
+                  Clean test UI with Flask API as backend.
+                </p>
+              </div>
+              <span className="badge badge-outline badge-primary">Next.js + Flask</span>
+            </div>
+
+            <form className="space-y-4" onSubmit={onSubmit}>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text text-base">Query</span>
+                </div>
+                <input
+                  className="input input-bordered input-primary w-full"
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search in documents..."
+                  required
+                />
+              </label>
+
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text text-base">Search type</span>
+                </div>
+                <select
+                  className="select select-bordered w-full"
+                  value={method}
+                  onChange={(event) => setMethod(event.target.value as SearchMethod)}
+                >
+                  <option value="bm25">BM25</option>
+                  <option value="vector">Vector (FAISS)</option>
+                </select>
+              </label>
+
+              <details className="dropdown dropdown-bottom w-full">
+                <summary className="btn btn-ghost btn-sm">Advanced settings</summary>
+                <div className="card card-sm z-10 mt-3 w-full border border-base-300 bg-base-100 shadow-lg">
+                  <div className="card-body grid gap-4 md:grid-cols-2">
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">API base URL</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={apiBaseUrl}
+                        onChange={(event) => setApiBaseUrl(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Model name</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={modelName}
+                        onChange={(event) => setModelName(event.target.value)}
+                        list="model-options"
+                      />
+                    </label>
+                    <datalist id="model-options">
+                      <option value="KBLab/bert-base-swedish-cased" />
+                      <option value="sentence-transformers/paraphrase-multilingual-mpnet-base-v2" />
+                      <option value="intfloat/multilingual-e5-base" />
+                    </datalist>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Parsed dir (BM25)</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={parsedDir}
+                        onChange={(event) => setParsedDir(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Top-k</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="number"
+                        min={1}
+                        value={topK}
+                        onChange={(event) => setTopK(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">FAISS index path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={indexPath}
+                        onChange={(event) => setIndexPath(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Metadata path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={metadataPath}
+                        onChange={(event) => setMetadataPath(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Device</span>
+                      </div>
+                      <select
+                        className="select select-bordered"
+                        value={device}
+                        onChange={(event) => setDevice(event.target.value)}
+                      >
+                        <option value="auto">auto</option>
+                        <option value="cpu">cpu</option>
+                        <option value="cuda">cuda</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </details>
+
+              <div className="pt-1">
+                <button className="btn btn-primary btn-wide" type="submit" disabled={!canSubmit}>
+                  {isLoading ? (
+                    <>
+                      <span className="loading loading-spinner loading-sm" />
+                      Searching
+                    </>
+                  ) : (
+                    "Search"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {errors.length > 0 ? (
+          <section className="mt-5 space-y-2">
+            {errors.map((error) => (
+              <div className="alert alert-error" key={error}>
+                <span>{error}</span>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {results.length > 0 ? (
+          <section className="mt-5 grid gap-3">
+            {results.map((result, index) => (
+              <article className="card border border-base-300 bg-base-100 shadow-md" key={`${index}-${String(result.score ?? "")}`}>
+                <div className="card-body gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="badge badge-primary badge-outline">Rank {index + 1}</span>
+                    <span className="text-sm text-base-content/70">
+                      Score:{" "}
+                      {typeof result.score === "number"
+                        ? result.score.toFixed(4)
+                        : String(result.score ?? "n/a")}
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-6">
+                    {String(result.chunk_text ?? result.text ?? "")}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </section>
+        ) : null}
+      </main>
+    </div>
+  );
+}

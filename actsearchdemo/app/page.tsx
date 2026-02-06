@@ -1,64 +1,65 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+
+const DEMO_PASSWORD = "actsearchdemo";
+const SESSION_KEY = "actsearch-authenticated";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (password !== DEMO_PASSWORD) {
+      setError("Wrong password.");
+      return;
+    }
+
+    localStorage.setItem(SESSION_KEY, "true");
+    router.push("/search");
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff9ef,#f6f0e5)] px-6 py-20 text-[#211f1b]">
+      <main className="mx-auto w-full max-w-lg rounded-3xl border border-[#d9cfbf] bg-[#fffcf6] p-10 shadow-[0_20px_60px_rgba(0,0,0,0.08)]">
+        <h1 className="mb-2 font-serif text-4xl">ActSearch Demo</h1>
+        <p className="mb-8 text-sm text-[#6f6557]">
+          Enter the hardcoded password to open the search interface.
+        </p>
+
+        <form className="space-y-5" onSubmit={onSubmit}>
+          <label className="block">
+            <span className="mb-2 block text-sm text-[#6f6557]">Password</span>
+            <input
+              className="w-full rounded-xl border border-[#cdbfa8] bg-white px-4 py-3 outline-none focus:border-[#1f6e6e]"
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setError(null);
+                setPassword(event.target.value);
+              }}
+              placeholder="Password"
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </label>
+
+          {error ? (
+            <p className="rounded-lg border border-[#f0b79f] bg-[#ffe8dc] px-3 py-2 text-sm text-[#7a2e0d]">
+              {error}
+            </p>
+          ) : null}
+
+          <button
+            className="w-full rounded-xl bg-[#1f6e6e] px-4 py-3 font-semibold text-white transition hover:bg-[#175959]"
+            type="submit"
           >
-            Documentation
-          </a>
-        </div>
+            Continue
+          </button>
+        </form>
       </main>
     </div>
   );

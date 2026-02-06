@@ -1,10 +1,10 @@
-"""Flask server for testing Docplus search methods."""
+"""Flask API server for Docplus BM25 and vector search."""
 from __future__ import annotations
 
 import os
 from typing import Any, Dict, List
 
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, request
 
 from search.bm25_search import bm25_search
 from search.vector_index import DEFAULT_MODEL, query_index
@@ -18,34 +18,63 @@ def _get_env_default(name: str, fallback: str) -> str:
 app = Flask(__name__)
 
 
-@app.get("/")
-def index() -> str:
-    defaults = {
-        "parsed_dir": _get_env_default("DOCPLUS_PARSED_DIR", "output/parsed"),
-        "index_path": _get_env_default("DOCPLUS_INDEX_PATH", "output/vector_index/docplus.faiss"),
-        "metadata_path": _get_env_default(
-            "DOCPLUS_METADATA_PATH", "output/vector_index/docplus_metadata.jsonl"
+@app.after_request
+def add_cors_headers(response):  # type: ignore[no-untyped-def]
+    response.headers["Access-Control-Allow-Origin"] = os.getenv(
+        "DOCPLUS_ALLOWED_ORIGIN",
+        "*",
+    )
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        "parsed_dir": str(
+            payload.get("parsed_dir")
+            or _get_env_default("DOCPLUS_PARSED_DIR", "output/parsed")
         ),
-        "model_name": _get_env_default("DOCPLUS_MODEL_NAME", DEFAULT_MODEL),
-        "device": _get_env_default("DOCPLUS_DEVICE", "auto"),
-        "top_k": _get_env_default("DOCPLUS_TOP_K", "5"),
+        "index_path": str(
+            payload.get("index_path")
+            or _get_env_default("DOCPLUS_INDEX_PATH", "output/vector_index/docplus.faiss")
+        ),
+        "metadata_path": str(
+            payload.get("metadata_path")
+            or _get_env_default(
+                "DOCPLUS_METADATA_PATH", "output/vector_index/docplus_metadata.jsonl"
+            )
+        ),
+        "model_name": str(
+            payload.get("model_name")
+            or _get_env_default("DOCPLUS_MODEL_NAME", DEFAULT_MODEL)
+        ),
+        "device": str(payload.get("device") or _get_env_default("DOCPLUS_DEVICE", "auto")),
+        "top_k": str(payload.get("top_k") or _get_env_default("DOCPLUS_TOP_K", "5")),
     }
-    return render_template("index.html", defaults=defaults, results=None, errors=None)
 
 
-@app.post("/search")
-def search() -> str:
-    method = request.form.get("method", "bm25")
-    query = (request.form.get("query") or "").strip()
+@app.get("/")
+def health() -> Any:
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Docplus API is running.",
+            "endpoints": {"search": "/search (POST)"},
+        }
+    )
 
-    defaults = {
-        "parsed_dir": request.form.get("parsed_dir", "output/parsed"),
-        "index_path": request.form.get("index_path", "output/vector_index/docplus.faiss"),
-        "metadata_path": request.form.get("metadata_path", "output/vector_index/docplus_metadata.jsonl"),
-        "model_name": request.form.get("model_name", DEFAULT_MODEL),
-        "device": request.form.get("device", "auto"),
-        "top_k": request.form.get("top_k", "5"),
-    }
+
+@app.route("/search", methods=["POST", "OPTIONS"])
+def search() -> Any:
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    method = str(payload.get("method", "bm25")).lower()
+    query = str(payload.get("query") or "").strip()
+
+    defaults = _defaults_from_payload(payload)
 
     errors: List[str] = []
     results: List[Dict[str, Any]] | None = None
@@ -83,14 +112,16 @@ def search() -> str:
         else:
             errors.append(f"Unknown method '{method}'.")
 
-    return render_template(
-        "index.html",
-        defaults=defaults,
-        results=results,
-        errors=errors or None,
-        query=query,
-        method=method,
-    )
+    status_code = 400 if errors else 200
+    return jsonify(
+        {
+            "query": query,
+            "method": method,
+            "defaults": defaults,
+            "results": results or [],
+            "errors": errors,
+        }
+    ), status_code
 
 
 if __name__ == "__main__":
