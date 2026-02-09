@@ -16,6 +16,105 @@ type SearchResult = {
   [key: string]: unknown;
 };
 
+const getStringValue = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getMetadataValue = (
+  metadata: Record<string, unknown> | undefined,
+  keys: string[],
+): string | undefined => {
+  if (!metadata) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = getStringValue(metadata[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const getNameFromPath = (value: string): string | undefined => {
+  try {
+    const url = new URL(value);
+    const last = url.pathname.split("/").filter(Boolean).pop();
+    return last ? decodeURIComponent(last) : undefined;
+  } catch {
+    const last = value.split("/").filter(Boolean).pop();
+    return last || undefined;
+  }
+};
+
+const getTitleFromUrl = (value: string): string | undefined => {
+  try {
+    const url = new URL(value);
+    const filename =
+      url.searchParams.get("filename") ||
+      url.searchParams.get("file") ||
+      url.searchParams.get("name");
+    if (filename) {
+      return decodeURIComponent(filename);
+    }
+    const last = url.pathname.split("/").filter(Boolean).pop();
+    if (last && last.toLowerCase() !== "getdocument") {
+      return decodeURIComponent(last);
+    }
+  } catch {
+    const last = value.split("/").filter(Boolean).pop();
+    if (last && last.toLowerCase() !== "getdocument") {
+      return last;
+    }
+  }
+  return undefined;
+};
+
+const getResultUrl = (result: SearchResult): string | undefined => {
+  const url = getMetadataValue(result.metadata, [
+    "source_url",
+    "url",
+    "link",
+    "href",
+    "source",
+  ]);
+  if (!url) {
+    return undefined;
+  }
+  return /^https?:\/\//i.test(url) ? url : undefined;
+};
+
+const getResultTitle = (result: SearchResult): string => {
+  const fromMetadata = getMetadataValue(result.metadata, [
+    "title",
+    "document_title",
+    "doc_title",
+    "name",
+    "filename",
+    "file_name",
+  ]);
+  if (fromMetadata) {
+    return fromMetadata;
+  }
+  const url = getResultUrl(result);
+  const urlName = url ? getTitleFromUrl(url) : undefined;
+  if (urlName) {
+    return urlName;
+  }
+  const sourcePath = getStringValue(result.source_path);
+  const pathName = sourcePath ? getNameFromPath(sourcePath) : undefined;
+  if (pathName) {
+    return pathName;
+  }
+  return "Untitled document";
+};
+
+const RESULT_WIDTH_CLASS = "w-full max-w-4xl mx-auto";
+
 export default function SearchPage() {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
@@ -94,7 +193,7 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen px-4 py-10 md:px-8">
       <main className="mx-auto w-full max-w-5xl">
-        <div className="card border border-base-300 bg-base-100 shadow-xl">
+        <div className={`card border border-base-300 bg-base-100 shadow-xl ${RESULT_WIDTH_CLASS}`}>
           <div className="card-body gap-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -265,25 +364,49 @@ export default function SearchPage() {
         ) : null}
 
         {results.length > 0 ? (
-          <section className="mt-5 grid gap-3">
-            {results.map((result, index) => (
-              <article className="card border border-base-300 bg-base-100 shadow-md" key={`${index}-${String(result.score ?? "")}`}>
-                <div className="card-body gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="badge badge-primary badge-outline">Rank {index + 1}</span>
-                    <span className="text-sm text-base-content/70">
-                      Score:{" "}
-                      {typeof result.score === "number"
-                        ? result.score.toFixed(4)
-                        : String(result.score ?? "n/a")}
-                    </span>
+          <section className={`mt-5 grid gap-3 ${RESULT_WIDTH_CLASS}`}>
+            {results.map((result, index) => {
+              const url = getResultUrl(result);
+              const title = getResultTitle(result);
+              return (
+                <article
+                  className="card w-full border border-base-300 bg-base-100 shadow-md"
+                  key={`${index}-${String(result.score ?? "")}`}
+                >
+                  <div className="card-body min-w-0 gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="badge badge-primary badge-outline">Rank {index + 1}</span>
+                      <span className="text-sm text-base-content/70">
+                        Score:{" "}
+                        {typeof result.score === "number"
+                          ? result.score.toFixed(4)
+                          : String(result.score ?? "n/a")}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold">{title}</p>
+                      {url ? (
+                        <a
+                          className="link link-primary break-all text-sm"
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {url}
+                        </a>
+                      ) : (
+                        <p className="text-sm text-base-content/60">
+                          No source URL available.
+                        </p>
+                      )}
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-6">
+                      {String(result.chunk_text ?? result.text ?? "")}
+                    </p>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm leading-6">
-                    {String(result.chunk_text ?? result.text ?? "")}
-                  </p>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </section>
         ) : null}
       </main>
