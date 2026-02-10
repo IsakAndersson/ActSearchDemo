@@ -45,6 +45,20 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
                 "DOCPLUS_METADATA_PATH", "output/vector_index/docplus_metadata.jsonl"
             )
         ),
+        "titles_index_path": str(
+            payload.get("titles_index_path")
+            or _get_env_default(
+                "DOCPLUS_TITLES_INDEX_PATH",
+                "output/vector_index_titles/docplus_titles.faiss",
+            )
+        ),
+        "titles_metadata_path": str(
+            payload.get("titles_metadata_path")
+            or _get_env_default(
+                "DOCPLUS_TITLES_METADATA_PATH",
+                "output/vector_index_titles/docplus_titles_metadata.jsonl",
+            )
+        ),
         "model_name": str(
             payload.get("model_name")
             or _get_env_default("DOCPLUS_MODEL_NAME", DEFAULT_MODEL)
@@ -78,6 +92,7 @@ def search() -> Any:
 
     errors: List[str] = []
     results: List[Dict[str, Any]] | None = None
+    results_by_method: Dict[str, List[Dict[str, Any]]] | None = None
 
     if not query:
         errors.append("Query cannot be empty.")
@@ -109,6 +124,53 @@ def search() -> Any:
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
+        elif method == "vector_titles":
+            try:
+                results = query_index(
+                    index_path=defaults["titles_index_path"],
+                    metadata_path=defaults["titles_metadata_path"],
+                    query=query,
+                    model_name=defaults["model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector+titles search failed: {exc}")
+        elif method == "all":
+            results_by_method = {}
+            try:
+                results_by_method["bm25"] = bm25_search(
+                    parsed_dir=defaults["parsed_dir"],
+                    query=query,
+                    top_k=top_k,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"BM25 search failed: {exc}")
+                results_by_method["bm25"] = []
+            try:
+                results_by_method["vector"] = query_index(
+                    index_path=defaults["index_path"],
+                    metadata_path=defaults["metadata_path"],
+                    query=query,
+                    model_name=defaults["model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector search failed: {exc}")
+                results_by_method["vector"] = []
+            try:
+                results_by_method["vector_titles"] = query_index(
+                    index_path=defaults["titles_index_path"],
+                    metadata_path=defaults["titles_metadata_path"],
+                    query=query,
+                    model_name=defaults["model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector+titles search failed: {exc}")
+                results_by_method["vector_titles"] = []
         else:
             errors.append(f"Unknown method '{method}'.")
 
@@ -119,6 +181,7 @@ def search() -> Any:
             "method": method,
             "defaults": defaults,
             "results": results or [],
+            "results_by_method": results_by_method or {},
             "errors": errors,
         }
     ), status_code

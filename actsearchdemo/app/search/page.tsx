@@ -6,15 +6,18 @@ import { useRouter } from "next/navigation";
 const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector";
+type SearchMethod = "bm25" | "vector" | "vector_titles" | "all";
 
 type SearchResult = {
   score?: number;
   text?: string;
   chunk_text?: string;
+  chunk_type?: string;
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 };
+
+type SearchResultsByMethod = Partial<Record<SearchMethod, SearchResult[]>>;
 
 const getStringValue = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
@@ -121,12 +124,19 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [resultsByMethod, setResultsByMethod] = useState<SearchResultsByMethod>({});
   const [method, setMethod] = useState<SearchMethod>("bm25");
   const [query, setQuery] = useState("");
   const [parsedDir, setParsedDir] = useState("output/parsed");
   const [indexPath, setIndexPath] = useState("output/vector_index/docplus.faiss");
   const [metadataPath, setMetadataPath] = useState(
     "output/vector_index/docplus_metadata.jsonl",
+  );
+  const [titlesIndexPath, setTitlesIndexPath] = useState(
+    "output/vector_index_titles/docplus_titles.faiss",
+  );
+  const [titlesMetadataPath, setTitlesMetadataPath] = useState(
+    "output/vector_index_titles/docplus_titles_metadata.jsonl",
   );
   const [modelName, setModelName] = useState("KBLab/bert-base-swedish-cased");
   const [device, setDevice] = useState("auto");
@@ -149,6 +159,7 @@ export default function SearchPage() {
     setIsLoading(true);
     setErrors([]);
     setResults([]);
+    setResultsByMethod({});
 
     try {
       const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/search`, {
@@ -160,13 +171,19 @@ export default function SearchPage() {
           parsed_dir: parsedDir,
           index_path: indexPath,
           metadata_path: metadataPath,
+          titles_index_path: titlesIndexPath,
+          titles_metadata_path: titlesMetadataPath,
           model_name: modelName,
           device,
           top_k: topK,
         }),
       });
 
-      const payload = (await response.json()) as { errors?: string[]; results?: SearchResult[] };
+      const payload = (await response.json()) as {
+        errors?: string[];
+        results?: SearchResult[];
+        results_by_method?: SearchResultsByMethod;
+      };
 
       if (!response.ok) {
         setErrors(payload.errors && payload.errors.length ? payload.errors : ["Search failed."]);
@@ -175,6 +192,7 @@ export default function SearchPage() {
 
       setErrors(payload.errors ?? []);
       setResults(payload.results ?? []);
+      setResultsByMethod(payload.results_by_method ?? {});
     } catch (error) {
       setErrors([
         error instanceof Error
@@ -233,6 +251,8 @@ export default function SearchPage() {
                 >
                   <option value="bm25">BM25</option>
                   <option value="vector">Vector (FAISS)</option>
+                  <option value="vector_titles">Vector (FAISS + titles)</option>
+                  <option value="all">All (side-by-side)</option>
                 </select>
               </label>
 
@@ -321,6 +341,30 @@ export default function SearchPage() {
 
                     <label className="form-control">
                       <div className="label">
+                        <span className="label-text">Titles FAISS index path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={titlesIndexPath}
+                        onChange={(event) => setTitlesIndexPath(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Titles metadata path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={titlesMetadataPath}
+                        onChange={(event) => setTitlesMetadataPath(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
                         <span className="label-text">Device</span>
                       </div>
                       <select
@@ -363,7 +407,87 @@ export default function SearchPage() {
           </section>
         ) : null}
 
-        {results.length > 0 ? (
+        {method === "all" && Object.keys(resultsByMethod).length > 0 ? (
+          <section className={`mt-5 grid gap-4 ${RESULT_WIDTH_CLASS}`}>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {[
+                { key: "bm25", label: "BM25" },
+                { key: "vector", label: "Vector (FAISS)" },
+                { key: "vector_titles", label: "Vector (FAISS + titles)" },
+              ].map(({ key, label }) => {
+                const methodResults = resultsByMethod[key as SearchMethod] ?? [];
+                return (
+                  <div
+                    className="card border border-base-300 bg-base-100 shadow-md"
+                    key={key}
+                  >
+                    <div className="card-body gap-3">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold">{label}</h2>
+                        <span className="badge badge-outline">{methodResults.length}</span>
+                      </div>
+                      {methodResults.length === 0 ? (
+                        <p className="text-sm text-base-content/60">No results.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {methodResults.map((result, index) => {
+                            const url = getResultUrl(result);
+                            const title = getResultTitle(result);
+                            return (
+                              <article
+                                className="rounded-lg border border-base-200 p-3"
+                                key={`${key}-${index}-${String(result.score ?? "")}`}
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="badge badge-primary badge-outline whitespace-nowrap text-xs">
+                                    Rank {index + 1}
+                                  </span>
+                                  <span className="text-xs text-base-content/70 whitespace-nowrap">
+                                    Score:{" "}
+                                    {typeof result.score === "number"
+                                      ? result.score.toFixed(4)
+                                      : String(result.score ?? "n/a")}
+                                  </span>
+                                  {result.chunk_type === "title" ? (
+                                    <span className="badge badge-secondary badge-outline whitespace-nowrap text-xs">
+                                      Title match
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-sm font-semibold">{title}</p>
+                                  {url ? (
+                                    <a
+                                      className="link link-primary break-all text-xs"
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {url}
+                                    </a>
+                                  ) : (
+                                    <p className="text-xs text-base-content/60">
+                                      No source URL available.
+                                    </p>
+                                  )}
+                                </div>
+                                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5">
+                                  {String(result.chunk_text ?? result.text ?? "")}
+                                </p>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {method !== "all" && results.length > 0 ? (
           <section className={`mt-5 grid gap-3 ${RESULT_WIDTH_CLASS}`}>
             {results.map((result, index) => {
               const url = getResultUrl(result);
@@ -382,6 +506,9 @@ export default function SearchPage() {
                           ? result.score.toFixed(4)
                           : String(result.score ?? "n/a")}
                       </span>
+                      {result.chunk_type === "title" ? (
+                        <span className="badge badge-secondary badge-outline">Title match</span>
+                      ) : null}
                     </div>
                     <div className="space-y-1">
                       <p className="text-base font-semibold">{title}</p>

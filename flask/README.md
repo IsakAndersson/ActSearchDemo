@@ -70,6 +70,23 @@ python -m search.vector_index query \
   --query "I vilka fall behöver patienter adrenalin"
 ```
 
+### Vector indexing with title chunks
+
+To build a separate FAISS index that includes title-only chunks (derived from document
+metadata/URL filenames) alongside body chunks:
+
+```bash
+python -m search.vector_index build-titles \
+  --parsed-dir output/parsed \
+  --output-dir output/vector_index_titles \
+  --model-name KBLab/bert-base-swedish-cased
+```
+
+This creates:
+
+- `output/vector_index_titles/docplus_titles.faiss` with normalized embeddings
+- `output/vector_index_titles/docplus_titles_metadata.jsonl` with chunk text + metadata
+
 ### GPU acceleration
 
 The vector indexer will use CUDA automatically if your PyTorch build supports it. To
@@ -109,7 +126,8 @@ python app.py
 API endpoints:
 
 - `GET /` health/info endpoint
-- `POST /search` search endpoint (JSON body or form body)
+- `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
+  `vector`, `vector_titles`, and `all` (returns `results_by_method`).
 
 Set defaults and CORS via environment variables if needed:
 
@@ -117,6 +135,8 @@ Set defaults and CORS via environment variables if needed:
 export DOCPLUS_PARSED_DIR=output/parsed
 export DOCPLUS_INDEX_PATH=output/vector_index/docplus.faiss
 export DOCPLUS_METADATA_PATH=output/vector_index/docplus_metadata.jsonl
+export DOCPLUS_TITLES_INDEX_PATH=output/vector_index_titles/docplus_titles.faiss
+export DOCPLUS_TITLES_METADATA_PATH=output/vector_index_titles/docplus_titles_metadata.jsonl
 export DOCPLUS_MODEL_NAME=KBLab/bert-base-swedish-cased
 export DOCPLUS_DEVICE=auto
 export DOCPLUS_TOP_K=5
