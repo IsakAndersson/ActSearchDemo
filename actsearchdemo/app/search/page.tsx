@@ -4,7 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const SESSION_KEY = "actsearch-authenticated";
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:5000";
+const DEFAULT_API_BASE_URL =
+  process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
 type SearchMethod = "bm25" | "vector" | "vector_titles" | "all";
 
