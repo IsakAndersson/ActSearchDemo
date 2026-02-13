@@ -115,6 +115,19 @@ python -m search.bm25_search \
   --query "I vilka fall behöver patienter adrenalin"
 ```
 
+## Offline evaluation
+
+Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`, and
+`hybrid` methods with `RR@20` reporting.
+
+From repository root:
+
+```bash
+python evaluation/evaluation.py --method hybrid --top-k 20
+```
+
+See `evaluation/README.md` for full setup, methods, and outputs.
+
 ## Flask API server
 
 Run the local API used by the Next.js frontend:
