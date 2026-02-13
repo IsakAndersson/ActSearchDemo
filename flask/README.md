@@ -120,7 +120,7 @@ python -m search.bm25_search \
 Run the local API used by the Next.js frontend:
 
 ```bash
-python app.py
+DOCPLUS_HOST=127.0.0.1 DOCPLUS_PORT=5000 python app.py
 ```
 
 API endpoints:
@@ -128,6 +128,16 @@ API endpoints:
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
   `vector`, `vector_titles`, and `all` (returns `results_by_method`).
+- `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
+  from the frontend when a user clicks a result link.
+
+Search and click logs are written as CSV files:
+
+- `output/logs/search_events.csv` (one row per hit, with method, rank, score, URL/title)
+- `output/logs/click_events.csv` (one row per clicked result)
+
+Each `/search` response includes a `search_id` that can be used to correlate click rows
+to the exact query and result set.
 
 Set defaults and CORS via environment variables if needed:
 
@@ -141,7 +151,47 @@ export DOCPLUS_MODEL_NAME=KBLab/bert-base-swedish-cased
 export DOCPLUS_DEVICE=auto
 export DOCPLUS_TOP_K=5
 export DOCPLUS_ALLOWED_ORIGIN=https://your-vercel-app.vercel.app
+export DOCPLUS_HOST=127.0.0.1
+export DOCPLUS_PORT=5000
+export DOCPLUS_SEARCH_LOG_PATH=output/logs/search_events.csv
+export DOCPLUS_CLICK_LOG_PATH=output/logs/click_events.csv
 ```
+
+### Vercel demo via ngrok
+
+If your frontend is deployed on Vercel, the browser requires the API to be reachable over
+HTTPS. The simplest temporary setup is to keep Flask local and expose it with ngrok.
+
+1. Install ngrok and authenticate once:
+
+```bash
+ngrok config add-authtoken <YOUR_NGROK_TOKEN>
+```
+
+2. Start Flask so it listens on all interfaces and your chosen demo port:
+
+```bash
+DOCPLUS_HOST=0.0.0.0 DOCPLUS_PORT=2200 \
+DOCPLUS_ALLOWED_ORIGIN=https://act-search-demo-qjau.vercel.app \
+python app.py
+```
+
+3. In another terminal, create the HTTPS tunnel:
+
+```bash
+ngrok http 2200
+```
+
+4. Copy the `https://...ngrok-free.app` URL from ngrok and set it in Vercel:
+
+- `NEXT_PUBLIC_DOCPLUS_API_BASE_URL=https://<your-ngrok-domain>`
+
+5. Redeploy the Vercel app so the new public env var is included in the client bundle.
+
+Useful checks:
+
+- ngrok request inspector: `http://127.0.0.1:4040`
+- Flask health endpoint through tunnel: `https://<your-ngrok-domain>/`
 
 ### Notes
 

@@ -19,6 +19,18 @@ type SearchResult = {
 };
 
 type SearchResultsByMethod = Partial<Record<SearchMethod, SearchResult[]>>;
+type ClickTrackPayload = {
+  search_id: string;
+  query: string;
+  requested_method: SearchMethod;
+  result_method: SearchMethod;
+  rank: number;
+  score: string;
+  title: string;
+  url: string;
+  chunk_type: string;
+  source_path: string;
+};
 
 const getStringValue = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
@@ -126,6 +138,9 @@ export default function SearchPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [resultsByMethod, setResultsByMethod] = useState<SearchResultsByMethod>({});
+  const [searchId, setSearchId] = useState<string>("");
+  const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("bm25");
+  const [lastSearchQuery, setLastSearchQuery] = useState<string>("");
   const [method, setMethod] = useState<SearchMethod>("bm25");
   const [query, setQuery] = useState("");
   const [parsedDir, setParsedDir] = useState("output/parsed");
@@ -155,12 +170,65 @@ export default function SearchPage() {
 
   const canSubmit = useMemo(() => query.trim().length > 0 && !isLoading, [isLoading, query]);
 
+  const scoreToText = (value: unknown): string => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value.toString() : "";
+    }
+    return getStringValue(value) ?? "";
+  };
+
+  const trackResultClick = (payload: ClickTrackPayload): void => {
+    const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/search/click`;
+    const body = JSON.stringify(payload);
+
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const queued = navigator.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+      if (queued) {
+        return;
+      }
+    }
+
+    void fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    }).catch(() => undefined);
+  };
+
+  const onResultClick = (
+    result: SearchResult,
+    rank: number,
+    resultMethod: SearchMethod,
+    title: string,
+    url: string,
+  ): void => {
+    if (!searchId) {
+      return;
+    }
+    trackResultClick({
+      search_id: searchId,
+      query: lastSearchQuery,
+      requested_method: lastRequestedMethod,
+      result_method: resultMethod,
+      rank,
+      score: scoreToText(result.score),
+      title,
+      url,
+      chunk_type: getStringValue(result.chunk_type) ?? "",
+      source_path: getStringValue(result.source_path) ?? "",
+    });
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     setErrors([]);
     setResults([]);
     setResultsByMethod({});
+    setSearchId("");
+
+    const submittedMethod = method;
 
     try {
       const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/search`, {
@@ -181,6 +249,7 @@ export default function SearchPage() {
       });
 
       const payload = (await response.json()) as {
+        search_id?: string;
         errors?: string[];
         results?: SearchResult[];
         results_by_method?: SearchResultsByMethod;
@@ -191,6 +260,9 @@ export default function SearchPage() {
         return;
       }
 
+      setSearchId(payload.search_id ?? "");
+      setLastRequestedMethod(submittedMethod);
+      setLastSearchQuery(query.trim());
       setErrors(payload.errors ?? []);
       setResults(payload.results ?? []);
       setResultsByMethod(payload.results_by_method ?? {});
@@ -463,6 +535,15 @@ export default function SearchPage() {
                                       href={url}
                                       target="_blank"
                                       rel="noreferrer"
+                                      onClick={() =>
+                                        onResultClick(
+                                          result,
+                                          index + 1,
+                                          key as SearchMethod,
+                                          title,
+                                          url,
+                                        )
+                                      }
                                     >
                                       {url}
                                     </a>
@@ -519,6 +600,7 @@ export default function SearchPage() {
                           href={url}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={() => onResultClick(result, index + 1, lastRequestedMethod, title, url)}
                         >
                           {url}
                         </a>
