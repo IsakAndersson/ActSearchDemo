@@ -54,17 +54,17 @@ cover/
 /coverage
 
 # Node.js dependencies (from second gitignore)
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+/actsearchdemo/node_modules
+/actsearchdemo/.pnp
+.actsearchdemo/.pnp.*
+.actsearchdemo/.yarn/*
+!.actsearchdemo/.yarn/patches
+!.actsearchdemo/.yarn/plugins
+!.actsearchdemo/.yarn/releases
+!.actsearchdemo/.yarn/versions
 
 # Next.js (from second gitignore)
-/.next/
+/actsearchdemo/.next/
 /out/
 *.tsbuildinfo
 next-env.d.ts
