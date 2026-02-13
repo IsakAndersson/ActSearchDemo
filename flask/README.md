@@ -9,7 +9,7 @@ This repo contains a lightweight scraper that can crawl a Docplus instance, down
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt #OBS for mac users change to torch in requirements 
 ```
 
 ### Usage for actsearch!
