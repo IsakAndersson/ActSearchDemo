@@ -31,6 +31,17 @@ type ClickTrackPayload = {
   chunk_type: string;
   source_path: string;
 };
+type RatingTrackPayload = {
+  search_id: string;
+  query: string;
+  requested_method: SearchMethod;
+  result_method: SearchMethod;
+  document: string;
+  title: string;
+  url: string;
+  source_path: string;
+  user_score: number;
+};
 
 const getStringValue = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
@@ -141,6 +152,7 @@ export default function SearchPage() {
   const [searchId, setSearchId] = useState<string>("");
   const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("bm25");
   const [lastSearchQuery, setLastSearchQuery] = useState<string>("");
+  const [resultRatings, setResultRatings] = useState<Record<string, number>>({});
   const [method, setMethod] = useState<SearchMethod>("bm25");
   const [query, setQuery] = useState("");
   const [parsedDir, setParsedDir] = useState("output/parsed");
@@ -220,6 +232,46 @@ export default function SearchPage() {
     });
   };
 
+  const trackResultRating = async (payload: RatingTrackPayload): Promise<void> => {
+    const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/search/rating`;
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+  };
+
+  const onRateResult = async (
+    result: SearchResult,
+    rank: number,
+    resultMethod: SearchMethod,
+    title: string,
+    url: string,
+    userScore: number,
+  ): Promise<void> => {
+    if (!searchId) {
+      return;
+    }
+    const resultKey = `${searchId}:${resultMethod}:${rank}`;
+    setResultRatings((previous) => ({ ...previous, [resultKey]: userScore }));
+    try {
+      await trackResultRating({
+        search_id: searchId,
+        query: lastSearchQuery,
+        requested_method: lastRequestedMethod,
+        result_method: resultMethod,
+        document: title || getStringValue(result.source_path) || url,
+        title,
+        url,
+        source_path: getStringValue(result.source_path) ?? "",
+        user_score: userScore,
+      });
+    } catch {
+      // Ratings are best-effort telemetry and should not block usage.
+    }
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -227,6 +279,7 @@ export default function SearchPage() {
     setResults([]);
     setResultsByMethod({});
     setSearchId("");
+    setResultRatings({});
 
     const submittedMethod = method;
 
@@ -506,6 +559,9 @@ export default function SearchPage() {
                           {methodResults.map((result, index) => {
                             const url = getResultUrl(result);
                             const title = getResultTitle(result);
+                            const resultMethod = key as SearchMethod;
+                            const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
+                            const selectedRating = resultRatings[resultKey] ?? 0;
                             return (
                               <article
                                 className="rounded-lg border border-base-200 p-3"
@@ -556,6 +612,27 @@ export default function SearchPage() {
                                 <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5">
                                   {String(result.chunk_text ?? result.text ?? "")}
                                 </p>
+                                <div className="mt-2 flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={`${resultKey}-star-${star}`}
+                                      type="button"
+                                      className={`btn btn-ghost btn-xs min-h-0 h-7 px-1 ${
+                                        selectedRating >= star ? "text-warning" : "text-base-content/40"
+                                      }`}
+                                      onClick={() =>
+                                        onRateResult(result, index + 1, resultMethod, title, url ?? "", star)
+                                      }
+                                      aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                                      title={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                                    >
+                                      ★
+                                    </button>
+                                  ))}
+                                  <span className="ml-1 text-xs text-base-content/60">
+                                    {selectedRating > 0 ? `${selectedRating}/5` : "Rate result"}
+                                  </span>
+                                </div>
                               </article>
                             );
                           })}
@@ -574,6 +651,9 @@ export default function SearchPage() {
             {results.map((result, index) => {
               const url = getResultUrl(result);
               const title = getResultTitle(result);
+              const resultMethod = lastRequestedMethod;
+              const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
+              const selectedRating = resultRatings[resultKey] ?? 0;
               return (
                 <article
                   className="card w-full border border-base-300 bg-base-100 shadow-md"
@@ -613,6 +693,27 @@ export default function SearchPage() {
                     <p className="whitespace-pre-wrap text-sm leading-6">
                       {String(result.chunk_text ?? result.text ?? "")}
                     </p>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={`${resultKey}-star-${star}`}
+                          type="button"
+                          className={`btn btn-ghost btn-sm min-h-0 h-8 px-1 ${
+                            selectedRating >= star ? "text-warning" : "text-base-content/40"
+                          }`}
+                          onClick={() =>
+                            onRateResult(result, index + 1, resultMethod, title, url ?? "", star)
+                          }
+                          aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                          title={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                      <span className="ml-1 text-sm text-base-content/60">
+                        {selectedRating > 0 ? `${selectedRating}/5` : "Rate result"}
+                      </span>
+                    </div>
                   </div>
                 </article>
               );

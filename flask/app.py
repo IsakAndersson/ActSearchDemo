@@ -28,6 +28,10 @@ def _click_log_path() -> str:
     return _get_env_default("DOCPLUS_CLICK_LOG_PATH", "output/logs/click_events.csv")
 
 
+def _rating_log_path() -> str:
+    return _get_env_default("DOCPLUS_RATING_LOG_PATH", "output/logs/rating_events.csv")
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -227,6 +231,20 @@ CLICK_LOG_FIELDS = [
     "client_ip",
     "user_agent",
 ]
+RATING_LOG_FIELDS = [
+    "timestamp_utc",
+    "search_id",
+    "query",
+    "requested_method",
+    "result_method",
+    "document",
+    "title",
+    "url",
+    "source_path",
+    "user_score",
+    "client_ip",
+    "user_agent",
+]
 
 
 @app.after_request
@@ -285,7 +303,11 @@ def health() -> Any:
         {
             "ok": True,
             "message": "Docplus API is running.",
-            "endpoints": {"search": "/search (POST)", "search_click": "/search/click (POST)"},
+            "endpoints": {
+                "search": "/search (POST)",
+                "search_click": "/search/click (POST)",
+                "search_rating": "/search/rating (POST)",
+            },
         }
     )
 
@@ -436,6 +458,50 @@ def search_click() -> Any:
             "url": _to_text(payload.get("url")),
             "chunk_type": _to_text(payload.get("chunk_type")),
             "source_path": _to_text(payload.get("source_path")),
+            "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
+            "user_agent": request.headers.get("User-Agent", ""),
+        },
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/search/rating", methods=["POST", "OPTIONS"])
+def search_rating() -> Any:
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    search_id = _to_text(payload.get("search_id"))
+    if not search_id:
+        return jsonify({"ok": False, "errors": ["search_id is required."]}), 400
+
+    try:
+        user_score = int(_to_text(payload.get("user_score")))
+    except ValueError:
+        return jsonify({"ok": False, "errors": ["user_score must be an integer between 1 and 5."]}), 400
+
+    if user_score < 1 or user_score > 5:
+        return jsonify({"ok": False, "errors": ["user_score must be an integer between 1 and 5."]}), 400
+
+    title = _to_text(payload.get("title"))
+    url = _to_text(payload.get("url"))
+    source_path = _to_text(payload.get("source_path"))
+    document = _to_text(payload.get("document")) or title or source_path or url
+
+    _append_csv_row(
+        _rating_log_path(),
+        RATING_LOG_FIELDS,
+        {
+            "timestamp_utc": _utc_now(),
+            "search_id": search_id,
+            "query": _to_text(payload.get("query")),
+            "requested_method": _to_text(payload.get("requested_method")),
+            "result_method": _to_text(payload.get("result_method")),
+            "document": document,
+            "title": title,
+            "url": url,
+            "source_path": source_path,
+            "user_score": str(user_score),
             "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
             "user_agent": request.headers.get("User-Agent", ""),
         },

@@ -130,11 +130,14 @@ API endpoints:
   `vector`, `vector_titles`, and `all` (returns `results_by_method`).
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link.
+- `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
+  and `user_score` (1-5).
 
 Search and click logs are written as CSV files:
 
 - `output/logs/search_events.csv` (one row per hit, with method, rank, score, URL/title)
 - `output/logs/click_events.csv` (one row per clicked result)
+- `output/logs/rating_events.csv` (one row per user rating)
 
 Each `/search` response includes a `search_id` that can be used to correlate click rows
 to the exact query and result set.
@@ -155,6 +158,7 @@ export DOCPLUS_HOST=127.0.0.1
 export DOCPLUS_PORT=5000
 export DOCPLUS_SEARCH_LOG_PATH=output/logs/search_events.csv
 export DOCPLUS_CLICK_LOG_PATH=output/logs/click_events.csv
+export DOCPLUS_RATING_LOG_PATH=output/logs/rating_events.csv
 ```
 
 ### Vercel demo via ngrok
