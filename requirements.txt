@@ -6,10 +6,11 @@ faiss-cpu
 numpy
 --extra-index-url https://download.pytorch.org/whl/cu118
 
-torch==2.3.1+cu118  #for windows
-#torch #for mac
+#torch==2.3.1+cu118  #for windows
+torch #for mac
 
 transformers
 flask
 ir-measures
 pandas
+pytest
