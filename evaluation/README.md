@@ -13,12 +13,6 @@ It evaluates multiple query variants from the Google Sheet (for example case des
 
 ## Search methods
 
-The script supports three retrieval methods via `evaluation/search_adapter.py`:
-
-- `bm25`: lexical search over parsed JSON chunks
-- `dense`: FAISS + transformer embeddings
-- `hybrid`: BM25 + dense fused with Reciprocal Rank Fusion (RRF)
-
 All methods use the common interface:
 
 ```python
