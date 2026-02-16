@@ -1,2 +1,12 @@
-average_rank,average_score
-1.0,0.13586413586413587
+average_rank,average_score,evaluated_at_utc,top_k,num_queries_total,num_query_types
+1.0,0.13586413586413587,2026-02-16T00:59:42+00:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T01:00:45+00:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T02:01:51+01:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T02:02:03+01:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T02:02:10+01:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T02:02:20+01:00,20,13,7
+1.0,0.13586413586413587,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
+1.0,0.13586413586413587,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
+1.0,0.13586413586413587,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1

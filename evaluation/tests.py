@@ -4,7 +4,13 @@ import pytest
  
 def run_tests():
     
-    evaluation.evaluate_system(make_search_hit_at_rank(1, "Grundläggande omhändertagande av nyfött barn"), 20)
+    evaluation.evaluate_system(make_search_hit_at_rank(1, "Grundläggande omhändertagande av nyfött barn"), 20, 
+        metadata={
+        "istest": "YES",
+        "search_method": "hybrid",
+        "model_name": "KBLab/bert-base-swedish-cased",
+        "run_tag": "baseline_v1"
+    })
     
     #evaluate_query_type
     test_evaluate_query_type_no_hits_returns_zero()
