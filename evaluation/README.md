@@ -147,6 +147,7 @@ Automatic run metadata written to outputs:
 - `num_query_types`
 
 Any user-provided `metadata` is also written to the CSV outputs above.
+Run metadata is also printed in the terminal output for each evaluation run.
 
 ## Search Adapter
 

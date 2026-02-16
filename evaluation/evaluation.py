@@ -58,7 +58,7 @@ def evaluate_system(search_function, k, metadata=None):
         "num_query_types": int(len(query_types_cols.columns)),
     }
     run_metadata.update(_validate_flat_metadata(metadata))
-    print_results(results_by_query, average_score, average_rank)
+    print_results(results_by_query, average_score, average_rank, run_metadata=run_metadata)
     save_results_to_csv(results_by_query, average_score, average_rank, run_metadata, run_df=run_df)
     return results_by_query, average_rank, average_score
 
@@ -208,12 +208,17 @@ def calculate_average_rank(qrels, run):
 	avg_rank = sum(ranks) / len(ranks) if ranks else 0
 	return avg_rank
 
-def print_results(results, average_score, average_rank):
+def print_results(results, average_score, average_rank, run_metadata=None):
 	BOLD = '\033[1m'
 	UNDERLINE = '\033[4m'
 	END = '\033[0m'
  
 	print("\n---------------" + BOLD + " Utvärderingsresultat " + END +  "---------------")
+	if run_metadata:
+		print("\nRun metadata:")
+		for key in sorted(run_metadata.keys()):
+			print(f"  {key}: {run_metadata[key]}")
+		print()
 	print(results.to_string(index=False))
 	print("\n Genomsnittlig RR@20: " + str(average_score))
 	print(" Genomsnittlig average rank: " + str(average_rank) + "\n")
