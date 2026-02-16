@@ -13,18 +13,29 @@ run = pd.DataFrame([
 ])"""
 
 def evaluate_system(search_function, k):
-	df = load_data()
+    df = load_data()
 
 	#tar ut rätt kolumner för qrels 
-	doc_ids = df["Titel på rätt dokument"]
-	query_type_list = ["Case-beskrivning", "Titel på rätt dokument", "Titel utan stor bokstav", "2 nyckelord", 
+    doc_ids = df["Titel på rätt dokument"]
+    query_type_list = ["Case-beskrivning", "Titel på rätt dokument", "Titel utan stor bokstav", "2 nyckelord", 
                        "2 nyckelord med stavfel", "2 nyckelord med synonymer", "Längre sökterm"]
-	query_types_cols = df[query_type_list]
+    query_types_cols = df[query_type_list]
 
 	#todo: lägg in for-loop som loopar igenom varje sökfunktion och kör evaluate
-	results, average_rank, average_score = evaluate(search_function, k, doc_ids, query_types_cols)
-	print_results(results, average_rank, average_score)
-	return results, average_rank, average_score
+    results_by_query, average_rank, average_score = evaluate(search_function, k, doc_ids, query_types_cols)
+    print_results(results_by_query, average_score, average_rank)
+    save_results_to_csv(results_by_query, average_score, average_rank)
+    return results_by_query, average_rank, average_score
+
+def save_results_to_csv(detailed_results, average_score, average_rank):
+    # 1) Detailed per-query-type metrics
+    detailed_results.to_csv("evaluation_results.csv", index=False)
+
+    # 2) Overall summary metrics
+    pd.DataFrame([{
+        "average_rank": average_rank,
+        "average_score": average_score
+    }]).to_csv("evaluation_summary.csv", index=False)
 
 def evaluate(search_function, k, doc_ids, query_types_cols):
 	rows = []
@@ -124,14 +135,11 @@ def print_results(results, average_score, average_rank):
 	UNDERLINE = '\033[4m'
 	END = '\033[0m'
  
-	model = "Ex. BM25"
- 
 	print("\n---------------" + BOLD + " Utvärderingsresultat " + END +  "---------------")
-	print("\nModell: " + model + "\n")
 	print(results.to_string(index=False))
 	print("\n Genomsnittlig RR@20: " + str(average_score))
-	print(" Average rank: " + str(average_rank) + "\n")
+	print(" Genomsnittlig average rank: " + str(average_rank) + "\n")
 	print(UNDERLINE + "Förklaring av mått:" + END 
        + "\nRR@20 (Mean Reciprocal Rank): Mäter hur högt upp i resultatlistan det rätta svaret placeras i topp 20. Beräknas som 1/positionen för det rätta dokumentet. \n1.0 = Perfekt score (högst upp varje gång) \n0.0 = Utanför topp 20 varje gång\n"
-       + "\nAverage rank: Genomsnittlig position av rätt dokument. Ignorerar resultat utanför top k"
+       + "\nAverage rank: Genomsnittlig position av rätt dokument. Ignorerar resultat utanför top k.\n"
        )

@@ -4,6 +4,8 @@ import pytest
  
 def run_tests():
     
+    evaluation.evaluate_system(make_search_hit_at_rank(1, "Grundläggande omhändertagande av nyfött barn"), 20)
+    
     #evaluate_query_type
     test_evaluate_query_type_no_hits_returns_zero()
     test_evaluate_query_type_hit_outside_top_k_returns_zero()

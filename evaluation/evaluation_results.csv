@@ -1,0 +1,8 @@
+query_type,RR@20,average_rank
+Case-beskrivning,0.15384615384615385,1.0
+Titel på rätt dokument,0.09090909090909091,1.0
+Titel utan stor bokstav,0.09090909090909091,1.0
+2 nyckelord,0.15384615384615385,1.0
+2 nyckelord med stavfel,0.15384615384615385,1.0
+2 nyckelord med synonymer,0.15384615384615385,1.0
+Längre sökterm,0.15384615384615385,1.0
