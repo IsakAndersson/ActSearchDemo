@@ -86,7 +86,13 @@ Run from repository root in Python:
 
 ```python
 from evaluation.evaluation import evaluate_system
-from evaluation.search_adapter import bm25_search, dense_search, hybrid_search
+from evaluation.search_adapter import (
+    bm25_search,
+    dense_search,
+    dense_e5_search,
+    hybrid_search,
+    hybrid_e5_search,
+)
 
 # BM25
 evaluate_system(
@@ -108,6 +114,20 @@ evaluate_system(
     k=20,
     metadata={"method": "hybrid", "experiment": "baseline"}
 )
+
+# Dense (E5 large instruct)
+evaluate_system(
+    search_function=dense_e5_search,
+    k=20,
+    metadata={"method": "dense_e5", "experiment": "baseline"}
+)
+
+# Hybrid (BM25 + E5 large instruct)
+evaluate_system(
+    search_function=hybrid_e5_search,
+    k=20,
+    metadata={"method": "hybrid_e5", "experiment": "baseline"}
+)
 ```
 
 Run from terminal with flags:
@@ -119,7 +139,7 @@ Run from terminal with flags:
 
 CLI flags:
 
-- `--method`: `bm25`, `dense`, or `hybrid` (default: `hybrid`)
+- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, or `hybrid_e5` (default: `hybrid`)
 - `--top-k`: integer > 0 (default: `20`)
 - `--meta KEY=VALUE`: optional metadata entry, repeat for multiple fields
 
@@ -164,6 +184,9 @@ Optional environment variables used by `search_adapter.py`:
 - `DOCPLUS_INDEX_PATH`
 - `DOCPLUS_METADATA_PATH`
 - `DOCPLUS_MODEL_NAME`
+- `DOCPLUS_E5_INDEX_PATH`
+- `DOCPLUS_E5_METADATA_PATH`
+- `DOCPLUS_E5_MODEL_NAME`
 - `DOCPLUS_DEVICE`
 
 ## Prerequisites
@@ -181,3 +204,5 @@ Data/index prerequisites:
 - Parsed docs in `flask/output/parsed`
 - Dense index in `flask/output/vector_index/docplus.faiss`
 - Dense metadata in `flask/output/vector_index/docplus_metadata.jsonl`
+- E5 dense index in `flask/output/vector_index_e5/docplus.faiss`
+- E5 dense metadata in `flask/output/vector_index_e5/docplus_metadata.jsonl`

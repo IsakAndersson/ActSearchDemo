@@ -7,7 +7,7 @@ const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector" | "vector_titles" | "all";
+type SearchMethod = "bm25" | "vector" | "vector_e5" | "vector_titles" | "all";
 
 type SearchResult = {
   score?: number;
@@ -167,6 +167,11 @@ export default function SearchPage() {
     "output/vector_index_titles/docplus_titles_metadata.jsonl",
   );
   const [modelName, setModelName] = useState("KBLab/bert-base-swedish-cased");
+  const [e5IndexPath, setE5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
+  const [e5MetadataPath, setE5MetadataPath] = useState(
+    "output/vector_index_e5/docplus_metadata.jsonl",
+  );
+  const [e5ModelName, setE5ModelName] = useState("intfloat/multilingual-e5-large-instruct");
   const [device, setDevice] = useState("auto");
   const [topK, setTopK] = useState("5");
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
@@ -296,6 +301,9 @@ export default function SearchPage() {
           titles_index_path: titlesIndexPath,
           titles_metadata_path: titlesMetadataPath,
           model_name: modelName,
+          e5_index_path: e5IndexPath,
+          e5_metadata_path: e5MetadataPath,
+          e5_model_name: e5ModelName,
           device,
           top_k: topK,
         }),
@@ -377,7 +385,8 @@ export default function SearchPage() {
                 >
                   <option value="bm25">BM25</option>
                   <option value="vector">Vector (FAISS)</option>
-                  <option value="vector_titles">Vector (FAISS + titles)</option>
+                  <option value="vector_e5">Vector (E5 large instruct)</option>
+                  <option value="vector_titles">Vector (title-only)</option>
                   <option value="all">All (side-by-side)</option>
                 </select>
               </label>
@@ -410,10 +419,22 @@ export default function SearchPage() {
                         list="model-options"
                       />
                     </label>
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">E5 model name</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={e5ModelName}
+                        onChange={(event) => setE5ModelName(event.target.value)}
+                        list="model-options"
+                      />
+                    </label>
                     <datalist id="model-options">
                       <option value="KBLab/bert-base-swedish-cased" />
-                      <option value="sentence-transformers/paraphrase-multilingual-mpnet-base-v2" />
                       <option value="intfloat/multilingual-e5-base" />
+                      <option value="intfloat/multilingual-e5-large-instruct" />
                     </datalist>
 
                     <label className="form-control">
@@ -462,6 +483,28 @@ export default function SearchPage() {
                         type="text"
                         value={metadataPath}
                         onChange={(event) => setMetadataPath(event.target.value)}
+                      />
+                    </label>
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">E5 FAISS index path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={e5IndexPath}
+                        onChange={(event) => setE5IndexPath(event.target.value)}
+                      />
+                    </label>
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">E5 metadata path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={e5MetadataPath}
+                        onChange={(event) => setE5MetadataPath(event.target.value)}
                       />
                     </label>
 
@@ -539,7 +582,8 @@ export default function SearchPage() {
               {[
                 { key: "bm25", label: "BM25" },
                 { key: "vector", label: "Vector (FAISS)" },
-                { key: "vector_titles", label: "Vector (FAISS + titles)" },
+                { key: "vector_e5", label: "Vector (E5 large instruct)" },
+                { key: "vector_titles", label: "Vector (title-only)" },
               ].map(({ key, label }) => {
                 const methodResults = resultsByMethod[key as SearchMethod] ?? [];
                 return (

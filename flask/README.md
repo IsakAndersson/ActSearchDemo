@@ -45,15 +45,31 @@ The scraper writes:
 
 ## Vector indexing (BERT Swedish)
 
-To build a vector index using the Swedish BERT model (`KBLab/bert-base-swedish-cased`),
-install the extra dependencies and run the indexer against your parsed output.
+To build a vector index, install the extra dependencies and run the indexer against your
+parsed output.
+
+Available named profiles in `search.vector_index`:
+
+- `swedish_bert` -> `KBLab/bert-base-swedish-cased`, `chunk_size=1200`, `chunk_overlap=200`
+- `e5_large_instruct` -> `intfloat/multilingual-e5-large-instruct`, `chunk_size=250`, `chunk_overlap=50`
+
+Swedish BERT index:
 
 ```bash
 pip install -r requirements.txt
 python -m search.vector_index build \
   --parsed-dir output/parsed \
   --output-dir output/vector_index \
-  --model-name KBLab/bert-base-swedish-cased
+  --profile swedish_bert
+```
+
+E5 large instruct index:
+
+```bash
+python -m search.vector_index build \
+  --parsed-dir output/parsed \
+  --output-dir output/vector_index_e5 \
+  --profile e5_large_instruct
 ```
 
 This creates:
@@ -72,20 +88,23 @@ python -m search.vector_index query \
 
 ### Vector indexing with title chunks
 
-To build a separate FAISS index that includes title-only chunks (derived from document
-metadata/URL filenames) alongside body chunks:
+To build a separate FAISS index that contains only title chunks (derived from
+document metadata/URL filenames):
 
 ```bash
 python -m search.vector_index build-titles \
   --parsed-dir output/parsed \
   --output-dir output/vector_index_titles \
-  --model-name KBLab/bert-base-swedish-cased
+  --profile swedish_bert
 ```
 
 This creates:
 
 - `output/vector_index_titles/docplus_titles.faiss` with normalized embeddings
 - `output/vector_index_titles/docplus_titles_metadata.jsonl` with chunk text + metadata
+
+For `e5_large_instruct`, regular `build` automatically includes one title chunk per
+document plus chunked body text.
 
 ### GPU acceleration
 
@@ -117,8 +136,8 @@ python -m search.bm25_search \
 
 ## Offline evaluation
 
-Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`, and
-`hybrid` methods with `RR@20` reporting.
+Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`,
+`dense_e5`, `hybrid`, and `hybrid_e5` methods with `RR@20` reporting.
 
 From repository root:
 
@@ -140,7 +159,7 @@ API endpoints:
 
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
-  `vector`, `vector_titles`, and `all` (returns `results_by_method`).
+  `vector`, `vector_e5`, `vector_titles`, and `all` (returns `results_by_method`).
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link.
 - `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
@@ -161,9 +180,12 @@ Set defaults and CORS via environment variables if needed:
 export DOCPLUS_PARSED_DIR=output/parsed
 export DOCPLUS_INDEX_PATH=output/vector_index/docplus.faiss
 export DOCPLUS_METADATA_PATH=output/vector_index/docplus_metadata.jsonl
+export DOCPLUS_E5_INDEX_PATH=output/vector_index_e5/docplus.faiss
+export DOCPLUS_E5_METADATA_PATH=output/vector_index_e5/docplus_metadata.jsonl
 export DOCPLUS_TITLES_INDEX_PATH=output/vector_index_titles/docplus_titles.faiss
 export DOCPLUS_TITLES_METADATA_PATH=output/vector_index_titles/docplus_titles_metadata.jsonl
 export DOCPLUS_MODEL_NAME=KBLab/bert-base-swedish-cased
+export DOCPLUS_E5_MODEL_NAME=intfloat/multilingual-e5-large-instruct
 export DOCPLUS_DEVICE=auto
 export DOCPLUS_TOP_K=5
 export DOCPLUS_ALLOWED_ORIGIN=https://your-vercel-app.vercel.app

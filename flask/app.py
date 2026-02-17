@@ -12,7 +12,10 @@ from uuid import uuid4
 from flask import Flask, jsonify, request
 
 from search.bm25_search import bm25_search
-from search.vector_index import DEFAULT_MODEL, query_index
+from search.vector_index import DEFAULT_MODEL, VECTOR_MODEL_PROFILES, query_index
+
+
+E5_PROFILE = VECTOR_MODEL_PROFILES["e5_large_instruct"]
 
 
 def _get_env_default(name: str, fallback: str) -> str:
@@ -148,7 +151,7 @@ def _log_search(
     methods_to_log: Dict[str, List[Dict[str, Any]]] = {}
     if results_by_method:
         methods_to_log = results_by_method
-    elif requested_method in {"bm25", "vector", "vector_titles"}:
+    elif requested_method in {"bm25", "vector", "vector_titles", "vector_e5"}:
         methods_to_log = {requested_method: results}
 
     if not methods_to_log:
@@ -288,9 +291,27 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
                 "output/vector_index_titles/docplus_titles_metadata.jsonl",
             )
         ),
+        "e5_index_path": str(
+            payload.get("e5_index_path")
+            or _get_env_default(
+                "DOCPLUS_E5_INDEX_PATH",
+                "output/vector_index_e5/docplus.faiss",
+            )
+        ),
+        "e5_metadata_path": str(
+            payload.get("e5_metadata_path")
+            or _get_env_default(
+                "DOCPLUS_E5_METADATA_PATH",
+                "output/vector_index_e5/docplus_metadata.jsonl",
+            )
+        ),
         "model_name": str(
             payload.get("model_name")
             or _get_env_default("DOCPLUS_MODEL_NAME", DEFAULT_MODEL)
+        ),
+        "e5_model_name": str(
+            payload.get("e5_model_name")
+            or _get_env_default("DOCPLUS_E5_MODEL_NAME", E5_PROFILE.model_name)
         ),
         "device": str(payload.get("device") or _get_env_default("DOCPLUS_DEVICE", "auto")),
         "top_k": str(payload.get("top_k") or _get_env_default("DOCPLUS_TOP_K", "5")),
@@ -359,6 +380,18 @@ def search() -> Any:
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
+        elif method == "vector_e5":
+            try:
+                results = query_index(
+                    index_path=defaults["e5_index_path"],
+                    metadata_path=defaults["e5_metadata_path"],
+                    query=query,
+                    model_name=defaults["e5_model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector E5 search failed: {exc}")
         elif method == "vector_titles":
             try:
                 results = query_index(
@@ -394,6 +427,18 @@ def search() -> Any:
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
                 results_by_method["vector"] = []
+            try:
+                results_by_method["vector_e5"] = query_index(
+                    index_path=defaults["e5_index_path"],
+                    metadata_path=defaults["e5_metadata_path"],
+                    query=query,
+                    model_name=defaults["e5_model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector E5 search failed: {exc}")
+                results_by_method["vector_e5"] = []
             try:
                 results_by_method["vector_titles"] = query_index(
                     index_path=defaults["titles_index_path"],

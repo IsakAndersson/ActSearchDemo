@@ -31,6 +31,9 @@ class SearchConfig:
     index_path: str = str(FLASK_DIR / "output" / "vector_index" / "docplus.faiss")
     metadata_path: str = str(FLASK_DIR / "output" / "vector_index" / "docplus_metadata.jsonl")
     model_name: str = "KBLab/bert-base-swedish-cased"
+    e5_index_path: str = str(FLASK_DIR / "output" / "vector_index_e5" / "docplus.faiss")
+    e5_metadata_path: str = str(FLASK_DIR / "output" / "vector_index_e5" / "docplus_metadata.jsonl")
+    e5_model_name: str = "intfloat/multilingual-e5-large-instruct"
     device: str = "auto"
 
 
@@ -39,6 +42,9 @@ DEFAULT_CONFIG = SearchConfig(
     index_path=os.getenv("DOCPLUS_INDEX_PATH", SearchConfig.index_path),
     metadata_path=os.getenv("DOCPLUS_METADATA_PATH", SearchConfig.metadata_path),
     model_name=os.getenv("DOCPLUS_MODEL_NAME", SearchConfig.model_name),
+    e5_index_path=os.getenv("DOCPLUS_E5_INDEX_PATH", SearchConfig.e5_index_path),
+    e5_metadata_path=os.getenv("DOCPLUS_E5_METADATA_PATH", SearchConfig.e5_metadata_path),
+    e5_model_name=os.getenv("DOCPLUS_E5_MODEL_NAME", SearchConfig.e5_model_name),
     device=os.getenv("DOCPLUS_DEVICE", SearchConfig.device),
 )
 
@@ -137,6 +143,28 @@ def dense_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CON
     return _dedupe_and_sort(raw_results, top_k=top_k)
 
 
+def dense_e5_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CONFIG) -> SearchResults:
+    if not query.strip() or top_k <= 0:
+        return []
+    try:
+        from search.vector_index import query_index
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Dense search requires vector dependencies (faiss/torch/transformers). "
+            "Install requirements and rebuild index."
+        ) from exc
+
+    raw_results = query_index(
+        index_path=config.e5_index_path,
+        metadata_path=config.e5_metadata_path,
+        query=query,
+        model_name=config.e5_model_name,
+        top_k=top_k,
+        device_preference=config.device,
+    )
+    return _dedupe_and_sort(raw_results, top_k=top_k)
+
+
 def hybrid_search(
     query: str,
     top_k: int = 20,
@@ -151,6 +179,32 @@ def hybrid_search(
     candidate_k = max(top_k * 3, top_k)
     bm25_results = bm25_search(query=query, top_k=candidate_k, config=config)
     dense_results = dense_search(query=query, top_k=candidate_k, config=config)
+
+    fused_scores: Dict[str, float] = {}
+    for rank, (doc_id, _) in enumerate(bm25_results, start=1):
+        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + bm25_weight / (rrf_k + rank)
+
+    for rank, (doc_id, _) in enumerate(dense_results, start=1):
+        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + dense_weight / (rrf_k + rank)
+
+    ranked = sorted(fused_scores.items(), key=lambda pair: pair[1], reverse=True)
+    return ranked[:top_k]
+
+
+def hybrid_e5_search(
+    query: str,
+    top_k: int = 20,
+    config: SearchConfig = DEFAULT_CONFIG,
+    rrf_k: int = 60,
+    bm25_weight: float = 1.0,
+    dense_weight: float = 1.0,
+) -> SearchResults:
+    if not query.strip() or top_k <= 0:
+        return []
+
+    candidate_k = max(top_k * 3, top_k)
+    bm25_results = bm25_search(query=query, top_k=candidate_k, config=config)
+    dense_results = dense_e5_search(query=query, top_k=candidate_k, config=config)
 
     fused_scores: Dict[str, float] = {}
     for rank, (doc_id, _) in enumerate(bm25_results, start=1):

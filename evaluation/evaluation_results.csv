@@ -72,3 +72,11 @@ Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:32:47+01:00,20,13,
 2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
 2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
 Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiments,run_tag,method
+Case-beskrivning,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Titel på rätt dokument,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Titel utan stor bokstav,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord med stavfel,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord med synonymer,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Längre sökterm,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid

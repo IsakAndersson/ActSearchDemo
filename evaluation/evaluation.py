@@ -256,14 +256,28 @@ def _parse_meta_args(meta_args):
 
 def _resolve_search_function(method: str):
     try:
-        from .search_adapter import bm25_search, dense_search, hybrid_search
+        from .search_adapter import (
+            bm25_search,
+            dense_e5_search,
+            dense_search,
+            hybrid_e5_search,
+            hybrid_search,
+        )
     except ImportError:
-        from search_adapter import bm25_search, dense_search, hybrid_search
+        from search_adapter import (
+            bm25_search,
+            dense_e5_search,
+            dense_search,
+            hybrid_e5_search,
+            hybrid_search,
+        )
 
     search_functions = {
         "bm25": bm25_search,
         "dense": dense_search,
+        "dense_e5": dense_e5_search,
         "hybrid": hybrid_search,
+        "hybrid_e5": hybrid_e5_search,
     }
     return search_functions[method]
 
@@ -271,7 +285,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run retrieval evaluation.")
     parser.add_argument(
         "--method",
-        choices=["bm25", "dense", "hybrid"],
+        choices=["bm25", "dense", "dense_e5", "hybrid", "hybrid_e5"],
         default="hybrid",
         help="Search method to evaluate.",
     )

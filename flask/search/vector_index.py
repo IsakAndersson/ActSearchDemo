@@ -5,7 +5,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
 import faiss
@@ -14,7 +14,32 @@ import torch
 from transformers import AutoModel, AutoTokenizer
 
 
-DEFAULT_MODEL = "KBLab/bert-base-swedish-cased"
+@dataclass(frozen=True)
+class VectorModelProfile:
+    key: str
+    model_name: str
+    chunk_size: int
+    chunk_overlap: int
+
+
+VECTOR_MODEL_PROFILES: Dict[str, VectorModelProfile] = {
+    "swedish_bert": VectorModelProfile(
+        key="swedish_bert",
+        model_name="KBLab/bert-base-swedish-cased",
+        chunk_size=1200,
+        chunk_overlap=200,
+    ),
+    "e5_large_instruct": VectorModelProfile(
+        key="e5_large_instruct",
+        model_name="intfloat/multilingual-e5-large-instruct",
+        chunk_size=250,
+        chunk_overlap=50,
+    ),
+}
+DEFAULT_MODEL_PROFILE_KEY = "swedish_bert"
+DEFAULT_MODEL = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].model_name
+DEFAULT_CHUNK_SIZE = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_size
+DEFAULT_CHUNK_OVERLAP = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_overlap
 
 
 @dataclass
@@ -63,6 +88,43 @@ def chunk_text(text: str, max_chars: int, overlap: int) -> List[str]:
     if current:
         chunks.append(" ".join(current).strip())
     return [chunk for chunk in chunks if chunk]
+
+
+def _resolve_profile(profile_key: Optional[str]) -> Optional[VectorModelProfile]:
+    if not profile_key:
+        return None
+    profile = VECTOR_MODEL_PROFILES.get(profile_key)
+    if profile is None:
+        choices = ", ".join(sorted(VECTOR_MODEL_PROFILES.keys()))
+        raise ValueError(f"Unknown profile '{profile_key}'. Valid options: {choices}")
+    return profile
+
+
+def resolve_model_name(
+    profile_key: Optional[str],
+    model_name: Optional[str],
+) -> str:
+    profile = _resolve_profile(profile_key)
+    if isinstance(model_name, str) and model_name.strip():
+        return model_name.strip()
+    if profile:
+        return profile.model_name
+    return DEFAULT_MODEL
+
+
+def resolve_chunk_settings(
+    profile_key: Optional[str],
+    max_chars: Optional[int],
+    overlap: Optional[int],
+) -> tuple[int, int]:
+    profile = _resolve_profile(profile_key)
+    resolved_max_chars = (
+        max_chars if max_chars is not None else profile.chunk_size if profile else DEFAULT_CHUNK_SIZE
+    )
+    resolved_overlap = (
+        overlap if overlap is not None else profile.chunk_overlap if profile else DEFAULT_CHUNK_OVERLAP
+    )
+    return resolved_max_chars, resolved_overlap
 
 
 def _extract_title_from_url(url: str) -> Optional[str]:
@@ -148,70 +210,7 @@ def build_index(
     overlap: int,
     batch_size: int,
     device_preference: str,
-) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name)
-    device = resolve_device(device_preference)
-    model.to(device)
-    model.eval()
-
-    chunks: List[ChunkRecord] = []
-    texts: List[str] = []
-    chunk_id = 0
-    for payload in iter_parsed_documents(parsed_dir):
-        text = payload.get("text") or ""
-        if not text.strip():
-            continue
-        for chunk_text_value in chunk_text(text, max_chars=max_chars, overlap=overlap):
-            chunks.append(
-                ChunkRecord(
-                    chunk_id=chunk_id,
-                    source_path=payload["path"],
-                    text=chunk_text_value,
-                    metadata=payload.get("metadata", {}),
-                )
-            )
-            texts.append(chunk_text_value)
-            chunk_id += 1
-
-    if not texts:
-        raise ValueError("No parsed documents with text found to index.")
-
-    embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dimension)
-    faiss.normalize_L2(embeddings)
-    index.add(embeddings)
-
-    faiss_path = os.path.join(output_dir, "docplus.faiss")
-    faiss.write_index(index, faiss_path)
-
-    metadata_path = os.path.join(output_dir, "docplus_metadata.jsonl")
-    with open(metadata_path, "w", encoding="utf-8") as handle:
-        for record in chunks:
-            handle.write(
-                json.dumps(
-                    {
-                        "chunk_id": record.chunk_id,
-                        "source_path": record.source_path,
-                        "text": record.text,
-                        "metadata": record.metadata,
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-
-
-def build_index_with_titles(
-    parsed_dir: str,
-    output_dir: str,
-    model_name: str,
-    max_chars: int,
-    overlap: int,
-    batch_size: int,
-    device_preference: str,
+    include_title_chunk: bool = False,
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -227,7 +226,8 @@ def build_index_with_titles(
         text = payload.get("text") or ""
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
-        if title:
+
+        if include_title_chunk and title:
             title_metadata = {**metadata, "title": title}
             chunks.append(
                 ChunkRecord(
@@ -259,6 +259,72 @@ def build_index_with_titles(
 
     if not texts:
         raise ValueError("No parsed documents with text found to index.")
+
+    embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    faiss.normalize_L2(embeddings)
+    index.add(embeddings)
+
+    faiss_path = os.path.join(output_dir, "docplus.faiss")
+    faiss.write_index(index, faiss_path)
+
+    metadata_path = os.path.join(output_dir, "docplus_metadata.jsonl")
+    with open(metadata_path, "w", encoding="utf-8") as handle:
+        for record in chunks:
+            handle.write(
+                json.dumps(
+                    {
+                        "chunk_id": record.chunk_id,
+                        "source_path": record.source_path,
+                        "text": record.text,
+                        "metadata": record.metadata,
+                        "chunk_type": record.chunk_type,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+
+
+def build_index_with_titles(
+    parsed_dir: str,
+    output_dir: str,
+    model_name: str,
+    max_chars: int,
+    overlap: int,
+    batch_size: int,
+    device_preference: str,
+) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
+    device = resolve_device(device_preference)
+    model.to(device)
+    model.eval()
+
+    chunks: List[ChunkRecord] = []
+    texts: List[str] = []
+    chunk_id = 0
+    for payload in iter_parsed_documents(parsed_dir):
+        metadata = payload.get("metadata", {}) or {}
+        title = extract_title(payload)
+        if title:
+            title_metadata = {**metadata, "title": title}
+            chunks.append(
+                ChunkRecord(
+                    chunk_id=chunk_id,
+                    source_path=payload["path"],
+                    text=title,
+                    metadata=title_metadata,
+                    chunk_type="title",
+                )
+            )
+            texts.append(title)
+            chunk_id += 1
+
+    if not texts:
+        raise ValueError("No parsed documents with title metadata found to index.")
 
     embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
     dimension = embeddings.shape[1]
@@ -336,10 +402,20 @@ def build_parser() -> argparse.ArgumentParser:
     build = subparsers.add_parser("build", help="Build a FAISS index from parsed JSON.")
     build.add_argument("--parsed-dir", required=True, help="Directory with parsed JSON files.")
     build.add_argument("--output-dir", required=True, help="Directory to store FAISS index.")
-    build.add_argument("--model-name", default=DEFAULT_MODEL, help="Hugging Face model name.")
-    build.add_argument("--max-chars", type=int, default=1200, help="Chunk size in characters.")
-    build.add_argument("--overlap", type=int, default=200, help="Overlap between chunks.")
+    build.add_argument(
+        "--profile",
+        choices=tuple(sorted(VECTOR_MODEL_PROFILES.keys())),
+        help="Optional named model profile (model + chunking defaults).",
+    )
+    build.add_argument("--model-name", help="Hugging Face model name.")
+    build.add_argument("--max-chars", type=int, help="Chunk size in characters.")
+    build.add_argument("--overlap", type=int, help="Overlap between chunks.")
     build.add_argument("--batch-size", type=int, default=8, help="Embedding batch size.")
+    build.add_argument(
+        "--include-title-chunk",
+        action="store_true",
+        help="Include one extra title chunk per document in addition to body chunks.",
+    )
     build.add_argument(
         "--device",
         choices=("auto", "cpu", "cuda"),
@@ -351,7 +427,12 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--index-path", required=True, help="Path to FAISS index file.")
     query.add_argument("--metadata-path", required=True, help="Path to metadata JSONL file.")
     query.add_argument("--query", required=True, help="Search query text.")
-    query.add_argument("--model-name", default=DEFAULT_MODEL, help="Hugging Face model name.")
+    query.add_argument(
+        "--profile",
+        choices=tuple(sorted(VECTOR_MODEL_PROFILES.keys())),
+        help="Optional named model profile (model default).",
+    )
+    query.add_argument("--model-name", help="Hugging Face model name.")
     query.add_argument("--top-k", type=int, default=5, help="Number of results to return.")
     query.add_argument(
         "--device",
@@ -362,13 +443,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_titles = subparsers.add_parser(
         "build-titles",
-        help="Build a FAISS index with title-only chunks plus body chunks.",
+        help="Build a FAISS index with title-only chunks from parsed metadata.",
     )
     build_titles.add_argument("--parsed-dir", required=True, help="Directory with parsed JSON files.")
     build_titles.add_argument("--output-dir", required=True, help="Directory to store FAISS index.")
-    build_titles.add_argument("--model-name", default=DEFAULT_MODEL, help="Hugging Face model name.")
-    build_titles.add_argument("--max-chars", type=int, default=1200, help="Chunk size in characters.")
-    build_titles.add_argument("--overlap", type=int, default=200, help="Overlap between chunks.")
+    build_titles.add_argument(
+        "--profile",
+        choices=tuple(sorted(VECTOR_MODEL_PROFILES.keys())),
+        help="Optional named model profile (model + chunking defaults).",
+    )
+    build_titles.add_argument("--model-name", help="Hugging Face model name.")
+    build_titles.add_argument("--max-chars", type=int, help="Chunk size in characters.")
+    build_titles.add_argument("--overlap", type=int, help="Overlap between chunks.")
     build_titles.add_argument("--batch-size", type=int, default=8, help="Embedding batch size.")
     build_titles.add_argument(
         "--device",
@@ -385,23 +471,32 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "build":
+        model_name = resolve_model_name(profile_key=args.profile, model_name=args.model_name)
+        max_chars, overlap = resolve_chunk_settings(
+            profile_key=args.profile,
+            max_chars=args.max_chars,
+            overlap=args.overlap,
+        )
+        include_title_chunk = args.include_title_chunk or args.profile == "e5_large_instruct"
         build_index(
             parsed_dir=args.parsed_dir,
             output_dir=args.output_dir,
-            model_name=args.model_name,
-            max_chars=args.max_chars,
-            overlap=args.overlap,
+            model_name=model_name,
+            max_chars=max_chars,
+            overlap=overlap,
             batch_size=args.batch_size,
             device_preference=args.device,
+            include_title_chunk=include_title_chunk,
         )
         return
 
     if args.command == "query":
+        model_name = resolve_model_name(profile_key=args.profile, model_name=args.model_name)
         results = query_index(
             index_path=args.index_path,
             metadata_path=args.metadata_path,
             query=args.query,
-            model_name=args.model_name,
+            model_name=model_name,
             top_k=args.top_k,
             device_preference=args.device,
         )
@@ -409,12 +504,18 @@ def main() -> None:
         return
 
     if args.command == "build-titles":
+        model_name = resolve_model_name(profile_key=args.profile, model_name=args.model_name)
+        max_chars, overlap = resolve_chunk_settings(
+            profile_key=args.profile,
+            max_chars=args.max_chars,
+            overlap=args.overlap,
+        )
         build_index_with_titles(
             parsed_dir=args.parsed_dir,
             output_dir=args.output_dir,
-            model_name=args.model_name,
-            max_chars=args.max_chars,
-            overlap=args.overlap,
+            model_name=model_name,
+            max_chars=max_chars,
+            overlap=overlap,
             batch_size=args.batch_size,
             device_preference=args.device,
         )
