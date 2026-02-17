@@ -9,7 +9,7 @@ This repo contains a lightweight scraper that can crawl a Docplus instance, down
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt #OBS for mac users change to torch in requirements 
 ```
 
 ### Usage for actsearch!
@@ -114,6 +114,19 @@ python -m search.bm25_search \
   --parsed-dir output/parsed \
   --query "I vilka fall behöver patienter adrenalin"
 ```
+
+## Offline evaluation
+
+Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`, and
+`hybrid` methods with `RR@20` reporting.
+
+From repository root:
+
+```bash
+python evaluation/evaluation.py --method hybrid --top-k 20
+```
+
+See `evaluation/README.md` for full setup, methods, and outputs.
 
 ## Flask API server
 
