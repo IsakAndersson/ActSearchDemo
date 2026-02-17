@@ -12,3 +12,5 @@ average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_ty
 1.0,0.13586413586413587,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
 average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
 1.0,0.13586413586413587,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiments,run_tag,method
+0.0,0.0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid

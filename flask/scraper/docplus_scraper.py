@@ -11,7 +11,7 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Iterable, Optional
-from urllib.parse import parse_qs, urlencode, urljoin, urldefrag, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlencode, urljoin, urldefrag, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -142,10 +142,14 @@ class DocplusScraper:
             raise
         filename = self.store.write_binary(url, response.content)
         extracted_text = extract_text(filename)
+        document_name = extract_document_name_from_url(url)
         metadata = {
             "source_url": url,
             "downloaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "content_type": response.headers.get("Content-Type", ""),
+            "document_name": document_name,
+            "title": extract_title_from_document_name(document_name),
+            "title_source": "url_filename",
         }
         self.store.write_text(filename, extracted_text, metadata)
         return DownloadResult(url=url, filename=filename, extracted_text_len=len(extracted_text))
@@ -214,6 +218,29 @@ def set_page_param(url: str, page: int) -> str:
     updated_query = urlencode(query, doseq=True)
     updated = parsed._replace(query=updated_query)
     return normalize_url(urlunparse(updated))
+
+
+def extract_document_name_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    for key in ("filename", "file", "name"):
+        values = query.get(key)
+        if values:
+            candidate = unquote(values[0]).strip()
+            if candidate:
+                return candidate
+
+    last = parsed.path.split("/")[-1].strip()
+    if last and last.lower() != "getdocument":
+        return unquote(last)
+    return ""
+
+
+def extract_title_from_document_name(document_name: str) -> str:
+    stem, ext = os.path.splitext(document_name.strip())
+    if stem and ext:
+        return stem
+    return document_name.strip()
 
 
 def build_start_urls(
