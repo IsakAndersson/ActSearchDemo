@@ -94,7 +94,7 @@ def save_results_to_csv(detailed_results, average_score, average_rank, run_metad
         if run_metadata:
             for key, value in run_metadata.items():
                 run_with_metadata[key] = value
-        append_df_to_csv(run_with_metadata, "evaluation_run.csv")
+        run_with_metadata.to_csv("evaluation_run.csv", index=False)
 
 def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 	rows = []

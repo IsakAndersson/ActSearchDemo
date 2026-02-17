@@ -132,12 +132,12 @@ CLI flags:
 
 ## Output Files
 
-Evaluation appends rows to these files (it does not overwrite):
+Evaluation output behavior:
 
 - `qrels.csv`: latest downloaded sheet snapshot
-- `evaluation_results.csv`: per-query-type metrics
-- `evaluation_summary.csv`: one summary row per evaluation run
-- `evaluation_run.csv`: full run rows (`query_id`, `doc_id`, `score`, `query_type`)
+- `evaluation_results.csv`: per-query-type metrics (appends)
+- `evaluation_summary.csv`: one summary row per evaluation run (appends)
+- `evaluation_run.csv`: full run rows (`query_id`, `doc_id`, `score`, `query_type`) for the latest run only (overwrites each run)
 
 Automatic run metadata written to outputs:
 
