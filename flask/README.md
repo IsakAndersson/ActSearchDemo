@@ -6,10 +6,16 @@ This repo contains a lightweight scraper that can crawl a Docplus instance, down
 
 ### Setup
 
+Use the shared project environment at repository root (`../.venv`), not `flask/.venv`.
+
 ```bash
+# from repository root (recommended)
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt #OBS for mac users change to torch in requirements 
+pip install -r requirements.txt # OBS for mac users change to torch in requirements
+
+# or, if you are already in flask/
+source ../.venv/bin/activate
 ```
 
 ### Usage for actsearch!
@@ -56,7 +62,7 @@ Available named profiles in `search.vector_index`:
 Swedish BERT index:
 
 ```bash
-pip install -r requirements.txt
+pip install -r ../requirements.txt
 python -m search.vector_index build \
   --parsed-dir output/parsed \
   --output-dir output/vector_index \
@@ -125,8 +131,9 @@ your driver and CUDA toolkit.
 
 ## BM25 search (lexical)
 
-To run a BM25 search directly over the parsed JSON files (same chunks as the vector
-index), use the BM25 helper:
+To run a BM25 search directly over the parsed JSON files, use the BM25 helper.
+Default BM25 chunking now matches the E5 profile (`max_chars=250`, `overlap=50`)
+and includes one title-only chunk per document when a title can be extracted:
 
 ```bash
 python -m search.bm25_search \
@@ -238,3 +245,4 @@ Useful checks:
 - Parsed text extraction uses optional dependencies for PDF and DOCX. If you remove them from `requirements.txt`, extraction is skipped and empty text is stored.
 - Be sure to respect Docplus usage policies and adjust crawl rate as needed.
 - If your start paths include `&` characters, wrap the value in quotes (or escape `&`) so the shell does not treat them as background commands.
+- Vector build/query now load embedding models with local-only Hugging Face cache access (`local_files_only=True`). No Hugging Face network requests are made at runtime; if a model is missing, pre-download it first.

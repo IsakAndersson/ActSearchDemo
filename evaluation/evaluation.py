@@ -5,6 +5,14 @@ import os
 import argparse
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Tuple
+from pathlib import Path
+
+try:
+    from .doc_id import normalize_doc_id
+except ImportError:
+    from doc_id import normalize_doc_id
+
+EVALUATION_DIR = Path(__file__).resolve().parent
 
 """ 
 Format för run:
@@ -64,13 +72,14 @@ def evaluate_system(search_function, k, metadata=None):
 
 def save_results_to_csv(detailed_results, average_score, average_rank, run_metadata=None, run_df=None):
     def append_df_to_csv(df: pd.DataFrame, path: str):
+        output_path = EVALUATION_DIR / path
         needs_header = True
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            with open(path, "r", encoding="utf-8") as f:
+        if output_path.exists() and output_path.stat().st_size > 0:
+            with output_path.open("r", encoding="utf-8") as f:
                 first_line = f.readline().lstrip("\ufeff").strip()
             expected_header = ",".join(map(str, df.columns))
             needs_header = first_line != expected_header
-        df.to_csv(path, mode="a", header=needs_header, index=False)
+        df.to_csv(output_path, mode="a", header=needs_header, index=False)
 
     # 1) Detailed per-query-type metrics
     detailed_results_with_metadata = detailed_results.copy()
@@ -94,7 +103,7 @@ def save_results_to_csv(detailed_results, average_score, average_rank, run_metad
         if run_metadata:
             for key, value in run_metadata.items():
                 run_with_metadata[key] = value
-        run_with_metadata.to_csv("evaluation_run.csv", index=False)
+        append_df_to_csv(run_with_metadata, "evaluation_run.csv")
 
 def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 	rows = []
@@ -147,8 +156,11 @@ def build_run_df(
         results = search_fn(query, top_k)
         # results = [(doc_id, score), ...]
         for doc_id, score in results:
+            normalized_doc_id = normalize_doc_id(doc_id)
+            if not normalized_doc_id:
+                continue
             rows.append({
-                "doc_id": str(doc_id),   # titel
+                "doc_id": normalized_doc_id,
                 "query_id": query,
                 "score": float(score)
             })
@@ -159,14 +171,18 @@ def load_data():
     #Läser in data från Google Sheets: https://docs.google.com/spreadsheets/d/1_bjtkzZyc-59dAf8c0LlnNFqXl9rB01LGJF3HFoKo6I/edit?usp=sharing
 	sheet_id = "1_bjtkzZyc-59dAf8c0LlnNFqXl9rB01LGJF3HFoKo6I"
 	sheet_name = "Blad1"  # ändra om annan flik
+	local_snapshot = Path(__file__).with_name("qrels.csv")
 
 	url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-	df = pd.read_csv(url)
- 
-	#spara csv-filen i samma mapp som denna fil, för att kunna titta hur den ser ut
-	df.to_csv('qrels.csv', index=False)
- 
-	return df
+	try:
+		df = pd.read_csv(url)
+		#spara csv-filen i samma mapp som denna fil, för att kunna titta hur den ser ut
+		df.to_csv(local_snapshot, index=False)
+		return df
+	except Exception:
+		if local_snapshot.exists():
+			return pd.read_csv(local_snapshot)
+		raise
 
 """ Format för qrels:
 qrels = pd.DataFrame([
@@ -176,12 +192,13 @@ qrels = pd.DataFrame([
     {'query_id': "Q1", 'doc_id': "D3", 'relevance': 2},
 ])"""
 def create_qrels(doc_ids, query_ids):
-
+	normalized_doc_ids = [normalize_doc_id(doc_id) for doc_id in doc_ids]
 	qrels = pd.DataFrame({
 		"query_id": query_ids,
-		"doc_id": doc_ids,
+		"doc_id": normalized_doc_ids,
 		"relevance": 1
 	})
+	qrels = qrels[qrels["doc_id"] != ""]
 	return qrels
 
 """
