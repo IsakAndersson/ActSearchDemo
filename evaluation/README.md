@@ -158,7 +158,6 @@ Evaluation output behavior:
 - `evaluation_results.csv`: per-query-type metrics (appends)
 - `evaluation_summary.csv`: one summary row per evaluation run (appends)
 - `evaluation_run.csv`: full run rows (`query_id`, `doc_id`, `score`, `query_type`) for the latest run only (overwrites each run)
-- `../flask/evaluation_visualization.ipynb`: notebook for plotting summary/results/run CSVs
 
 Automatic run metadata written to outputs:
 
@@ -169,33 +168,6 @@ Automatic run metadata written to outputs:
 
 Any user-provided `metadata` is also written to the CSV outputs above.
 Run metadata is also printed in the terminal output for each evaluation run.
-
-## Visualization Notebook
-
-Open and run:
-
-```bash
-jupyter notebook flask/evaluation_visualization.ipynb
-```
-
-If you prefer to run Jupyter explicitly from the shared root env:
-
-```bash
-./.venv/bin/python -m jupyter notebook flask/evaluation_visualization.ipynb
-```
-
-The notebook reads:
-
-- `evaluation_summary.csv`
-- `evaluation_results.csv`
-- `evaluation_run.csv`
-
-and visualizes:
-
-- average score over time
-- best run per method
-- RR@20 by query type
-- retrieved score distributions per method
 
 ## Search Adapter
 
@@ -218,8 +190,6 @@ Optional environment variables used by `search_adapter.py`:
 - `DOCPLUS_DEVICE`
 
 ## Prerequisites
-
-Use one shared environment at repository root (`./.venv`).
 
 From repository root:
 

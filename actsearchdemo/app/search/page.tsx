@@ -166,10 +166,12 @@ export default function SearchPage() {
   const [titlesMetadataPath, setTitlesMetadataPath] = useState(
     "output/vector_index_titles/docplus_titles_metadata.jsonl",
   );
+  const [modelName, setModelName] = useState("KBLab/bert-base-swedish-cased");
   const [e5IndexPath, setE5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
   const [e5MetadataPath, setE5MetadataPath] = useState(
     "output/vector_index_e5/docplus_metadata.jsonl",
   );
+  const [e5ModelName, setE5ModelName] = useState("intfloat/multilingual-e5-large-instruct");
   const [device, setDevice] = useState("auto");
   const [topK, setTopK] = useState("5");
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
@@ -298,8 +300,10 @@ export default function SearchPage() {
           metadata_path: metadataPath,
           titles_index_path: titlesIndexPath,
           titles_metadata_path: titlesMetadataPath,
+          model_name: modelName,
           e5_index_path: e5IndexPath,
           e5_metadata_path: e5MetadataPath,
+          e5_model_name: e5ModelName,
           device,
           top_k: topK,
         }),
@@ -402,6 +406,36 @@ export default function SearchPage() {
                         onChange={(event) => setApiBaseUrl(event.target.value)}
                       />
                     </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">Model name</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={modelName}
+                        onChange={(event) => setModelName(event.target.value)}
+                        list="model-options"
+                      />
+                    </label>
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">E5 model name</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={e5ModelName}
+                        onChange={(event) => setE5ModelName(event.target.value)}
+                        list="model-options"
+                      />
+                    </label>
+                    <datalist id="model-options">
+                      <option value="KBLab/bert-base-swedish-cased" />
+                      <option value="intfloat/multilingual-e5-base" />
+                      <option value="intfloat/multilingual-e5-large-instruct" />
+                    </datalist>
 
                     <label className="form-control">
                       <div className="label">

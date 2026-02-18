@@ -202,18 +202,6 @@ def resolve_device(device_preference: str) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def load_local_encoder(model_name: str) -> tuple[AutoTokenizer, AutoModel]:
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
-        model = AutoModel.from_pretrained(model_name, local_files_only=True)
-        return tokenizer, model
-    except OSError as exc:
-        raise RuntimeError(
-            "Model files were not found in the local Hugging Face cache. "
-            f"Pre-download '{model_name}' before running with offline loading."
-        ) from exc
-
-
 def build_index(
     parsed_dir: str,
     output_dir: str,
@@ -225,7 +213,8 @@ def build_index(
     include_title_chunk: bool = False,
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    tokenizer, model = load_local_encoder(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
     device = resolve_device(device_preference)
     model.to(device)
     model.eval()
@@ -308,7 +297,8 @@ def build_index_with_titles(
     device_preference: str,
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    tokenizer, model = load_local_encoder(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
     device = resolve_device(device_preference)
     model.to(device)
     model.eval()
@@ -371,7 +361,8 @@ def query_index(
     top_k: int,
     device_preference: str,
 ) -> List[dict]:
-    tokenizer, model = load_local_encoder(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModel.from_pretrained(model_name)
     device = resolve_device(device_preference)
     model.to(device)
     model.eval()
