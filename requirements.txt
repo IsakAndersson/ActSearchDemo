@@ -14,4 +14,3 @@ flask
 ir-measures
 pandas
 pytest
-matplotlib

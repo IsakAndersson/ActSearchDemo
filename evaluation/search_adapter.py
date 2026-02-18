@@ -21,10 +21,6 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from search.bm25_search import bm25_search as _bm25_impl  # noqa: E402
-try:
-    from .doc_id import normalize_doc_id  # type: ignore[attr-defined] # noqa: E402
-except ImportError:
-    from doc_id import normalize_doc_id  # noqa: E402
 
 SearchResults = List[Tuple[str, float]]
 
@@ -84,31 +80,20 @@ def _extract_doc_id(result: Dict[str, object]) -> Optional[str]:
 
     title = _metadata_value(
         metadata_dict,
-        [
-            "title",
-            "document_title",
-            "doc_title",
-            "document_name",
-            "name",
-            "filename",
-            "file_name",
-        ],
+        ["title", "document_title", "doc_title", "name", "filename", "file_name"],
     )
     if title:
-        normalized = normalize_doc_id(title)
-        return normalized if normalized else None
+        return title
 
     source_url = _metadata_value(metadata_dict, ["source_url", "url", "link", "href", "source"])
     if source_url:
         filename = _filename_from_url(source_url)
         if filename:
-            normalized = normalize_doc_id(filename)
-            return normalized if normalized else None
+            return filename
 
     source_path = result.get("source_path")
     if isinstance(source_path, str) and source_path.strip():
-        normalized = normalize_doc_id(Path(source_path).name)
-        return normalized if normalized else None
+        return Path(source_path).name
 
     return None
 

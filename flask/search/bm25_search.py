@@ -8,12 +8,9 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
-from urllib.parse import parse_qs, unquote, urlparse
 
 
 TOKEN_RE = re.compile(r"[0-9A-Za-zÅÄÖåäö]+")
-E5_CHUNK_SIZE = 250
-E5_CHUNK_OVERLAP = 50
 
 
 @dataclass
@@ -22,7 +19,6 @@ class ChunkRecord:
     source_path: str
     text: str
     metadata: dict
-    chunk_type: str = "body"
 
 
 def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
@@ -68,41 +64,10 @@ def tokenize(text: str) -> List[str]:
     return [match.group(0).lower() for match in TOKEN_RE.finditer(text)]
 
 
-def _extract_title_from_url(url: str) -> str:
-    try:
-        parsed = urlparse(url)
-    except ValueError:
-        return ""
-    query = parse_qs(parsed.query)
-    for key in ("filename", "file", "name"):
-        values = query.get(key)
-        if values:
-            title = unquote(values[0]).strip()
-            if title:
-                return title
-    last = parsed.path.split("/")[-1].strip()
-    if last and last.lower() != "getdocument":
-        return unquote(last)
-    return ""
-
-
-def extract_title(payload: dict) -> str:
-    metadata = payload.get("metadata") or {}
-    for key in ("title", "document_title", "doc_title", "name", "filename", "file_name"):
-        value = metadata.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    source_url = metadata.get("source_url")
-    if isinstance(source_url, str) and source_url.strip():
-        return _extract_title_from_url(source_url.strip())
-    return ""
-
-
 def build_bm25_corpus(
     parsed_dir: str,
     max_chars: int,
     overlap: int,
-    include_title_chunk: bool,
 ) -> Tuple[List[ChunkRecord], List[Dict[str, int]], List[int], Dict[str, int], float]:
     chunks: List[ChunkRecord] = []
     term_freqs: List[Dict[str, int]] = []
@@ -113,35 +78,9 @@ def build_bm25_corpus(
 
     for payload in iter_parsed_documents(parsed_dir):
         text = payload.get("text") or ""
-        metadata = payload.get("metadata", {}) or {}
-        title = extract_title(payload)
-
-        candidate_chunks: List[ChunkRecord] = []
-        if include_title_chunk and title:
-            candidate_chunks.append(
-                ChunkRecord(
-                    chunk_id=-1,
-                    source_path=payload["path"],
-                    text=title,
-                    metadata={**metadata, "title": title},
-                    chunk_type="title",
-                )
-            )
-        if text.strip():
-            body_metadata = {**metadata, "title": title} if title else metadata
-            for chunk_text_value in chunk_text(text, max_chars=max_chars, overlap=overlap):
-                candidate_chunks.append(
-                    ChunkRecord(
-                        chunk_id=-1,
-                        source_path=payload["path"],
-                        text=chunk_text_value,
-                        metadata=body_metadata,
-                        chunk_type="body",
-                    )
-                )
-
-        for candidate in candidate_chunks:
-            chunk_text_value = candidate.text
+        if not text.strip():
+            continue
+        for chunk_text_value in chunk_text(text, max_chars=max_chars, overlap=overlap):
             tokens = tokenize(chunk_text_value)
             if not tokens:
                 continue
@@ -155,9 +94,13 @@ def build_bm25_corpus(
             total_length += doc_len
             doc_lengths.append(doc_len)
             term_freqs.append(freqs)
-            candidate.chunk_id = chunk_id
             chunks.append(
-                candidate
+                ChunkRecord(
+                    chunk_id=chunk_id,
+                    source_path=payload["path"],
+                    text=chunk_text_value,
+                    metadata=payload.get("metadata", {}),
+                )
             )
             chunk_id += 1
 
@@ -172,9 +115,8 @@ def bm25_search(
     parsed_dir: str,
     query: str,
     top_k: int = 5,
-    max_chars: int = E5_CHUNK_SIZE,
-    overlap: int = E5_CHUNK_OVERLAP,
-    include_title_chunk: bool = True,
+    max_chars: int = 1200,
+    overlap: int = 200,
     k1: float = 1.5,
     b: float = 0.75,
 ) -> List[dict]:
@@ -182,7 +124,6 @@ def bm25_search(
         parsed_dir=parsed_dir,
         max_chars=max_chars,
         overlap=overlap,
-        include_title_chunk=include_title_chunk,
     )
     query_tokens = tokenize(query)
     if not query_tokens:
@@ -213,7 +154,6 @@ def bm25_search(
                 "text": record.text,
                 "metadata": record.metadata,
                 "source_path": record.source_path,
-                "chunk_type": record.chunk_type,
             }
         )
 
@@ -226,31 +166,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parsed-dir", required=True, help="Directory with parsed JSON files.")
     parser.add_argument("--query", required=True, help="Search query text.")
     parser.add_argument("--top-k", type=int, default=5, help="Number of results to return.")
-    parser.add_argument(
-        "--max-chars",
-        type=int,
-        default=E5_CHUNK_SIZE,
-        help=f"Chunk size in characters (default: {E5_CHUNK_SIZE}).",
-    )
-    parser.add_argument(
-        "--overlap",
-        type=int,
-        default=E5_CHUNK_OVERLAP,
-        help=f"Overlap between chunks (default: {E5_CHUNK_OVERLAP}).",
-    )
-    parser.add_argument(
-        "--include-title-chunk",
-        dest="include_title_chunk",
-        action="store_true",
-        help="Include one title-only chunk per document when title can be extracted.",
-    )
-    parser.add_argument(
-        "--no-include-title-chunk",
-        dest="include_title_chunk",
-        action="store_false",
-        help="Disable title-only chunks.",
-    )
-    parser.set_defaults(include_title_chunk=True)
+    parser.add_argument("--max-chars", type=int, default=1200, help="Chunk size in characters.")
+    parser.add_argument("--overlap", type=int, default=200, help="Overlap between chunks.")
     parser.add_argument("--k1", type=float, default=1.5, help="BM25 k1 parameter.")
     parser.add_argument("--b", type=float, default=0.75, help="BM25 b parameter.")
     return parser
@@ -265,7 +182,6 @@ def main() -> None:
         top_k=args.top_k,
         max_chars=args.max_chars,
         overlap=args.overlap,
-        include_title_chunk=args.include_title_chunk,
         k1=args.k1,
         b=args.b,
     )

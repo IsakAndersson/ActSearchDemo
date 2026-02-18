@@ -1,41 +1,82 @@
-query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,method
-Case-beskrivning,0.08547008547008547,4.333333333333333,2026-02-17T17:04:34+01:00,20,13,7,bm25
-Titel på rätt dokument,0.9090909090909091,1.0,2026-02-17T17:04:34+01:00,20,13,7,bm25
-Titel utan stor bokstav,0.9090909090909091,1.0,2026-02-17T17:04:34+01:00,20,13,7,bm25
-2 nyckelord,0.6089743589743589,1.9,2026-02-17T17:04:34+01:00,20,13,7,bm25
-2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-17T17:04:34+01:00,20,13,7,bm25
-2 nyckelord med synonymer,0.01282051282051282,6.0,2026-02-17T17:04:34+01:00,20,13,7,bm25
-Längre sökterm,0.621301775147929,2.3333333333333335,2026-02-17T17:04:34+01:00,20,13,7,bm25
-query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,method
-Case-beskrivning,0.4230769230769231,2.0,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-Titel på rätt dokument,0.9090909090909091,1.0,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-Titel utan stor bokstav,0.8181818181818182,1.0,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-2 nyckelord,0.24816849816849818,3.0,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-2 nyckelord med stavfel,0.13846153846153847,4.8,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-2 nyckelord med synonymer,0.13351896971806473,8.6,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-Längre sökterm,0.38613693998309384,4.4,2026-02-17T17:35:51+01:00,20,13,7,dense_e5
-query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
-Case-beskrivning,0.4149572649572649,3.0,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-Titel på rätt dokument,0.9090909090909091,1.0,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-Titel utan stor bokstav,0.8311688311688311,1.6,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-2 nyckelord,0.430982905982906,3.5454545454545454,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-2 nyckelord med stavfel,0.17564102564102563,4.5,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-2 nyckelord med synonymer,0.11752136752136752,5.0,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-Längre sökterm,0.6487179487179487,4.636363636363637,2026-02-18T12:27:26+01:00,20,13,7,hybrid_e5,hybrid_e5
-query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
-Case-beskrivning,0.08547008547008547,4.333333333333333,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-Titel på rätt dokument,0.9090909090909091,1.0,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-Titel utan stor bokstav,0.9090909090909091,1.0,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-2 nyckelord,0.6089743589743589,1.9,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-2 nyckelord med synonymer,0.01282051282051282,6.0,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-Längre sökterm,0.621301775147929,2.3333333333333335,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
-
-query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
-Case-beskrivning,0.045074224021592446,9.0,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-Titel på rätt dokument,0.6393939393939394,1.9,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-Titel utan stor bokstav,0.5181818181818182,2.3,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-2 nyckelord,0.34566074950690334,3.4,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-2 nyckelord med synonymer,0.07692307692307693,1.0,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
-Längre sökterm,0.30128205128205127,2.875,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
+query_type,RR@20,average_rank
+Case-beskrivning,0.15384615384615385,1.0
+Titel på rätt dokument,0.09090909090909091,1.0
+Titel utan stor bokstav,0.09090909090909091,1.0
+2 nyckelord,0.15384615384615385,1.0
+2 nyckelord med stavfel,0.15384615384615385,1.0
+2 nyckelord med synonymer,0.15384615384615385,1.0
+Längre sökterm,0.15384615384615385,1.0
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T01:00:45+00:00,20,13,7
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T01:00:45+00:00,20,13,7
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T01:00:45+00:00,20,13,7
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T01:00:45+00:00,20,13,7
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T01:00:45+00:00,20,13,7
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T01:00:45+00:00,20,13,7
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T01:00:45+00:00,20,13,7
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:01:51+01:00,20,13,7
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:01:51+01:00,20,13,7
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:01:51+01:00,20,13,7
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:01:51+01:00,20,13,7
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:01:51+01:00,20,13,7
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:01:51+01:00,20,13,7
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:01:51+01:00,20,13,7
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:02:03+01:00,20,13,7
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:02:03+01:00,20,13,7
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:02:03+01:00,20,13,7
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:02:03+01:00,20,13,7
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:02:03+01:00,20,13,7
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:02:03+01:00,20,13,7
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:02:03+01:00,20,13,7
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:02:10+01:00,20,13,7
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:02:10+01:00,20,13,7
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:02:10+01:00,20,13,7
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:02:10+01:00,20,13,7
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:02:10+01:00,20,13,7
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:02:10+01:00,20,13,7
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:02:10+01:00,20,13,7
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:02:20+01:00,20,13,7
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:02:20+01:00,20,13,7
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:02:20+01:00,20,13,7
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:02:20+01:00,20,13,7
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:02:20+01:00,20,13,7
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:02:20+01:00,20,13,7
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:02:20+01:00,20,13,7
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:07:49+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:09:16+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:12:54+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,istest,search_method,model_name,run_tag
+Case-beskrivning,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel på rätt dokument,0.09090909090909091,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Titel utan stor bokstav,0.09090909090909091,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med stavfel,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+2 nyckelord med synonymer,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+Längre sökterm,0.15384615384615385,1.0,2026-02-16T02:32:47+01:00,20,13,7,YES,hybrid,KBLab/bert-base-swedish-cased,baseline_v1
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiments,run_tag,method
+Case-beskrivning,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Titel på rätt dokument,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Titel utan stor bokstav,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord med stavfel,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+2 nyckelord med synonymer,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
+Längre sökterm,0.0,0,2026-02-16T11:30:57+01:00,20,13,7,baseline,exp1,hybrid
