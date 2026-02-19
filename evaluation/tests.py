@@ -1,6 +1,22 @@
 import pandas as pd
 import evaluation
 import pytest
+try:
+    from .search_adapter import (
+        SearchConfig,
+        _extract_live_docplus_links,
+        _extract_live_sts_links,
+        docplus_live_search,
+        sts_live_search,
+    )
+except ImportError:
+    from search_adapter import (
+        SearchConfig,
+        _extract_live_docplus_links,
+        _extract_live_sts_links,
+        docplus_live_search,
+        sts_live_search,
+    )
  
 def run_tests():
     
@@ -154,6 +170,16 @@ def test_calculate_average_rank_no_hits_returns_zero():
 
     avg_rank = evaluation.calculate_average_rank(qrels, run)
     assert avg_rank == 0
+
+
+def test_build_run_df_empty_has_expected_columns():
+    run = evaluation.build_run_df(
+        queries=pd.Series(["q0"]),
+        search_fn=lambda query, top_k: [],
+        top_k=20,
+    )
+    assert list(run.columns) == ["doc_id", "query_id", "score"]
+    assert run.empty
     
 
 #Integration test
@@ -230,6 +256,122 @@ def test_evaluate_integration_with_real_pipeline():
 
     assert avg_score == pytest.approx(expected_avg_score, abs=1e-6)
     assert avg_rank == pytest.approx(expected_avg_rank, abs=1e-6)
+
+
+def test_extract_live_docplus_links_filters_non_documents():
+    html = """
+    <html><body>
+      <a href="/Home/GetDocument?filename=Alpha%20Plan.pdf">Alpha Plan</a>
+      <a href="/Home/Details/123">Not a document</a>
+      <a href="https://publikdocplus.regionuppsala.se/Home/GetDocument?file=Beta.docx"></a>
+    </body></html>
+    """
+    links = _extract_live_docplus_links(
+        html=html,
+        page_url="https://publikdocplus.regionuppsala.se/Home/Search",
+    )
+
+    assert len(links) == 2
+    assert links[0]["source_url"].endswith("filename=Alpha%20Plan.pdf")
+    assert links[0]["title"] == "Alpha Plan"
+    assert "Beta.docx" in links[1]["source_url"]
+    assert links[1]["title"] == "Beta.docx"
+
+
+def test_docplus_live_search_returns_normalized_ranked_doc_ids():
+    class _FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+            self.status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeSession:
+        def __init__(self):
+            self.headers = {}
+            self.calls = []
+
+        def get(self, url, params, timeout):
+            self.calls.append((url, params, timeout))
+            return _FakeResponse(
+                """
+                <html><body>
+                  <a href="/Home/GetDocument?filename=Vårdprogram%20A.pdf">Vårdprogram A.pdf</a>
+                  <a href="/Home/GetDocument?filename=Vårdprogram%20B.pdf">Vårdprogram B.pdf</a>
+                </body></html>
+                """
+            )
+
+    fake_session = _FakeSession()
+    config = SearchConfig(live_max_pages=1)
+    results = docplus_live_search(
+        query="vårdprogram",
+        top_k=2,
+        config=config,
+        session=fake_session,  # type: ignore[arg-type]
+    )
+
+    assert results == [("vårdprogram a", 2.0), ("vårdprogram b", 1.0)]
+    assert len(fake_session.calls) == 1
+
+
+def test_extract_live_sts_links_filters_non_documents():
+    html = """
+    <html><body>
+      <a href="/redirect?to=https://publikdocplus.regionuppsala.se/Home/GetDocument?filename=Gamma%20Doc.pdf">Gamma</a>
+      <a href="https://publikdocplus.regionuppsala.se/Home/GetDocument?file=Delta.docx">Delta</a>
+      <a href="/about">About</a>
+    </body></html>
+    """
+    links = _extract_live_sts_links(
+        html=html,
+        page_url="https://sts.search.datatovalue.se/",
+    )
+
+    assert len(links) == 2
+    assert "Gamma%20Doc.pdf" in links[0]["source_url"]
+    assert links[0]["title"] == "Gamma"
+    assert "Delta.docx" in links[1]["source_url"]
+    assert links[1]["title"] == "Delta"
+
+
+def test_sts_live_search_returns_normalized_ranked_doc_ids():
+    class _FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+            self.status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeSession:
+        def __init__(self):
+            self.headers = {}
+            self.calls = []
+
+        def get(self, url, params, timeout):
+            self.calls.append((url, params, timeout))
+            return _FakeResponse(
+                """
+                <html><body>
+                  <a href="https://publikdocplus.regionuppsala.se/Home/GetDocument?filename=Rutin%20A.pdf">Rutin A</a>
+                  <a href="https://publikdocplus.regionuppsala.se/Home/GetDocument?filename=Rutin%20B.pdf">Rutin B</a>
+                </body></html>
+                """
+            )
+
+    fake_session = _FakeSession()
+    config = SearchConfig(sts_live_max_pages=1)
+    results = sts_live_search(
+        query="rutin",
+        top_k=2,
+        config=config,
+        session=fake_session,  # type: ignore[arg-type]
+    )
+
+    assert results == [("rutin a", 2.0), ("rutin b", 1.0)]
+    assert len(fake_session.calls) == 1
 
 if __name__ == "__main__":
     run_tests()

@@ -20,20 +20,23 @@ class VectorModelProfile:
     model_name: str
     chunk_size: int
     chunk_overlap: int
+    include_title_chunk: bool
 
 
 VECTOR_MODEL_PROFILES: Dict[str, VectorModelProfile] = {
     "swedish_bert": VectorModelProfile(
         key="swedish_bert",
         model_name="KBLab/bert-base-swedish-cased",
-        chunk_size=1200,
-        chunk_overlap=200,
+        chunk_size=250,
+        chunk_overlap=50,
+        include_title_chunk=True,
     ),
     "e5_large_instruct": VectorModelProfile(
         key="e5_large_instruct",
         model_name="intfloat/multilingual-e5-large-instruct",
         chunk_size=250,
         chunk_overlap=50,
+        include_title_chunk=True,
     ),
 }
 DEFAULT_MODEL_PROFILE_KEY = "swedish_bert"
@@ -125,6 +128,16 @@ def resolve_chunk_settings(
         overlap if overlap is not None else profile.chunk_overlap if profile else DEFAULT_CHUNK_OVERLAP
     )
     return resolved_max_chars, resolved_overlap
+
+
+def resolve_include_title_chunk(profile_key: Optional[str], include_title_chunk: bool) -> bool:
+    if include_title_chunk:
+        return True
+    selected_profile_key = profile_key or DEFAULT_MODEL_PROFILE_KEY
+    profile = _resolve_profile(selected_profile_key)
+    if profile is None:
+        return False
+    return profile.include_title_chunk
 
 
 def _extract_title_from_url(url: str) -> Optional[str]:
@@ -486,7 +499,10 @@ def main() -> None:
             max_chars=args.max_chars,
             overlap=args.overlap,
         )
-        include_title_chunk = args.include_title_chunk or args.profile == "e5_large_instruct"
+        include_title_chunk = resolve_include_title_chunk(
+            profile_key=args.profile,
+            include_title_chunk=args.include_title_chunk,
+        )
         build_index(
             parsed_dir=args.parsed_dir,
             output_dir=args.output_dir,

@@ -39,3 +39,43 @@ Titel utan stor bokstav,0.5181818181818182,2.3,2026-02-18T13:36:01+01:00,20,13,7
 2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
 2 nyckelord med synonymer,0.07692307692307693,1.0,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
 Längre sökterm,0.30128205128205127,2.875,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.0,0.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+Titel på rätt dokument,0.12907092907092907,6.5,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+Titel utan stor bokstav,0.13636363636363635,3.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+2 nyckelord,0.0,0.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+2 nyckelord med stavfel,0.0,0.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+2 nyckelord med synonymer,0.005128205128205128,15.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+Längre sökterm,0.006993006993006993,11.0,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.0,0.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+Titel på rätt dokument,0.5454545454545454,1.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+Titel utan stor bokstav,0.5454545454545454,1.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+2 nyckelord,0.4102564102564103,1.5714285714285714,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+2 nyckelord med stavfel,0.0,0.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+2 nyckelord med synonymer,0.005128205128205128,15.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+Längre sökterm,0.46153846153846156,1.0,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+Titel på rätt dokument,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+Titel utan stor bokstav,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+2 nyckelord,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+2 nyckelord med stavfel,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+2 nyckelord med synonymer,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+Längre sökterm,0.0,0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.08547008547008547,4.333333333333333,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+Titel på rätt dokument,0.9090909090909091,1.0,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+Titel utan stor bokstav,0.9090909090909091,1.0,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+2 nyckelord,0.6089743589743589,1.9,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+2 nyckelord med synonymer,0.01282051282051282,6.0,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+Längre sökterm,0.621301775147929,2.3333333333333335,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.07692307692307693,3.3333333333333335,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+Titel på rätt dokument,0.9090909090909091,1.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+Titel utan stor bokstav,0.6464646464646464,2.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+2 nyckelord,0.07692307692307693,1.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+2 nyckelord med stavfel,0.07692307692307693,1.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+2 nyckelord med synonymer,0.0,0.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense
+Längre sökterm,0.07692307692307693,1.0,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense

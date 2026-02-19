@@ -3,6 +3,7 @@ from ir_measures import *
 import pandas as pd
 import os
 import argparse
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Tuple
 from pathlib import Path
@@ -13,6 +14,7 @@ except ImportError:
     from doc_id import normalize_doc_id
 
 EVALUATION_DIR = Path(__file__).resolve().parent
+LOG = logging.getLogger(__name__)
 
 """ 
 Format för run:
@@ -153,7 +155,11 @@ def build_run_df(
 ) -> pd.DataFrame:
     rows = []
     for query in queries:
-        results = search_fn(query, top_k)
+        try:
+            results = search_fn(query, top_k)
+        except Exception as exc:
+            LOG.warning("Search failed for query %r: %s", query, exc)
+            results = []
         # results = [(doc_id, score), ...]
         for doc_id, score in results:
             normalized_doc_id = normalize_doc_id(doc_id)
@@ -164,7 +170,7 @@ def build_run_df(
                 "query_id": query,
                 "score": float(score)
             })
-    run = pd.DataFrame(rows)
+    run = pd.DataFrame(rows, columns=["doc_id", "query_id", "score"])
     return run
 
 def load_data():
@@ -275,18 +281,22 @@ def _resolve_search_function(method: str):
     try:
         from .search_adapter import (
             bm25_search,
+            docplus_live_search,
             dense_e5_search,
             dense_search,
             hybrid_e5_search,
             hybrid_search,
+            sts_live_search,
         )
     except ImportError:
         from search_adapter import (
             bm25_search,
+            docplus_live_search,
             dense_e5_search,
             dense_search,
             hybrid_e5_search,
             hybrid_search,
+            sts_live_search,
         )
 
     search_functions = {
@@ -295,6 +305,8 @@ def _resolve_search_function(method: str):
         "dense_e5": dense_e5_search,
         "hybrid": hybrid_search,
         "hybrid_e5": hybrid_e5_search,
+        "docplus_live": docplus_live_search,
+        "sts_live": sts_live_search,
     }
     return search_functions[method]
 
@@ -302,7 +314,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run retrieval evaluation.")
     parser.add_argument(
         "--method",
-        choices=["bm25", "dense", "dense_e5", "hybrid", "hybrid_e5"],
+        choices=["bm25", "dense", "dense_e5", "hybrid", "hybrid_e5", "docplus_live", "sts_live"],
         default="hybrid",
         help="Search method to evaluate.",
     )

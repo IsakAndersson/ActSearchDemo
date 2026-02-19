@@ -7,3 +7,13 @@ average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_ty
 2.5095238095238095,0.4605245182168259,2026-02-18T12:57:45+01:00,20,13,7,bm25_baseline,bm25
 average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
 3.0678571428571426,0.28620556231892263,2026-02-18T13:36:01+01:00,20,13,7,hybrid,hybrid
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+5.071428571428571,0.039650825365111074,2026-02-18T16:51:40+01:00,20,13,7,dense,dense
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+2.7959183673469385,0.2811188811188811,2026-02-19T20:20:20+01:00,20,13,7,docplus_live,docplus_live
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+0.0,0.0,2026-02-19T20:54:48+01:00,20,13,7,sts_live,sts_live
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+2.5095238095238095,0.4605245182168259,2026-02-19T21:15:12+01:00,20,13,7,new_bm25,bm25
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+1.3333333333333335,0.2661782661782662,2026-02-19T22:02:54+01:00,20,13,7,swedish_bert,dense

@@ -88,6 +88,8 @@ Run from repository root in Python:
 from evaluation.evaluation import evaluate_system
 from evaluation.search_adapter import (
     bm25_search,
+    docplus_live_search,
+    sts_live_search,
     dense_search,
     dense_e5_search,
     hybrid_search,
@@ -128,6 +130,20 @@ evaluate_system(
     k=20,
     metadata={"method": "hybrid_e5", "experiment": "baseline"}
 )
+
+# Live Docplus (queries publikdocplus.regionuppsala.se directly)
+evaluate_system(
+    search_function=docplus_live_search,
+    k=20,
+    metadata={"method": "docplus_live", "experiment": "baseline"}
+)
+
+# Live STS Docplus search (queries sts.search.datatovalue.se)
+evaluate_system(
+    search_function=sts_live_search,
+    k=20,
+    metadata={"method": "sts_live", "experiment": "baseline"}
+)
 ```
 
 Run from terminal with flags:
@@ -135,11 +151,13 @@ Run from terminal with flags:
 ```bash
 ./.venv/bin/python evaluation/evaluation.py --method hybrid --top-k 20 --meta experiment=baseline --meta run_tag=exp1
 ./.venv/bin/python evaluation/evaluation.py --method bm25 --top-k 20 --meta experiment=bm25_baseline
+./.venv/bin/python evaluation/evaluation.py --method docplus_live --top-k 20 --meta experiment=docplus_live
+./.venv/bin/python evaluation/evaluation.py --method sts_live --top-k 20 --meta experiment=sts_live
 ```
 
 CLI flags:
 
-- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, or `hybrid_e5` (default: `hybrid`)
+- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid`)
 - `--top-k`: integer > 0 (default: `20`)
 - `--meta KEY=VALUE`: optional metadata entry, repeat for multiple fields
 
@@ -203,7 +221,11 @@ and visualizes:
 
 - `bm25_search`
 - `dense_search`
+- `dense_e5_search`
 - `hybrid_search`
+- `hybrid_e5_search`
+- `docplus_live_search`
+- `sts_live_search`
 - `search` (default = hybrid)
 
 Optional environment variables used by `search_adapter.py`:
@@ -216,6 +238,16 @@ Optional environment variables used by `search_adapter.py`:
 - `DOCPLUS_E5_METADATA_PATH`
 - `DOCPLUS_E5_MODEL_NAME`
 - `DOCPLUS_DEVICE`
+- `DOCPLUS_LIVE_BASE_URL` (default: `https://publikdocplus.regionuppsala.se/`)
+- `DOCPLUS_LIVE_SEARCH_PATH` (default: `/Home/Search`)
+- `DOCPLUS_LIVE_TIMEOUT_SECONDS` (default: `20`)
+- `DOCPLUS_LIVE_MAX_PAGES` (default: `1`, auto-expanded when `top_k > 20`)
+- `DOCPLUS_LIVE_USER_AGENT`
+- `DOCPLUS_STS_LIVE_BASE_URL` (default: `https://sts.search.datatovalue.se/`)
+- `DOCPLUS_STS_LIVE_SEARCH_PATH` (default: `/`)
+- `DOCPLUS_STS_LIVE_TIMEOUT_SECONDS` (default: `20`)
+- `DOCPLUS_STS_LIVE_MAX_PAGES` (default: `1`, auto-expanded when `top_k > 20`)
+- `DOCPLUS_STS_LIVE_USER_AGENT`
 
 ## Prerequisites
 

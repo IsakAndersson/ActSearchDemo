@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
 import math
 import os
 import re
+import threading
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
@@ -23,6 +25,25 @@ class ChunkRecord:
     text: str
     metadata: dict
     chunk_type: str = "body"
+
+
+@dataclass
+class BM25Index:
+    chunks: List[ChunkRecord]
+    doc_lengths: List[int]
+    doc_freqs: Dict[str, int]
+    avg_doc_len: float
+    postings: Dict[str, List[Tuple[int, int]]]
+
+
+@dataclass
+class BM25CacheEntry:
+    signature: Tuple[int, int, int]
+    index: BM25Index
+
+
+_BM25_INDEX_CACHE: Dict[Tuple[str, int, int, bool], BM25CacheEntry] = {}
+_BM25_CACHE_LOCK = threading.Lock()
 
 
 def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
@@ -168,6 +189,84 @@ def build_bm25_corpus(
     return chunks, term_freqs, doc_lengths, document_frequencies, avg_doc_len
 
 
+def _parsed_dir_signature(parsed_dir: str) -> Tuple[int, int, int]:
+    file_count = 0
+    latest_mtime_ns = 0
+    total_size = 0
+
+    with os.scandir(parsed_dir) as entries:
+        for entry in entries:
+            if not entry.is_file() or not entry.name.endswith(".json"):
+                continue
+            file_count += 1
+            stat = entry.stat()
+            latest_mtime_ns = max(latest_mtime_ns, stat.st_mtime_ns)
+            total_size += stat.st_size
+
+    return file_count, latest_mtime_ns, total_size
+
+
+def _build_postings(term_freqs: List[Dict[str, int]]) -> Dict[str, List[Tuple[int, int]]]:
+    postings: Dict[str, List[Tuple[int, int]]] = {}
+    for doc_id, freqs in enumerate(term_freqs):
+        for token, tf in freqs.items():
+            token_postings = postings.get(token)
+            if token_postings is None:
+                postings[token] = [(doc_id, tf)]
+            else:
+                token_postings.append((doc_id, tf))
+    return postings
+
+
+def _build_bm25_index(
+    parsed_dir: str,
+    max_chars: int,
+    overlap: int,
+    include_title_chunk: bool,
+) -> BM25Index:
+    chunks, term_freqs, doc_lengths, doc_freqs, avg_doc_len = build_bm25_corpus(
+        parsed_dir=parsed_dir,
+        max_chars=max_chars,
+        overlap=overlap,
+        include_title_chunk=include_title_chunk,
+    )
+    postings = _build_postings(term_freqs)
+    return BM25Index(
+        chunks=chunks,
+        doc_lengths=doc_lengths,
+        doc_freqs=doc_freqs,
+        avg_doc_len=avg_doc_len,
+        postings=postings,
+    )
+
+
+def _get_or_build_bm25_index(
+    parsed_dir: str,
+    max_chars: int,
+    overlap: int,
+    include_title_chunk: bool,
+) -> BM25Index:
+    normalized_dir = os.path.abspath(parsed_dir)
+    key = (normalized_dir, max_chars, overlap, include_title_chunk)
+    signature = _parsed_dir_signature(normalized_dir)
+
+    with _BM25_CACHE_LOCK:
+        cached = _BM25_INDEX_CACHE.get(key)
+        if cached is not None and cached.signature == signature:
+            return cached.index
+
+    index = _build_bm25_index(
+        parsed_dir=normalized_dir,
+        max_chars=max_chars,
+        overlap=overlap,
+        include_title_chunk=include_title_chunk,
+    )
+
+    with _BM25_CACHE_LOCK:
+        _BM25_INDEX_CACHE[key] = BM25CacheEntry(signature=signature, index=index)
+    return index
+
+
 def bm25_search(
     parsed_dir: str,
     query: str,
@@ -178,7 +277,10 @@ def bm25_search(
     k1: float = 1.5,
     b: float = 0.75,
 ) -> List[dict]:
-    chunks, term_freqs, doc_lengths, doc_freqs, avg_doc_len = build_bm25_corpus(
+    if top_k <= 0:
+        return []
+
+    index = _get_or_build_bm25_index(
         parsed_dir=parsed_dir,
         max_chars=max_chars,
         overlap=overlap,
@@ -188,24 +290,33 @@ def bm25_search(
     if not query_tokens:
         return []
 
-    total_docs = len(chunks)
-    idf: Dict[str, float] = {}
-    for token in set(query_tokens):
-        df = doc_freqs.get(token, 0)
-        idf[token] = math.log(1 + (total_docs - df + 0.5) / (df + 0.5))
+    token_counts: Dict[str, int] = {}
+    for token in query_tokens:
+        token_counts[token] = token_counts.get(token, 0) + 1
 
-    results = []
-    for record, freqs, doc_len in zip(chunks, term_freqs, doc_lengths):
-        score = 0.0
-        for token in query_tokens:
-            tf = freqs.get(token, 0)
-            if tf == 0:
-                continue
-            numerator = tf * (k1 + 1)
-            denominator = tf + k1 * (1 - b + b * doc_len / avg_doc_len)
-            score += idf.get(token, 0.0) * (numerator / denominator)
-        if score <= 0:
+    total_docs = len(index.chunks)
+    scores: Dict[int, float] = {}
+    for token, query_tf in token_counts.items():
+        postings = index.postings.get(token)
+        if not postings:
             continue
+
+        df = index.doc_freqs.get(token, 0)
+        idf = math.log(1 + (total_docs - df + 0.5) / (df + 0.5))
+        for doc_id, tf in postings:
+            doc_len = index.doc_lengths[doc_id]
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * doc_len / index.avg_doc_len)
+            partial_score = query_tf * idf * (numerator / denominator)
+            scores[doc_id] = scores.get(doc_id, 0.0) + partial_score
+
+    if not scores:
+        return []
+
+    top_scores = heapq.nlargest(top_k, scores.items(), key=lambda pair: pair[1])
+    results = []
+    for doc_id, score in top_scores:
+        record = index.chunks[doc_id]
         results.append(
             {
                 "score": score,
@@ -216,9 +327,7 @@ def bm25_search(
                 "chunk_type": record.chunk_type,
             }
         )
-
-    results.sort(key=lambda item: item["score"], reverse=True)
-    return results[:top_k]
+    return results
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -56,7 +56,7 @@ parsed output.
 
 Available named profiles in `search.vector_index`:
 
-- `swedish_bert` -> `KBLab/bert-base-swedish-cased`, `chunk_size=1200`, `chunk_overlap=200`
+- `swedish_bert` -> `KBLab/bert-base-swedish-cased`, `chunk_size=250`, `chunk_overlap=50`
 - `e5_large_instruct` -> `intfloat/multilingual-e5-large-instruct`, `chunk_size=250`, `chunk_overlap=50`
 
 Swedish BERT index:
@@ -109,8 +109,8 @@ This creates:
 - `output/vector_index_titles/docplus_titles.faiss` with normalized embeddings
 - `output/vector_index_titles/docplus_titles_metadata.jsonl` with chunk text + metadata
 
-For `e5_large_instruct`, regular `build` automatically includes one title chunk per
-document plus chunked body text.
+For both `swedish_bert` and `e5_large_instruct`, regular `build` automatically includes
+one title chunk per document plus chunked body text.
 
 ### GPU acceleration
 
@@ -144,12 +144,14 @@ python -m search.bm25_search \
 ## Offline evaluation
 
 Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`,
-`dense_e5`, `hybrid`, and `hybrid_e5` methods with `RR@20` reporting.
+`dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, and `sts_live` methods with `RR@20` reporting.
 
 From repository root:
 
 ```bash
 python evaluation/evaluation.py --method hybrid --top-k 20
+python evaluation/evaluation.py --method docplus_live --top-k 20
+python evaluation/evaluation.py --method sts_live --top-k 20
 ```
 
 See `evaluation/README.md` for full setup, methods, and outputs.
