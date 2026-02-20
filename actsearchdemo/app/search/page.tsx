@@ -14,6 +14,15 @@ type SearchResult = {
   text?: string;
   chunk_text?: string;
   chunk_type?: string;
+  merged_hits?: number;
+  merged_chunk_ids?: Array<number | string>;
+  llm_summary?: {
+    summary?: string;
+    reference?: string;
+    provider?: string;
+    model?: string;
+    [key: string]: unknown;
+  };
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -141,6 +150,32 @@ const getResultTitle = (result: SearchResult): string => {
 };
 
 const RESULT_WIDTH_CLASS = "w-full max-w-4xl mx-auto";
+
+const getLlmSummary = (
+  result: SearchResult,
+): { summary: string; reference?: string; provider?: string; model?: string } | undefined => {
+  const payload = result.llm_summary;
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const summary = getStringValue(payload.summary);
+  if (!summary) {
+    return undefined;
+  }
+  return {
+    summary,
+    reference: getStringValue(payload.reference),
+    provider: getStringValue(payload.provider),
+    model: getStringValue(payload.model),
+  };
+};
+
+const getMergedHits = (result: SearchResult): number => {
+  if (typeof result.merged_hits === "number" && Number.isFinite(result.merged_hits)) {
+    return result.merged_hits;
+  }
+  return 1;
+};
 
 export default function SearchPage() {
   const router = useRouter();
@@ -538,6 +573,9 @@ export default function SearchPage() {
                             const url = getResultUrl(result);
                             const title = getResultTitle(result);
                             const resultMethod = key as SearchMethod;
+                            const llmSummary =
+                              resultMethod === "hybrid_e5" ? getLlmSummary(result) : undefined;
+                            const mergedHits = getMergedHits(result);
                             const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
                             const selectedRating = resultRatings[resultKey] ?? 0;
                             return (
@@ -558,6 +596,11 @@ export default function SearchPage() {
                                   {result.chunk_type === "title" ? (
                                     <span className="badge badge-secondary badge-outline whitespace-nowrap text-xs">
                                       Title match
+                                    </span>
+                                  ) : null}
+                                  {mergedHits > 1 ? (
+                                    <span className="badge badge-accent badge-outline whitespace-nowrap text-xs">
+                                      {mergedHits} chunks merged
                                     </span>
                                   ) : null}
                                 </div>
@@ -587,9 +630,26 @@ export default function SearchPage() {
                                     </p>
                                   )}
                                 </div>
-                                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5">
-                                  {String(result.chunk_text ?? result.text ?? "")}
-                                </p>
+                                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                  <p className="line-clamp-4 whitespace-pre-wrap text-xs leading-5">
+                                    {String(result.chunk_text ?? result.text ?? "")}
+                                  </p>
+                                  {llmSummary ? (
+                                    <div className="rounded-md border border-base-200 bg-base-200/30 p-2">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-base-content/70">
+                                        Summering
+                                      </p>
+                                      <p className="mt-1 whitespace-pre-wrap text-xs leading-5">
+                                        {llmSummary.summary}
+                                      </p>
+                                      {llmSummary.reference ? (
+                                        <p className="mt-2 text-[11px] leading-4 text-base-content/70">
+                                          Referens: {llmSummary.reference}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+                                </div>
                                 <div className="mt-2 flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <button
@@ -630,6 +690,9 @@ export default function SearchPage() {
               const url = getResultUrl(result);
               const title = getResultTitle(result);
               const resultMethod = lastRequestedMethod;
+              const llmSummary =
+                lastRequestedMethod === "hybrid_e5" ? getLlmSummary(result) : undefined;
+              const mergedHits = getMergedHits(result);
               const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
               const selectedRating = resultRatings[resultKey] ?? 0;
               return (
@@ -648,6 +711,11 @@ export default function SearchPage() {
                       </span>
                       {result.chunk_type === "title" ? (
                         <span className="badge badge-secondary badge-outline">Title match</span>
+                      ) : null}
+                      {mergedHits > 1 ? (
+                        <span className="badge badge-accent badge-outline">
+                          {mergedHits} chunks merged
+                        </span>
                       ) : null}
                     </div>
                     <div className="space-y-1">
@@ -668,9 +736,26 @@ export default function SearchPage() {
                         </p>
                       )}
                     </div>
-                    <p className="whitespace-pre-wrap text-sm leading-6">
-                      {String(result.chunk_text ?? result.text ?? "")}
-                    </p>
+                    <div className="grid gap-3 md:grid-cols-2 md:items-start">
+                      <p className="whitespace-pre-wrap text-sm leading-6">
+                        {String(result.chunk_text ?? result.text ?? "")}
+                      </p>
+                      {llmSummary ? (
+                        <aside className="rounded-lg border border-base-200 bg-base-200/30 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-base-content/70">
+                            Summering
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+                            {llmSummary.summary}
+                          </p>
+                          {llmSummary.reference ? (
+                            <p className="mt-2 text-xs leading-5 text-base-content/70">
+                              Referens: {llmSummary.reference}
+                            </p>
+                          ) : null}
+                        </aside>
+                      ) : null}
+                    </div>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button

@@ -12,6 +12,7 @@ from uuid import uuid4
 from flask import Flask, jsonify, request
 
 from search.bm25_search import bm25_search
+from search.llm_summary import summarize_result
 from search.vector_index import DEFAULT_MODEL, VECTOR_MODEL_PROFILES, query_index
 
 
@@ -113,6 +114,19 @@ def _extract_score(result: Dict[str, Any]) -> str:
     return _to_text(score)
 
 
+def _score_as_float(result: Dict[str, Any]) -> float:
+    score = result.get("score")
+    if isinstance(score, (int, float)):
+        return float(score)
+    text = _to_text(score)
+    if not text:
+        return 0.0
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
 def _append_csv_row(path: str, fieldnames: List[str], row: Dict[str, Any]) -> None:
     directory = os.path.dirname(path)
     if directory:
@@ -143,6 +157,19 @@ def _result_key(result: Dict[str, Any]) -> Tuple[str, int]:
     return source_path, chunk_id
 
 
+def _document_key(result: Dict[str, Any]) -> str:
+    source_path = _to_text(result.get("source_path"))
+    if source_path:
+        return f"path::{source_path.lower()}"
+    url = _extract_result_url(result)
+    if url:
+        return f"url::{url.lower()}"
+    title = _extract_result_title(result)
+    if title:
+        return f"title::{title.lower()}"
+    return "unknown"
+
+
 def _rrf_hybrid(
     bm25_results: List[Dict[str, Any]],
     e5_results: List[Dict[str, Any]],
@@ -171,6 +198,96 @@ def _rrf_hybrid(
         item["score"] = float(fused_score)
         merged.append(item)
     return merged
+
+
+def _merge_results_by_document(
+    results: List[Dict[str, Any]],
+    top_k: int,
+    max_chunks_per_document: int = 3,
+) -> List[Dict[str, Any]]:
+    if top_k <= 0 or not results:
+        return []
+
+    grouped: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
+    for rank, result in enumerate(results, start=1):
+        key = _document_key(result)
+        existing = grouped.get(key)
+        score = _score_as_float(result)
+        chunk_text = _to_text(result.get("chunk_text") or result.get("text"))
+        chunk_id = _to_text(result.get("chunk_id"))
+
+        if existing is None:
+            combined = dict(result)
+            if chunk_text:
+                combined["chunk_text"] = chunk_text
+                combined["text"] = chunk_text
+            combined["_best_score"] = score
+            combined["_score_sum"] = score
+            combined["_rank_sum"] = 1.0 / (60.0 + rank)
+            combined["_chunk_texts"] = [chunk_text] if chunk_text else []
+            combined["_chunk_ids"] = [chunk_id] if chunk_id else []
+            combined["merged_hits"] = 1
+            grouped[key] = combined
+            order.append(key)
+            continue
+
+        existing["_score_sum"] = float(existing.get("_score_sum", 0.0)) + score
+        existing["_rank_sum"] = float(existing.get("_rank_sum", 0.0)) + (1.0 / (60.0 + rank))
+        existing["merged_hits"] = int(existing.get("merged_hits", 1)) + 1
+
+        if score > float(existing.get("_best_score", 0.0)):
+            preserved_fields = {
+                "metadata": existing.get("metadata"),
+                "_score_sum": existing.get("_score_sum"),
+                "_rank_sum": existing.get("_rank_sum"),
+                "_chunk_texts": existing.get("_chunk_texts"),
+                "_chunk_ids": existing.get("_chunk_ids"),
+                "merged_hits": existing.get("merged_hits"),
+            }
+            existing.clear()
+            existing.update(dict(result))
+            existing.update(preserved_fields)
+            existing["_best_score"] = score
+
+        texts = existing.get("_chunk_texts")
+        if isinstance(texts, list) and chunk_text and chunk_text not in texts:
+            texts.append(chunk_text)
+        ids = existing.get("_chunk_ids")
+        if isinstance(ids, list) and chunk_id and chunk_id not in ids:
+            ids.append(chunk_id)
+
+    merged: List[Dict[str, Any]] = []
+    for key in order:
+        item = grouped[key]
+        texts = item.get("_chunk_texts")
+        text_values = texts if isinstance(texts, list) else []
+        combined_text = "\n\n---\n\n".join(text_values[:max_chunks_per_document])
+        if combined_text:
+            item["chunk_text"] = combined_text
+            item["text"] = combined_text
+        chunk_ids = item.get("_chunk_ids")
+        if isinstance(chunk_ids, list):
+            item["merged_chunk_ids"] = chunk_ids[:max_chunks_per_document]
+        item["score"] = float(item.get("_score_sum", 0.0)) + float(item.get("_rank_sum", 0.0))
+        item.pop("_score_sum", None)
+        item.pop("_rank_sum", None)
+        item.pop("_best_score", None)
+        item.pop("_chunk_texts", None)
+        item.pop("_chunk_ids", None)
+        merged.append(item)
+
+    merged.sort(key=lambda entry: _score_as_float(entry), reverse=True)
+    return merged[:top_k]
+
+
+def _annotate_results_with_summaries(query: str, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    annotated: List[Dict[str, Any]] = []
+    for item in results:
+        enriched = dict(item)
+        enriched["llm_summary"] = summarize_result(query=query, result=enriched)
+        annotated.append(enriched)
+    return annotated
 
 
 def _log_search(
@@ -379,6 +496,9 @@ def search() -> Any:
 
     errors: List[str] = []
     top_k = 5
+    candidate_multiplier = 3
+    merge_document_hits = True
+    max_chunks_per_document = 3
     results: List[Dict[str, Any]] | None = None
     results_by_method: Dict[str, List[Dict[str, Any]]] | None = None
 
@@ -390,42 +510,87 @@ def search() -> Any:
         except ValueError:
             top_k = 5
             errors.append("Top-k must be an integer; defaulted to 5.")
+        try:
+            candidate_multiplier = int(
+                _get_env_default("DOCPLUS_MERGE_CANDIDATE_MULTIPLIER", "3")
+            )
+        except ValueError:
+            candidate_multiplier = 3
+        if candidate_multiplier < 1:
+            candidate_multiplier = 1
+        merge_flag_raw = _get_env_default("DOCPLUS_MERGE_DOCUMENT_HITS", "1").lower()
+        merge_document_hits = merge_flag_raw not in {"0", "false", "no", "off"}
+        try:
+            max_chunks_per_document = int(
+                _get_env_default("DOCPLUS_MERGE_MAX_CHUNKS", "3")
+            )
+        except ValueError:
+            max_chunks_per_document = 3
+        if max_chunks_per_document < 1:
+            max_chunks_per_document = 1
 
         if method == "bm25":
             try:
+                candidate_k = max(top_k * candidate_multiplier, top_k)
                 results = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
-                    top_k=top_k,
+                    top_k=candidate_k,
                 )
+                if merge_document_hits:
+                    results = _merge_results_by_document(
+                        results=results,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results = results[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
         elif method == "vector":
             try:
+                candidate_k = max(top_k * candidate_multiplier, top_k)
                 results = query_index(
                     index_path=defaults["index_path"],
                     metadata_path=defaults["metadata_path"],
                     query=query,
                     model_name=defaults["model_name"],
-                    top_k=top_k,
+                    top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                if merge_document_hits:
+                    results = _merge_results_by_document(
+                        results=results,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results = results[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
         elif method == "vector_e5":
             try:
+                candidate_k = max(top_k * candidate_multiplier, top_k)
                 results = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
                     model_name=defaults["e5_model_name"],
-                    top_k=top_k,
+                    top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                if merge_document_hits:
+                    results = _merge_results_by_document(
+                        results=results,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results = results[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
         elif method == "hybrid_e5":
-            candidate_k = max(top_k * 3, top_k)
+            candidate_k = max(top_k * candidate_multiplier, top_k)
             bm25_results: List[Dict[str, Any]] = []
             e5_results: List[Dict[str, Any]] = []
             try:
@@ -450,47 +615,97 @@ def search() -> Any:
             results = _rrf_hybrid(
                 bm25_results=bm25_results,
                 e5_results=e5_results,
-                top_k=top_k,
+                top_k=candidate_k,
             )
+            if merge_document_hits:
+                results = _merge_results_by_document(
+                    results=results,
+                    top_k=top_k,
+                    max_chunks_per_document=max_chunks_per_document,
+                )
+            else:
+                results = results[:top_k]
+            results = _annotate_results_with_summaries(query=query, results=results)
         elif method == "all":
             results_by_method = {}
+            candidate_k = max(top_k * candidate_multiplier, top_k)
+            bm25_for_hybrid: List[Dict[str, Any]] = []
+            e5_for_hybrid: List[Dict[str, Any]] = []
             try:
-                results_by_method["bm25"] = bm25_search(
+                bm25_raw = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
-                    top_k=top_k,
+                    top_k=candidate_k,
                 )
+                bm25_for_hybrid = bm25_raw
+                if merge_document_hits:
+                    results_by_method["bm25"] = _merge_results_by_document(
+                        results=bm25_raw,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results_by_method["bm25"] = bm25_raw[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
             try:
-                results_by_method["vector"] = query_index(
+                vector_raw = query_index(
                     index_path=defaults["index_path"],
                     metadata_path=defaults["metadata_path"],
                     query=query,
                     model_name=defaults["model_name"],
-                    top_k=top_k,
+                    top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                if merge_document_hits:
+                    results_by_method["vector"] = _merge_results_by_document(
+                        results=vector_raw,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results_by_method["vector"] = vector_raw[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
                 results_by_method["vector"] = []
             try:
-                results_by_method["vector_e5"] = query_index(
+                vector_e5_raw = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
                     model_name=defaults["e5_model_name"],
-                    top_k=top_k,
+                    top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                e5_for_hybrid = vector_e5_raw
+                if merge_document_hits:
+                    results_by_method["vector_e5"] = _merge_results_by_document(
+                        results=vector_e5_raw,
+                        top_k=top_k,
+                        max_chunks_per_document=max_chunks_per_document,
+                    )
+                else:
+                    results_by_method["vector_e5"] = vector_e5_raw[:top_k]
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
             results_by_method["hybrid_e5"] = _rrf_hybrid(
-                bm25_results=results_by_method.get("bm25", []),
-                e5_results=results_by_method.get("vector_e5", []),
-                top_k=top_k,
+                bm25_results=bm25_for_hybrid,
+                e5_results=e5_for_hybrid,
+                top_k=candidate_k,
+            )
+            if merge_document_hits:
+                results_by_method["hybrid_e5"] = _merge_results_by_document(
+                    results=results_by_method["hybrid_e5"],
+                    top_k=top_k,
+                    max_chunks_per_document=max_chunks_per_document,
+                )
+            else:
+                results_by_method["hybrid_e5"] = results_by_method["hybrid_e5"][:top_k]
+            results_by_method["hybrid_e5"] = _annotate_results_with_summaries(
+                query=query,
+                results=results_by_method["hybrid_e5"],
             )
         else:
             errors.append(f"Unknown method '{method}'.")

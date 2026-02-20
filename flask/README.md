@@ -152,6 +152,9 @@ API endpoints:
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
   `vector`, `vector_e5`, `hybrid_e5` (default), and `all` (returns `results_by_method`).
+  For `hybrid_e5`, each result also includes `llm_summary` (`summary` + `reference`).
+  Results are merged on document-level by default (multiple chunk hits from same document
+  become one ranked result with `merged_hits`).
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link.
 - `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
@@ -184,7 +187,18 @@ export DOCPLUS_PORT=5000
 export DOCPLUS_SEARCH_LOG_PATH=output/logs/search_events.csv
 export DOCPLUS_CLICK_LOG_PATH=output/logs/click_events.csv
 export DOCPLUS_RATING_LOG_PATH=output/logs/rating_events.csv
+export DOCPLUS_LLM_SUMMARY_ENABLED=1
+export DOCPLUS_LLM_API_URL=https://api.openai.com/v1/chat/completions
+export DOCPLUS_LLM_API_KEY=<YOUR_API_KEY>
+export DOCPLUS_LLM_MODEL=gpt-4o-mini
+export DOCPLUS_LLM_TIMEOUT_SECONDS=12
+export DOCPLUS_MERGE_DOCUMENT_HITS=1
+export DOCPLUS_MERGE_CANDIDATE_MULTIPLIER=3
+export DOCPLUS_MERGE_MAX_CHUNKS=3
 ```
+
+If `DOCPLUS_LLM_API_KEY` is missing or the LLM call fails, the API falls back to a
+local extractive summary so the UI still shows a summary + reference.
 
 ### Vercel demo via ngrok
 
