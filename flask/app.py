@@ -151,7 +151,7 @@ def _log_search(
     methods_to_log: Dict[str, List[Dict[str, Any]]] = {}
     if results_by_method:
         methods_to_log = results_by_method
-    elif requested_method in {"bm25", "vector", "vector_titles", "vector_e5"}:
+    elif requested_method in {"bm25", "vector", "vector_e5"}:
         methods_to_log = {requested_method: results}
 
     if not methods_to_log:
@@ -277,20 +277,6 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
                 "DOCPLUS_METADATA_PATH", "output/vector_index/docplus_metadata.jsonl"
             )
         ),
-        "titles_index_path": str(
-            payload.get("titles_index_path")
-            or _get_env_default(
-                "DOCPLUS_TITLES_INDEX_PATH",
-                "output/vector_index_titles/docplus_titles.faiss",
-            )
-        ),
-        "titles_metadata_path": str(
-            payload.get("titles_metadata_path")
-            or _get_env_default(
-                "DOCPLUS_TITLES_METADATA_PATH",
-                "output/vector_index_titles/docplus_titles_metadata.jsonl",
-            )
-        ),
         "e5_index_path": str(
             payload.get("e5_index_path")
             or _get_env_default(
@@ -392,18 +378,6 @@ def search() -> Any:
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
-        elif method == "vector_titles":
-            try:
-                results = query_index(
-                    index_path=defaults["titles_index_path"],
-                    metadata_path=defaults["titles_metadata_path"],
-                    query=query,
-                    model_name=defaults["model_name"],
-                    top_k=top_k,
-                    device_preference=defaults["device"],
-                )
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"Vector+titles search failed: {exc}")
         elif method == "all":
             results_by_method = {}
             try:
@@ -439,18 +413,6 @@ def search() -> Any:
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
-            try:
-                results_by_method["vector_titles"] = query_index(
-                    index_path=defaults["titles_index_path"],
-                    metadata_path=defaults["titles_metadata_path"],
-                    query=query,
-                    model_name=defaults["model_name"],
-                    top_k=top_k,
-                    device_preference=defaults["device"],
-                )
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"Vector+titles search failed: {exc}")
-                results_by_method["vector_titles"] = []
         else:
             errors.append(f"Unknown method '{method}'.")
 

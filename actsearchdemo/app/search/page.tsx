@@ -7,7 +7,7 @@ const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector" | "vector_e5" | "vector_titles" | "all";
+type SearchMethod = "bm25" | "vector" | "vector_e5" | "all";
 
 type SearchResult = {
   score?: number;
@@ -160,12 +160,6 @@ export default function SearchPage() {
   const [metadataPath, setMetadataPath] = useState(
     "output/vector_index/docplus_metadata.jsonl",
   );
-  const [titlesIndexPath, setTitlesIndexPath] = useState(
-    "output/vector_index_titles/docplus_titles.faiss",
-  );
-  const [titlesMetadataPath, setTitlesMetadataPath] = useState(
-    "output/vector_index_titles/docplus_titles_metadata.jsonl",
-  );
   const [e5IndexPath, setE5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
   const [e5MetadataPath, setE5MetadataPath] = useState(
     "output/vector_index_e5/docplus_metadata.jsonl",
@@ -296,8 +290,6 @@ export default function SearchPage() {
           parsed_dir: parsedDir,
           index_path: indexPath,
           metadata_path: metadataPath,
-          titles_index_path: titlesIndexPath,
-          titles_metadata_path: titlesMetadataPath,
           e5_index_path: e5IndexPath,
           e5_metadata_path: e5MetadataPath,
           device,
@@ -382,7 +374,6 @@ export default function SearchPage() {
                   <option value="bm25">BM25</option>
                   <option value="vector">Vector (FAISS)</option>
                   <option value="vector_e5">Vector (E5 large instruct)</option>
-                  <option value="vector_titles">Vector (title-only)</option>
                   <option value="all">All (side-by-side)</option>
                 </select>
               </label>
@@ -476,30 +467,6 @@ export default function SearchPage() {
 
                     <label className="form-control">
                       <div className="label">
-                        <span className="label-text">Titles FAISS index path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={titlesIndexPath}
-                        onChange={(event) => setTitlesIndexPath(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">Titles metadata path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={titlesMetadataPath}
-                        onChange={(event) => setTitlesMetadataPath(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
                         <span className="label-text">Device</span>
                       </div>
                       <select
@@ -549,7 +516,6 @@ export default function SearchPage() {
                 { key: "bm25", label: "BM25" },
                 { key: "vector", label: "Vector (FAISS)" },
                 { key: "vector_e5", label: "Vector (E5 large instruct)" },
-                { key: "vector_titles", label: "Vector (title-only)" },
               ].map(({ key, label }) => {
                 const methodResults = resultsByMethod[key as SearchMethod] ?? [];
                 return (
