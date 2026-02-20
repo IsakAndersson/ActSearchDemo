@@ -7,7 +7,7 @@ const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector" | "vector_e5" | "all";
+type SearchMethod = "bm25" | "vector" | "vector_e5" | "hybrid_e5" | "all";
 
 type SearchResult = {
   score?: number;
@@ -150,10 +150,10 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [resultsByMethod, setResultsByMethod] = useState<SearchResultsByMethod>({});
   const [searchId, setSearchId] = useState<string>("");
-  const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("bm25");
+  const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("hybrid_e5");
   const [lastSearchQuery, setLastSearchQuery] = useState<string>("");
   const [resultRatings, setResultRatings] = useState<Record<string, number>>({});
-  const [method, setMethod] = useState<SearchMethod>("bm25");
+  const [method, setMethod] = useState<SearchMethod>("hybrid_e5");
   const [query, setQuery] = useState("");
   const [parsedDir, setParsedDir] = useState("output/parsed");
   const [indexPath, setIndexPath] = useState("output/vector_index/docplus.faiss");
@@ -374,6 +374,7 @@ export default function SearchPage() {
                   <option value="bm25">BM25</option>
                   <option value="vector">Vector (FAISS)</option>
                   <option value="vector_e5">Vector (E5 large instruct)</option>
+                  <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
                   <option value="all">All (side-by-side)</option>
                 </select>
               </label>
@@ -516,6 +517,7 @@ export default function SearchPage() {
                 { key: "bm25", label: "BM25" },
                 { key: "vector", label: "Vector (FAISS)" },
                 { key: "vector_e5", label: "Vector (E5 large instruct)" },
+                { key: "hybrid_e5", label: "Hybrid (BM25 + E5)" },
               ].map(({ key, label }) => {
                 const methodResults = resultsByMethod[key as SearchMethod] ?? [];
                 return (

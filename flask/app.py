@@ -5,7 +5,7 @@ import csv
 import os
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
@@ -127,6 +127,52 @@ def _append_csv_row(path: str, fieldnames: List[str], row: Dict[str, Any]) -> No
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
+def _result_key(result: Dict[str, Any]) -> Tuple[str, int]:
+    source_path = _to_text(result.get("source_path"))
+    chunk_id_raw = result.get("chunk_id")
+    if isinstance(chunk_id_raw, int):
+        chunk_id = chunk_id_raw
+    else:
+        chunk_id = -1
+        chunk_id_text = _to_text(chunk_id_raw)
+        if chunk_id_text:
+            try:
+                chunk_id = int(chunk_id_text)
+            except ValueError:
+                chunk_id = -1
+    return source_path, chunk_id
+
+
+def _rrf_hybrid(
+    bm25_results: List[Dict[str, Any]],
+    e5_results: List[Dict[str, Any]],
+    top_k: int,
+    rrf_k: int = 60,
+    bm25_weight: float = 1.0,
+    e5_weight: float = 1.0,
+) -> List[Dict[str, Any]]:
+    fused_scores: Dict[Tuple[str, int], float] = {}
+    result_lookup: Dict[Tuple[str, int], Dict[str, Any]] = {}
+
+    for rank, result in enumerate(bm25_results, start=1):
+        key = _result_key(result)
+        fused_scores[key] = fused_scores.get(key, 0.0) + bm25_weight / (rrf_k + rank)
+        result_lookup.setdefault(key, result)
+
+    for rank, result in enumerate(e5_results, start=1):
+        key = _result_key(result)
+        fused_scores[key] = fused_scores.get(key, 0.0) + e5_weight / (rrf_k + rank)
+        result_lookup.setdefault(key, result)
+
+    ranked = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)
+    merged: List[Dict[str, Any]] = []
+    for key, fused_score in ranked[:top_k]:
+        item = dict(result_lookup[key])
+        item["score"] = float(fused_score)
+        merged.append(item)
+    return merged
+
+
 def _log_search(
     search_id: str,
     query: str,
@@ -151,7 +197,7 @@ def _log_search(
     methods_to_log: Dict[str, List[Dict[str, Any]]] = {}
     if results_by_method:
         methods_to_log = results_by_method
-    elif requested_method in {"bm25", "vector", "vector_e5"}:
+    elif requested_method in {"bm25", "vector", "vector_e5", "hybrid_e5"}:
         methods_to_log = {requested_method: results}
 
     if not methods_to_log:
@@ -326,7 +372,7 @@ def search() -> Any:
 
     payload = request.get_json(silent=True) or request.form.to_dict()
     search_id = str(uuid4())
-    method = str(payload.get("method", "bm25")).lower()
+    method = str(payload.get("method", "hybrid_e5")).lower()
     query = str(payload.get("query") or "").strip()
 
     defaults = _defaults_from_payload(payload)
@@ -378,6 +424,34 @@ def search() -> Any:
                 )
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
+        elif method == "hybrid_e5":
+            candidate_k = max(top_k * 3, top_k)
+            bm25_results: List[Dict[str, Any]] = []
+            e5_results: List[Dict[str, Any]] = []
+            try:
+                bm25_results = bm25_search(
+                    parsed_dir=defaults["parsed_dir"],
+                    query=query,
+                    top_k=candidate_k,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"BM25 search failed: {exc}")
+            try:
+                e5_results = query_index(
+                    index_path=defaults["e5_index_path"],
+                    metadata_path=defaults["e5_metadata_path"],
+                    query=query,
+                    model_name=defaults["e5_model_name"],
+                    top_k=candidate_k,
+                    device_preference=defaults["device"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector E5 search failed: {exc}")
+            results = _rrf_hybrid(
+                bm25_results=bm25_results,
+                e5_results=e5_results,
+                top_k=top_k,
+            )
         elif method == "all":
             results_by_method = {}
             try:
@@ -413,6 +487,11 @@ def search() -> Any:
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
+            results_by_method["hybrid_e5"] = _rrf_hybrid(
+                bm25_results=results_by_method.get("bm25", []),
+                e5_results=results_by_method.get("vector_e5", []),
+                top_k=top_k,
+            )
         else:
             errors.append(f"Unknown method '{method}'.")
 

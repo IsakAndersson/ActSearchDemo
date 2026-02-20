@@ -151,7 +151,7 @@ API endpoints:
 
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
-  `vector`, `vector_e5`, and `all` (returns `results_by_method`).
+  `vector`, `vector_e5`, `hybrid_e5` (default), and `all` (returns `results_by_method`).
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link.
 - `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
