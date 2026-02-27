@@ -241,3 +241,6 @@ output/
 **/output/
 
 requirements_lock.txt
+
+*.faiss
+*.jsonl

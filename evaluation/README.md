@@ -215,6 +215,41 @@ and visualizes:
 - RR@20 by query type
 - retrieved score distributions per method
 
+## Parameter Sweep Script
+
+For large-scale evaluation across chunking/preprocessing settings, use:
+
+```bash
+python evaluation/evaluation_sweep.py \
+  --method hybrid \
+  --experiment-name hybrid_sweep_feb26 \
+  --chunk-sizes 150,250,400 \
+  --overlaps 25,50 \
+  --include-title-chunk true,false \
+  --top-k 20
+```
+
+Vector methods (`dense`, `dense_e5`, `hybrid`, `hybrid_e5`) build one vector index per parameter combination before evaluation.  
+`bm25` runs the same parameter grid without FAISS index building.
+
+Sweep output structure:
+
+- `evaluation/experiments/<experiment>/experiment_manifest.json`
+- `evaluation/experiments/<experiment>/indexes/.../<config>/config.json`
+- `evaluation/experiments/<experiment>/results/runs/.../<config>/evaluation_*.csv`
+- `evaluation/experiments/<experiment>/results/aggregate/evaluation_*.csv`
+
+Key flags:
+
+- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`
+- `--model-name`: optional vector model override
+- `--profile`: optional profile key (used when `--model-name` is omitted)
+- `--chunk-sizes`: comma-separated ints
+- `--overlaps`: comma-separated ints
+- `--include-title-chunk`: comma-separated booleans (`true,false`)
+- `--parsed-dir`: parsed JSON directory (default `flask/output/parsed`)
+- `--experiments-root`: default `evaluation/experiments`
+
 ## Search Adapter
 
 `search_adapter.py` provides ready-to-use adapters:

@@ -1,0 +1,21 @@
+{
+  "created_at_utc": "2026-02-26T21:23:32+00:00",
+  "method": "bm25",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "top_k": 20,
+  "chunk_sizes": [
+    150,
+    250,
+    400
+  ],
+  "overlaps": [
+    25,
+    50
+  ],
+  "include_title_chunk": [
+    true
+  ],
+  "batch_size": 8,
+  "device": "auto",
+  "model_name": null
+}

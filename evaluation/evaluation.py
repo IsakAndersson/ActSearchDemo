@@ -1,12 +1,13 @@
-import ir_measures
-from ir_measures import *
-import pandas as pd
-import os
 import argparse
 import logging
+import os
 from datetime import datetime, timedelta, timezone
-from typing import Callable, List, Tuple
 from pathlib import Path
+from typing import Callable, List, Optional, Tuple
+
+import ir_measures
+import pandas as pd
+from ir_measures import *
 
 try:
     from .doc_id import normalize_doc_id
@@ -40,7 +41,13 @@ def _validate_flat_metadata(metadata):
         validated[key] = value
     return validated
 
-def evaluate_system(search_function, k, metadata=None):
+def evaluate_system(
+    search_function,
+    k,
+    metadata=None,
+    output_dir: Optional[str] = None,
+    aggregate_dir: Optional[str] = None,
+):
     """
     Run evaluation and append outputs to CSV files.
 
@@ -69,12 +76,28 @@ def evaluate_system(search_function, k, metadata=None):
     }
     run_metadata.update(_validate_flat_metadata(metadata))
     print_results(results_by_query, average_score, average_rank, run_metadata=run_metadata)
-    save_results_to_csv(results_by_query, average_score, average_rank, run_metadata, run_df=run_df)
+    save_results_to_csv(
+        results_by_query,
+        average_score,
+        average_rank,
+        run_metadata,
+        run_df=run_df,
+        output_dir=output_dir,
+        aggregate_dir=aggregate_dir,
+    )
     return results_by_query, average_rank, average_score
 
-def save_results_to_csv(detailed_results, average_score, average_rank, run_metadata=None, run_df=None):
-    def append_df_to_csv(df: pd.DataFrame, path: str):
-        output_path = EVALUATION_DIR / path
+def save_results_to_csv(
+    detailed_results,
+    average_score,
+    average_rank,
+    run_metadata=None,
+    run_df=None,
+    output_dir: Optional[str] = None,
+    aggregate_dir: Optional[str] = None,
+):
+    def append_df_to_csv(df: pd.DataFrame, output_path: Path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         needs_header = True
         if output_path.exists() and output_path.stat().st_size > 0:
             with output_path.open("r", encoding="utf-8") as f:
@@ -83,12 +106,20 @@ def save_results_to_csv(detailed_results, average_score, average_rank, run_metad
             needs_header = first_line != expected_header
         df.to_csv(output_path, mode="a", header=needs_header, index=False)
 
+    run_output_dir = Path(output_dir).resolve() if output_dir else EVALUATION_DIR
+    targets = [run_output_dir]
+    if aggregate_dir:
+        aggregate_path = Path(aggregate_dir).resolve()
+        if aggregate_path not in targets:
+            targets.append(aggregate_path)
+
     # 1) Detailed per-query-type metrics
     detailed_results_with_metadata = detailed_results.copy()
     if run_metadata:
         for key, value in run_metadata.items():
             detailed_results_with_metadata[key] = value
-    append_df_to_csv(detailed_results_with_metadata, "evaluation_results.csv")
+    for target in targets:
+        append_df_to_csv(detailed_results_with_metadata, target / "evaluation_results.csv")
 
     # 2) Overall summary metrics
     summary_row = {
@@ -97,7 +128,8 @@ def save_results_to_csv(detailed_results, average_score, average_rank, run_metad
     }
     if run_metadata:
         summary_row.update(run_metadata)
-    append_df_to_csv(pd.DataFrame([summary_row]), "evaluation_summary.csv")
+    for target in targets:
+        append_df_to_csv(pd.DataFrame([summary_row]), target / "evaluation_summary.csv")
 
     # 3) Full run rows (query_id, doc_id, score) for reproducibility/debugging
     if run_df is not None and not run_df.empty:
@@ -105,7 +137,8 @@ def save_results_to_csv(detailed_results, average_score, average_rank, run_metad
         if run_metadata:
             for key, value in run_metadata.items():
                 run_with_metadata[key] = value
-        append_df_to_csv(run_with_metadata, "evaluation_run.csv")
+        for target in targets:
+            append_df_to_csv(run_with_metadata, target / "evaluation_run.csv")
 
 def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 	rows = []
@@ -331,6 +364,14 @@ def main():
         metavar="KEY=VALUE",
         help="Optional run metadata. Repeat flag for multiple entries.",
     )
+    parser.add_argument(
+        "--output-dir",
+        help="Optional directory where run CSV files are written.",
+    )
+    parser.add_argument(
+        "--aggregate-dir",
+        help="Optional directory that also receives appended aggregate CSV files.",
+    )
 
     args = parser.parse_args()
 
@@ -340,7 +381,13 @@ def main():
     search_function = _resolve_search_function(args.method)
     metadata = _parse_meta_args(args.meta)
     metadata.setdefault("method", args.method)
-    evaluate_system(search_function=search_function, k=args.top_k, metadata=metadata)
+    evaluate_system(
+        search_function=search_function,
+        k=args.top_k,
+        metadata=metadata,
+        output_dir=args.output_dir,
+        aggregate_dir=args.aggregate_dir,
+    )
 
 if __name__ == "__main__":
     main()

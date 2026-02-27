@@ -36,6 +36,13 @@ DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"
 LOG = logging.getLogger(__name__)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class SearchConfig:
     parsed_dir: str = str(FLASK_DIR / "output" / "parsed")
@@ -56,6 +63,9 @@ class SearchConfig:
     sts_live_timeout_seconds: int = 20
     sts_live_max_pages: int = 1
     sts_live_user_agent: str = "ActSearchEvaluation/1.0"
+    bm25_max_chars: int = 250
+    bm25_overlap: int = 50
+    bm25_include_title_chunk: bool = True
 
 
 DEFAULT_CONFIG = SearchConfig(
@@ -79,6 +89,12 @@ DEFAULT_CONFIG = SearchConfig(
     ),
     sts_live_max_pages=max(1, int(os.getenv("DOCPLUS_STS_LIVE_MAX_PAGES", str(SearchConfig.sts_live_max_pages)))),
     sts_live_user_agent=os.getenv("DOCPLUS_STS_LIVE_USER_AGENT", SearchConfig.sts_live_user_agent),
+    bm25_max_chars=int(os.getenv("DOCPLUS_BM25_MAX_CHARS", str(SearchConfig.bm25_max_chars))),
+    bm25_overlap=int(os.getenv("DOCPLUS_BM25_OVERLAP", str(SearchConfig.bm25_overlap))),
+    bm25_include_title_chunk=_env_bool(
+        "DOCPLUS_BM25_INCLUDE_TITLE_CHUNK",
+        SearchConfig.bm25_include_title_chunk,
+    ),
 )
 
 
@@ -313,7 +329,14 @@ def _fetch_sts_live_search_page(
 def bm25_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CONFIG) -> SearchResults:
     if not query.strip() or top_k <= 0:
         return []
-    raw_results = _bm25_impl(parsed_dir=config.parsed_dir, query=query, top_k=top_k)
+    raw_results = _bm25_impl(
+        parsed_dir=config.parsed_dir,
+        query=query,
+        top_k=top_k,
+        max_chars=config.bm25_max_chars,
+        overlap=config.bm25_overlap,
+        include_title_chunk=config.bm25_include_title_chunk,
+    )
     return _dedupe_and_sort(raw_results, top_k=top_k)
 
 
