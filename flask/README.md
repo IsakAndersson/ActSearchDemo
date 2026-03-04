@@ -12,11 +12,14 @@ Use the shared project environment at repository root (`../.venv`), not `flask/.
 # from repository root (recommended)
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt # OBS for mac users change to torch in requirements
+pip install -r requirements.txt
 
 # or, if you are already in flask/
 source ../.venv/bin/activate
 ```
+
+The base install is enough for scraping, BM25 search, and the Flask API. Vector search
+(`vector`, `vector_e5`, `hybrid_e5`) needs extra optional dependencies as described below.
 
 ### Usage for actsearch!
 
@@ -51,8 +54,8 @@ The scraper writes:
 
 ## Vector indexing (BERT Swedish)
 
-To build a vector index, install the extra dependencies and run the indexer against your
-parsed output.
+To build a vector index, first install the optional vector-search dependencies, then run
+the indexer against your parsed output.
 
 Available named profiles in `search.vector_index`:
 
@@ -62,7 +65,9 @@ Available named profiles in `search.vector_index`:
 Swedish BERT index:
 
 ```bash
-pip install -r ../requirements.txt
+# CPU-only vector setup
+pip install faiss-cpu transformers<5 torch==2.2.2
+
 python -m search.vector_index build \
   --parsed-dir output/parsed \
   --output-dir output/vector_index \
@@ -95,22 +100,42 @@ python -m search.vector_index query \
 For both `swedish_bert` and `e5_large_instruct`, regular `build` includes
 title chunks per document together with chunked body text.
 
-### GPU acceleration
+### Choosing CPU or GPU
 
-The vector indexer will use CUDA automatically if your PyTorch build supports it. To
-force the GPU or CPU, pass `--device cuda` or `--device cpu` to the `build` and `query`
-commands. If CUDA is not available and you request it, the indexer will raise an error.
+The vector indexer accepts `--device auto`, `--device cpu`, or `--device cuda`.
 
-For NVIDIA GPUs (like a GTX 1080 Ti), install CUDA-enabled builds of PyTorch and FAISS
-before running the indexer, for example:
+- `auto` is the default. It uses CUDA when your installed PyTorch build supports it,
+  otherwise it falls back to CPU.
+- `cpu` forces CPU inference even on a machine with a GPU.
+- `cuda` forces GPU inference. If CUDA is not available, the command raises an error.
+
+CPU-only setup:
+
+```bash
+pip install faiss-cpu transformers<5 torch==2.2.2
+```
+
+GPU setup (NVIDIA CUDA example):
 
 ```bash
 pip install --upgrade "torch==2.3.1+cu118" --index-url https://download.pytorch.org/whl/cu118
-pip install faiss-gpu
+pip install transformers<5 faiss-gpu
 ```
 
-Refer to the PyTorch and FAISS installation guides for the exact versions that match
-your driver and CUDA toolkit.
+Examples:
+
+```bash
+# Explicit CPU build/query
+python -m search.vector_index build --parsed-dir output/parsed --output-dir output/vector_index --profile swedish_bert --device cpu
+python -m search.vector_index query --index-path output/vector_index/docplus.faiss --metadata-path output/vector_index/docplus_metadata.jsonl --query "adrenalin" --device cpu
+
+# Explicit GPU build/query
+python -m search.vector_index build --parsed-dir output/parsed --output-dir output/vector_index --profile swedish_bert --device cuda
+python -m search.vector_index query --index-path output/vector_index/docplus.faiss --metadata-path output/vector_index/docplus_metadata.jsonl --query "adrenalin" --device cuda
+```
+
+Refer to the PyTorch and FAISS installation guides for exact versions that match your
+driver, CUDA toolkit, and platform.
 
 ## BM25 search (lexical)
 
@@ -151,7 +176,8 @@ API endpoints:
 
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
-  `vector`, `vector_e5`, `hybrid_e5` (default), and `all` (returns `results_by_method`).
+  `vector`, `vector_e5`, `hybrid_e5`, and `all` (returns `results_by_method`). The
+  default method is `bm25`.
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link.
 - `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
@@ -229,3 +255,5 @@ Useful checks:
 - Be sure to respect Docplus usage policies and adjust crawl rate as needed.
 - If your start paths include `&` characters, wrap the value in quotes (or escape `&`) so the shell does not treat them as background commands.
 - Vector build/query now load embedding models with local-only Hugging Face cache access (`local_files_only=True`). No Hugging Face network requests are made at runtime; if a model is missing, pre-download it first.
+- If `torch`, `transformers`, or FAISS are not installed, the app still runs for scraping
+  and BM25 search. Only vector-search methods are unavailable.

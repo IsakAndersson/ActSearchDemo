@@ -8,10 +8,32 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
-import faiss
 import numpy as np
-#import torch
-from transformers import AutoModel, AutoTokenizer
+
+try:
+    import faiss
+except ImportError as exc:
+    faiss = None
+    _FAISS_IMPORT_ERROR = exc
+else:
+    _FAISS_IMPORT_ERROR = None
+
+try:
+    import torch
+except ImportError as exc:
+    torch = None
+    _TORCH_IMPORT_ERROR = exc
+else:
+    _TORCH_IMPORT_ERROR = None
+
+try:
+    from transformers import AutoModel, AutoTokenizer
+except ImportError as exc:
+    AutoModel = None
+    AutoTokenizer = None
+    _TRANSFORMERS_IMPORT_ERROR = exc
+else:
+    _TRANSFORMERS_IMPORT_ERROR = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +74,32 @@ class ChunkRecord:
     text: str
     metadata: dict
     chunk_type: str = "body"
+
+
+def vector_dependencies_available() -> bool:
+    return all(
+        error is None
+        for error in (_FAISS_IMPORT_ERROR, _TORCH_IMPORT_ERROR, _TRANSFORMERS_IMPORT_ERROR)
+    )
+
+
+def ensure_vector_dependencies() -> None:
+    if vector_dependencies_available():
+        return
+
+    missing: List[str] = []
+    if _FAISS_IMPORT_ERROR is not None:
+        missing.append("faiss")
+    if _TORCH_IMPORT_ERROR is not None:
+        missing.append("torch")
+    if _TRANSFORMERS_IMPORT_ERROR is not None:
+        missing.append("transformers")
+
+    raise RuntimeError(
+        "Vector search dependencies are unavailable. "
+        f"Missing: {', '.join(missing)}. "
+        "Install the optional vector dependencies to enable FAISS-based search."
+    )
 
 
 def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
@@ -206,6 +254,7 @@ def embed_texts(
 
 
 def resolve_device(device_preference: str) -> torch.device:
+    ensure_vector_dependencies()
     if device_preference == "cpu":
         return torch.device("cpu")
     if device_preference == "cuda":
@@ -216,6 +265,7 @@ def resolve_device(device_preference: str) -> torch.device:
 
 
 def load_local_encoder(model_name: str) -> tuple[AutoTokenizer, AutoModel]:
+    ensure_vector_dependencies()
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
         model = AutoModel.from_pretrained(model_name, local_files_only=True)

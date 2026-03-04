@@ -372,7 +372,7 @@ def search() -> Any:
 
     payload = request.get_json(silent=True) or request.form.to_dict()
     search_id = str(uuid4())
-    method = str(payload.get("method", "hybrid_e5")).lower()
+    method = str(payload.get("method", "bm25")).lower()
     query = str(payload.get("query") or "").strip()
 
     defaults = _defaults_from_payload(payload)
@@ -381,6 +381,7 @@ def search() -> Any:
     top_k = 5
     results: List[Dict[str, Any]] | None = None
     results_by_method: Dict[str, List[Dict[str, Any]]] | None = None
+    successful_methods = 0
 
     if not query:
         errors.append("Query cannot be empty.")
@@ -398,6 +399,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
         elif method == "vector":
@@ -410,6 +412,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
         elif method == "vector_e5":
@@ -422,6 +425,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
         elif method == "hybrid_e5":
@@ -434,6 +438,7 @@ def search() -> Any:
                     query=query,
                     top_k=candidate_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
             try:
@@ -445,6 +450,7 @@ def search() -> Any:
                     top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
             results = _rrf_hybrid(
@@ -460,6 +466,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
@@ -472,6 +479,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
                 results_by_method["vector"] = []
@@ -484,6 +492,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
@@ -505,7 +514,7 @@ def search() -> Any:
         errors=errors,
     )
 
-    status_code = 400 if errors else 200
+    status_code = 400 if errors and successful_methods == 0 else 200
     return jsonify(
         {
             "search_id": search_id,
