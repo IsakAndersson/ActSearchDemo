@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 const SESSION_KEY = "actsearch-authenticated";
 const USER_NAME_KEY = "actsearch-user-name";
+const DEMO_API_BASE_URL =
+  process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 const METHODS = ["bm25", "dense", "hybrid", "docplus"] as const;
 
 type SearchMethod = (typeof METHODS)[number];
@@ -402,6 +404,8 @@ export default function DemoSearchPage() {
   const [relevantSections, setRelevantSections] = useState<Record<string, string>>({});
   const [resultComments, setResultComments] = useState<Record<string, string>>({});
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
+  const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const canSubmit = query.trim().length > 0;
   const hasSubmittedQuery = submittedQuery.trim().length > 0;
   const isAuthenticated =
@@ -417,9 +421,17 @@ export default function DemoSearchPage() {
     () => buildPipeline(submittedQuery.trim(), runId),
     [runId, submittedQuery],
   );
+  const allResultsRated =
+    hasSubmittedQuery &&
+    pipeline.finalResults.length > 0 &&
+    pipeline.finalResults.every((result, index) => {
+      const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
+      return ratings[resultKey] === "relevant" || ratings[resultKey] === "not_relevant";
+    });
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSubmitError(null);
     setSubmittedQuery(query);
     setRunId((current) => current + 1);
     setHasSubmittedRatings(false);
@@ -428,9 +440,82 @@ export default function DemoSearchPage() {
     });
   };
 
+  const onFinalSubmit = async () => {
+    if (!allResultsRated) {
+      return;
+    }
+
+    const participantName =
+      typeof window !== "undefined" ? localStorage.getItem(USER_NAME_KEY)?.trim() ?? "" : "";
+
+    const results = pipeline.finalResults.map((result, index) => {
+      const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
+      const selectedRating = ratings[resultKey] ?? null;
+      const selectedScope = relevantScopes[resultKey] ?? null;
+      const sectionLabel = relevantSections[resultKey] ?? "";
+      const resultComment = resultComments[resultKey] ?? "";
+
+      return {
+        ...result,
+        assessment: {
+          rating: selectedRating,
+          relevant_scope: selectedRating === "relevant" ? selectedScope : null,
+          relevant_section:
+            selectedRating === "relevant" && selectedScope === "part_of_document"
+              ? sectionLabel
+              : "",
+          comment: resultComment,
+        },
+      };
+    });
+
+    const payload = {
+      participant_name: participantName,
+      information_need: informationNeed.trim(),
+      query: submittedQuery.trim(),
+      general_comment: comment.trim(),
+      results,
+      pipeline_snapshot: {
+        by_method: pipeline.byMethod,
+        pooled_before_dedup: pipeline.pooledBeforeDedup,
+        pooled_after_dedup: pipeline.pooledAfterDedup,
+        final_results: pipeline.finalResults,
+      },
+    };
+
+    setSubmitError(null);
+    setIsSubmittingToBackend(true);
+
+    try {
+      const response = await fetch(`${DEMO_API_BASE_URL}/demo/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json().catch(() => null)) as
+        | { ok?: boolean; errors?: string[] }
+        | null;
+
+      if (!response.ok || !data?.ok) {
+        const errorMessage = Array.isArray(data?.errors) && data.errors.length > 0
+          ? data.errors.join(" ")
+          : "Kunde inte spara formuläret.";
+        throw new Error(errorMessage);
+      }
+
+      setHasSubmittedRatings(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Kunde inte spara formuläret.");
+    } finally {
+      setIsSubmittingToBackend(false);
+    }
+  };
+
   const onLogout = () => {
     localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(USER_NAME_KEY);
     router.push("/");
   };
 
@@ -462,26 +547,16 @@ export default function DemoSearchPage() {
     return Object.fromEntries(entries) as Partial<Record<SearchMethod, number>>;
   };
 
-  const allResultsRated =
-    hasSubmittedQuery &&
-    pipeline.finalResults.length > 0 &&
-    pipeline.finalResults.every((result, index) => {
-      const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
-      return ratings[resultKey] === "relevant" || ratings[resultKey] === "not_relevant";
-    });
-
   if (!isAuthenticated) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8eb,#f3efe6_45%,#eaf4ff)] px-5 py-7 text-[#1e241f]">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-        <h1 className="font-serif text-3xl text-[#1d3529]">Insamling av utvärderingsdata</h1>
-
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8eb,#f3efe6_45%,#eaf4ff)] px-6 py-10 text-[#1e241f]">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <label
-            className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-sm font-medium transition md:min-w-[22rem] ${
+            className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
               debugMode
                 ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
                 : "border-[#d8ddd3] bg-white text-[#556055]"
@@ -527,15 +602,15 @@ export default function DemoSearchPage() {
         </div>
 
         {debugMode ? null : (
-          <section className="rounded-[2rem] border border-[#d6d8cf] bg-[#fffdf8]/95 p-6 shadow-[0_24px_80px_rgba(34,42,28,0.08)]">
-            <div className="max-w-4xl space-y-3.5 text-sm leading-6 text-[#4f5850]">
+          <section className="rounded-[2rem] border border-[#d6d8cf] bg-[#fffdf8]/95 p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)]">
+            <div className="max-w-4xl space-y-5 text-sm leading-7 text-[#4f5850]">
               <p className="font-medium text-[#253229]">
                 Det här är en del av ett masterarbete som görs i samarbete med DataToValue.
               </p>
 
               <div>
                 <p className="font-medium text-[#253229]">Så här går det till:</p>
-                  <p>1. Skapa en sökterm. Tryck på &quot;nästa&quot;.</p>
+                  <p>1. Skapa en sökterm. Tryck på "nästa".</p>
                   <p>2. För varje dokument i listan nedan, bedöm hur relevant resultatet är utifrån din sökterm.</p>
               </div>
 
@@ -570,14 +645,14 @@ export default function DemoSearchPage() {
         )}
 
         <section
-          className={`rounded-[2rem] border p-6 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
+          className={`rounded-[2rem] border p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
             hasSubmittedQuery
               ? "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-75"
               : "border-[#d6d8cf] bg-[#fffdf8]/95"
           }`}
         >
           {debugMode ? (
-            <div className="mb-5">
+            <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
                 Varje sökning anropar `bm25`, `dense`, `hybrid` och `docplus`, samlar deras
                 topp 10-resultat i samma format som riktiga svar, tar bort dubletter och
@@ -586,20 +661,18 @@ export default function DemoSearchPage() {
             </div>
           ) : null}
 
-          <form className="flex flex-col gap-2.5" onSubmit={onSubmit}>
+          <form className="flex flex-col gap-3" onSubmit={onSubmit}>
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
               1. Beskriv informationsbehov
             </p>
-            <div className="space-y-1.5">
-              <p className="text-sm leading-5 text-[#4f5850]">
-                &quot;Beskriv en situation där du behövde söka information i DocPlus.&quot;
+            <div className="space-y-2">
+              <p className="text-sm leading-6 text-[#4f5850]">
                 Beskriv ett exempel på ett informationsbehov som kan uppstå i ditt dagliga arbete,
-                där du behöver söka i DocPlus. Exempel: &quot;Familjen vill sova med sitt spädbarn
-                mellan sig. Vilken information behöver jag förmedla till föräldrarna?&quot; Eller &quot;Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?&quot;.
-                Det kan vara både situationer där du letar efter ett specifikt dokument och situationer där du vill få en överblick.
+                där du behöver söka i DocPlus. Exempel: "Familjen vill sova med sitt spädbarn
+                mellan sig. Vilken information behöver jag förmedla till föräldrarna?" Eller "Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?".
               </p>
               <input
-                className={`w-full rounded-2xl border px-4 py-3 text-base outline-none transition ${
+                className={`w-full rounded-2xl border px-5 py-4 text-base outline-none transition ${
                   hasSubmittedQuery
                     ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
                     : "border-[#cfd4c9] bg-white text-[#1e241f] focus:border-[#1f6e6e]"
@@ -614,12 +687,12 @@ export default function DemoSearchPage() {
             <p className="pt-2 text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
               2. Skapa en sökterm
             </p>
-            <p className="text-sm leading-5 text-[#4f5850]">
-              Vad skulle du skriva in i sökrutan (I docplus?) utifrån ovanstående informationsbehov?
+            <p className="text-sm leading-6 text-[#4f5850]">
+              Vad skulle du skriva in i sökrutan utifrån ovanstående informationsbehov?
             </p>
             <div className="flex flex-col gap-3">
               <input
-                className={`min-w-0 flex-1 rounded-2xl border px-4 py-3 text-base outline-none transition ${
+                className={`min-w-0 flex-1 rounded-2xl border px-5 py-4 text-base outline-none transition ${
                   hasSubmittedQuery
                     ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
                     : "border-[#cfd4c9] bg-white text-[#1e241f] focus:border-[#1f6e6e]"
@@ -631,12 +704,12 @@ export default function DemoSearchPage() {
               />
             </div>
 
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
                 Valfri kommentar
               </span>
               <textarea
-                className={`min-h-20 rounded-2xl border px-4 py-3 text-base outline-none transition ${
+                className={`min-h-28 rounded-2xl border px-5 py-4 text-base outline-none transition ${
                   hasSubmittedQuery
                     ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
                     : "border-[#cfd4c9] bg-white text-[#1e241f] focus:border-[#1f6e6e]"
@@ -647,12 +720,12 @@ export default function DemoSearchPage() {
               />
             </label>
 
-            <p className="text-sm leading-5 text-[#4f5850]">
-              När du är nöjd, tryck på &quot;Nästa steg&quot;. Du kan inte gå tillbaka och ändra i din information. 
+            <p className="text-sm leading-6 text-[#4f5850]">
+              När du är nöjd, tryck på "Nästa steg". Du kan inte gå tillbaka och ändra i din information. 
             </p>
 
             <button
-              className={`self-start rounded-2xl px-5 py-3 font-semibold text-white transition ${
+              className={`self-start rounded-2xl px-6 py-4 font-semibold text-white transition ${
                 canSubmit && !hasSubmittedQuery
                   ? "bg-[#1f6e6e] hover:bg-[#184f4f]"
                   : "cursor-not-allowed bg-[#9fb8b8]"
@@ -668,22 +741,22 @@ export default function DemoSearchPage() {
 
         <section
           ref={stepTwoRef}
-          className={`rounded-[2rem] border p-6 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
-            hasSubmittedQuery
-              ? hasSubmittedRatings
-                ? "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-60"
-                : "border-[#d6d8cf] bg-[#fffdf8]/95"
+          className={`rounded-[2rem] border p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
+            hasSubmittedRatings
+              ? "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-75"
+              : hasSubmittedQuery
+              ? "border-[#d6d8cf] bg-[#fffdf8]/95"
               : "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-60"
           }`}
         >
           <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
             2. Bedöm relevans
           </h2>
-          <div className="mt-2 space-y-1 text-sm leading-5 text-[#4f5850]">
+          <div className="mt-3 space-y-1 text-sm leading-6 text-[#4f5850]">
             <p>För varje sökträff, klicka på länken för att få upp dokumentet och bedöm hur relevant dokumentet är utifrån söktermen.</p>
             <p>Observera att rangordningen är slumpartad.</p>
           </div>
-          <div className={`mt-3 grid gap-2 text-sm text-[#6b7468] ${debugMode ? "md:grid-cols-4" : "md:grid-cols-1"}`}>
+          <div className={`mt-4 grid gap-3 text-sm text-[#6b7468] ${debugMode ? "md:grid-cols-4" : "md:grid-cols-1"}`}>
             <div className="rounded-2xl bg-[#f8f5ee] px-4 py-3">
               <span className="block text-xs uppercase tracking-[0.16em] text-[#7d7568]">
                 Din sökterm
@@ -715,7 +788,7 @@ export default function DemoSearchPage() {
           </div>
 
           {hasSubmittedQuery ? (
-            <div className="mt-4 grid gap-3">
+            <div className="mt-6 grid gap-4">
               {pipeline.finalResults.map((result, index) => {
               const pooledFrom = Array.isArray(result.metadata?.pooled_from)
                 ? result.metadata.pooled_from.filter((value): value is string => typeof value === "string")
@@ -730,28 +803,35 @@ export default function DemoSearchPage() {
 
                 return (
                   <article
-                    className="rounded-[1.5rem] border border-[#d6d8cf] bg-white/90 p-4 shadow-[0_16px_50px_rgba(35,44,32,0.06)]"
+                    className="rounded-[1.5rem] border border-[#d6d8cf] bg-white/90 p-6 shadow-[0_16px_50px_rgba(35,44,32,0.06)]"
                     key={`${resultKey}-${index}`}
                   >
-                    <h2 className="font-serif text-xl text-[#203327]">{getResultTitle(result)}</h2>
+                    {!debugMode ? (
+                      <div
+                        className={`grid gap-4 md:items-start ${
+                          selectedRating === "relevant"
+                            ? "xl:grid-cols-[minmax(0,1.1fr)_12rem_18rem_minmax(0,1fr)]"
+                            : "lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)]"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <h2 className="font-serif text-xl text-[#203327]">{getResultTitle(result)}</h2>
+                          <a
+                            className="mt-4 inline-flex break-all text-sm font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                            href={getResultUrl(result)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Öppna exempellänk
+                          </a>
+                        </div>
 
-                  <a
-                    className="mt-2 inline-flex break-all text-sm font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
-                    href={getResultUrl(result)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Öppna exempellänk
-                  </a>
-
-                  {!debugMode ? (
-                    <>
-                      <fieldset className="mt-3">
-                        <legend className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-                          Relevans
-                        </legend>
-                        <div className="mt-2 flex flex-col gap-2 md:flex-row md:flex-wrap">
-                          <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
+                        <fieldset>
+                          <legend className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
+                            Relevans
+                          </legend>
+                          <div className="mt-3 flex flex-col gap-2">
+                            <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
                             <input
                               checked={selectedRating === "relevant"}
                               className="h-4 w-4 accent-[#1f6e6e]"
@@ -759,12 +839,12 @@ export default function DemoSearchPage() {
                               name={`rating-${resultKey}`}
                               type="radio"
                               onChange={() =>
-                                setRatings((current) => ({ ...current, [resultKey]: "relevant" }))
-                              }
-                            />
-                            Relevant
-                          </label>
-                          <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
+                                  setRatings((current) => ({ ...current, [resultKey]: "relevant" }))
+                                }
+                              />
+                              Relevant
+                            </label>
+                            <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
                             <input
                               checked={selectedRating === "not_relevant"}
                               className="h-4 w-4 accent-[#1f6e6e]"
@@ -772,109 +852,120 @@ export default function DemoSearchPage() {
                               name={`rating-${resultKey}`}
                               type="radio"
                               onChange={() =>
-                                setRatings((current) => ({
-                                  ...current,
-                                  [resultKey]: "not_relevant",
-                                }))
-                              }
-                            />
-                            Inte relevant
-                          </label>
-                        </div>
-                      </fieldset>
-
-                      {selectedRating === "relevant" ? (
-                        <div className="mt-3 space-y-3 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-3">
-                          <div className="space-y-1.5">
-                            <p className="text-sm font-medium text-[#2f3a31]">
-                              Var i dokumentet finns den relevanta informationen för din söksituation?
-                            </p>
-                            <div className="flex flex-col gap-1.5">
-                              <label className="flex items-center gap-2 text-sm text-[#465048]">
-                                <input
-                                  checked={selectedScope === "whole_document"}
-                                  className="h-4 w-4 accent-[#1f6e6e]"
-                                  disabled={hasSubmittedRatings}
-                                  name={`scope-${resultKey}`}
-                                  type="radio"
-                                  onChange={() =>
-                                    setRelevantScopes((current) => ({
-                                      ...current,
-                                      [resultKey]: "whole_document",
-                                    }))
-                                  }
-                                />
-                                Hela dokumentet/större delar av dokumentet är relevant
-                              </label>
-                              <label className="flex items-center gap-2 text-sm text-[#465048]">
-                                <input
-                                  checked={selectedScope === "part_of_document"}
-                                  className="h-4 w-4 accent-[#1f6e6e]"
-                                  disabled={hasSubmittedRatings}
-                                  name={`scope-${resultKey}`}
-                                  type="radio"
-                                  onChange={() =>
-                                    setRelevantScopes((current) => ({
-                                      ...current,
-                                      [resultKey]: "part_of_document",
-                                    }))
-                                  }
-                                />
-                                En del av dokumentet är relevant
-                              </label>
-                            </div>
-                          </div>
-
-                          {selectedScope === "part_of_document" ? (
-                            <label className="flex flex-col gap-1.5">
-                              <span className="text-sm text-[#2f3a31]">
-                                Ange i vilken del/kapitel som den relevanta informationen finns
-                                (ange rubrik/underrubrik)
-                              </span>
-                              <input
-                                className={`rounded-2xl border px-4 py-2.5 text-sm outline-none transition ${
-                                  hasSubmittedRatings
-                                    ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
-                                    : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
-                                }`}
-                                disabled={hasSubmittedRatings}
-                                type="text"
-                                value={sectionLabel}
-                                onChange={(event) =>
-                                  setRelevantSections((current) => ({
+                                  setRatings((current) => ({
                                     ...current,
-                                    [resultKey]: event.target.value,
+                                    [resultKey]: "not_relevant",
                                   }))
                                 }
                               />
+                              Inte relevant
                             </label>
-                          ) : null}
-                        </div>
-                      ) : null}
+                          </div>
+                        </fieldset>
 
-                      <label className="mt-3 flex flex-col gap-1.5">
-                        <span className="text-sm text-[#2f3a31]">Valfri kommentar</span>
-                        <textarea
-                          className={`min-h-20 rounded-2xl border px-4 py-2.5 text-sm outline-none transition ${
-                            hasSubmittedRatings
-                              ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
-                              : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
-                          }`}
-                          disabled={hasSubmittedRatings}
-                          value={resultComment}
-                          onChange={(event) =>
-                            setResultComments((current) => ({
-                              ...current,
-                              [resultKey]: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    </>
-                  ) : null}
+                        {selectedRating === "relevant" ? (
+                          <div className="space-y-4 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4">
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-[#2f3a31]">
+                                Var i dokumentet finns den relevanta informationen?
+                              </p>
+                              <div className="flex flex-col gap-2">
+                                <label className="flex items-center gap-2 text-sm text-[#465048]">
+                                  <input
+                                    checked={selectedScope === "whole_document"}
+                                    className="h-4 w-4 accent-[#1f6e6e]"
+                                    disabled={hasSubmittedRatings}
+                                    name={`scope-${resultKey}`}
+                                    type="radio"
+                                    onChange={() =>
+                                      setRelevantScopes((current) => ({
+                                        ...current,
+                                        [resultKey]: "whole_document",
+                                      }))
+                                    }
+                                  />
+                                  Hela dokumentet
+                                </label>
+                                <label className="flex items-center gap-2 text-sm text-[#465048]">
+                                  <input
+                                    checked={selectedScope === "part_of_document"}
+                                    className="h-4 w-4 accent-[#1f6e6e]"
+                                    disabled={hasSubmittedRatings}
+                                    name={`scope-${resultKey}`}
+                                    type="radio"
+                                    onChange={() =>
+                                      setRelevantScopes((current) => ({
+                                        ...current,
+                                        [resultKey]: "part_of_document",
+                                      }))
+                                    }
+                                  />
+                                  En del/delar av dokumentet
+                                </label>
+                              </div>
+                            </div>
+
+                            {selectedScope === "part_of_document" ? (
+                              <label className="flex flex-col gap-2">
+                                <span className="text-sm text-[#2f3a31]">
+                                  Ange i vilken/vilka delar/kapitel
+                                </span>
+                                <input
+                                  className={`rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+                                    hasSubmittedRatings
+                                      ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
+                                      : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
+                                  }`}
+                                  disabled={hasSubmittedRatings}
+                                  type="text"
+                                  value={sectionLabel}
+                                  onChange={(event) =>
+                                    setRelevantSections((current) => ({
+                                      ...current,
+                                      [resultKey]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <label className={selectedRating === "relevant" ? "" : "lg:col-start-3"}>
+                          <span className="text-sm text-[#2f3a31]">Valfri kommentar</span>
+                          <textarea
+                            className={`mt-2 min-h-24 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+                              hasSubmittedRatings
+                                ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
+                                : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
+                            }`}
+                            disabled={hasSubmittedRatings}
+                            value={resultComment}
+                            onChange={(event) =>
+                              setResultComments((current) => ({
+                                ...current,
+                                [resultKey]: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <>
+                        <h2 className="font-serif text-xl text-[#203327]">{getResultTitle(result)}</h2>
+                        <a
+                          className="mt-4 inline-flex break-all text-sm font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                          href={getResultUrl(result)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Öppna exempellänk
+                        </a>
+                      </>
+                    )}
 
                   {debugMode ? (
-                    <div className="mt-3 space-y-2 rounded-2xl bg-[#f8f5ee] p-3 text-sm text-[#4c564f]">
+                    <div className="mt-4 space-y-3 rounded-2xl bg-[#f8f5ee] p-4 text-sm text-[#4c564f]">
                       <div className="flex flex-wrap gap-2 text-xs">
                         <span className="rounded-full bg-[#f3efe2] px-3 py-1 text-[#6d624e]">
                           {String(result.metadata?.category ?? "Okänd kategori")}
@@ -892,11 +983,11 @@ export default function DemoSearchPage() {
                         ))}
                       </div>
 
-                      <div className="rounded-xl bg-white/80 p-2.5">
+                      <div className="rounded-xl bg-white/80 p-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
                           Score per metod
                         </p>
-                        <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
                           {METHODS.map((method) => (
                             <span
                               className="rounded-full border border-[#d9ddd4] px-3 py-1 text-[#465048]"
@@ -911,11 +1002,11 @@ export default function DemoSearchPage() {
                         </div>
                       </div>
 
-                      <div className="rounded-xl bg-white/80 p-2.5">
+                      <div className="rounded-xl bg-white/80 p-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
                           Rank per metod
                         </p>
-                        <div className="mt-1.5 flex flex-wrap gap-2 text-xs">
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
                           {METHODS.map((method) => (
                             <span
                               className="rounded-full border border-[#d9ddd4] px-3 py-1 text-[#465048]"
@@ -928,7 +1019,7 @@ export default function DemoSearchPage() {
                         </div>
                       </div>
 
-                      <p className="leading-5">{String(result.chunk_text ?? result.text ?? "")}</p>
+                      <p className="leading-6">{String(result.chunk_text ?? result.text ?? "")}</p>
 
                       <pre className="overflow-x-auto whitespace-pre-wrap text-xs leading-5 text-[#465048]">
                         {JSON.stringify(result, null, 2)}
@@ -940,15 +1031,15 @@ export default function DemoSearchPage() {
               })}
             </div>
           ) : (
-            <div className="mt-4 rounded-[1.5rem] border border-dashed border-[#d4d7cf] bg-white/60 p-4 text-sm text-[#6a7169]">
+            <div className="mt-6 rounded-[1.5rem] border border-dashed border-[#d4d7cf] bg-white/60 p-6 text-sm text-[#6a7169]">
               Skriv in en sökterm och tryck på `Nästa` för att visa sökträffar.
             </div>
           )}
         </section>
 
         <section
-          className={`rounded-[2rem] border p-6 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
-            allResultsRated && !debugMode
+          className={`rounded-[2rem] border p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
+            allResultsRated
               ? "border-[#d6d8cf] bg-[#fffdf8]/95"
               : "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-60"
           }`}
@@ -956,26 +1047,28 @@ export default function DemoSearchPage() {
           <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
             3. Skicka in
           </h2>
-          <p className="mt-2 text-sm leading-5 text-[#4f5850]">
-            När du har bedömt alla sökträffar kan du skicka in dina svar.
+          <p className="mt-3 text-sm leading-6 text-[#4f5850]">
+            När alla sökträffar är bedömda kan du skicka in dina svar.
           </p>
-          <button
-            className={`mt-4 rounded-2xl px-5 py-3 font-semibold text-white transition ${
-              allResultsRated && !debugMode
-                ? "bg-[#1f6e6e] hover:bg-[#184f4f]"
-                : "cursor-not-allowed bg-[#9fb8b8]"
-            }`}
-            type="button"
-            disabled={!allResultsRated || debugMode}
-            onClick={() => setHasSubmittedRatings(true)}
-          >
-            Skicka in
-          </button>
-          {hasSubmittedRatings ? (
-            <p className="mt-4 text-sm text-[#1f6e6e]">
-              Tack. Dina bedömningar är markerade som inskickade i demon.
+          {submitError ? (
+            <p className="mt-4 rounded-2xl border border-[#f0b79f] bg-[#ffe8dc] px-4 py-3 text-sm text-[#7a2e0d]">
+              {submitError}
             </p>
           ) : null}
+          <button
+            className={`mt-5 rounded-2xl px-6 py-4 font-semibold text-white transition ${
+              allResultsRated && !hasSubmittedRatings && !isSubmittingToBackend
+                ? "bg-[#1f6e6e] hover:bg-[#184f4f]"
+                : hasSubmittedRatings || isSubmittingToBackend
+                  ? "cursor-default bg-[#7fa2a2]"
+                  : "cursor-not-allowed bg-[#9fb8b8]"
+            }`}
+            type="button"
+            disabled={!allResultsRated || hasSubmittedRatings || isSubmittingToBackend}
+            onClick={onFinalSubmit}
+          >
+            {hasSubmittedRatings ? "Inskickat" : isSubmittingToBackend ? "Skickar..." : "Skicka in"}
+          </button>
         </section>
 
         {debugMode ? (

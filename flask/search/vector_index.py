@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
@@ -65,6 +66,7 @@ DEFAULT_MODEL_PROFILE_KEY = "swedish_bert"
 DEFAULT_MODEL = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].model_name
 DEFAULT_CHUNK_SIZE = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_size
 DEFAULT_CHUNK_OVERLAP = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_overlap
+LOG = logging.getLogger(__name__)
 
 
 @dataclass
@@ -107,8 +109,12 @@ def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
         if not filename.endswith(".json"):
             continue
         path = os.path.join(parsed_dir, filename)
-        with open(path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            LOG.warning("Skipping invalid parsed JSON %s: %s", path, exc)
+            continue
         yield {"path": path, **payload}
 
 

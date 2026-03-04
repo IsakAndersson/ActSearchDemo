@@ -149,8 +149,11 @@ evaluate_system(
 Run from terminal with flags:
 
 ```bash
-./.venv/bin/python evaluation/evaluation.py --method hybrid --top-k 20 --meta experiment=baseline --meta run_tag=exp1
 ./.venv/bin/python evaluation/evaluation.py --method bm25 --top-k 20 --meta experiment=bm25_baseline
+./.venv/bin/python evaluation/evaluation.py --method dense --top-k 20 --meta experiment=dense_baseline
+./.venv/bin/python evaluation/evaluation.py --method dense_e5 --top-k 20 --meta experiment=dense_e5_baseline
+./.venv/bin/python evaluation/evaluation.py --method hybrid --top-k 20 --meta experiment=hybrid_baseline
+./.venv/bin/python evaluation/evaluation.py --method hybrid_e5 --top-k 20 --meta experiment=hybrid_e5_baseline
 ./.venv/bin/python evaluation/evaluation.py --method docplus_live --top-k 20 --meta experiment=docplus_live
 ./.venv/bin/python evaluation/evaluation.py --method sts_live --top-k 20 --meta experiment=sts_live
 ```

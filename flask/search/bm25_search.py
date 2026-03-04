@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import heapq
 import json
+import logging
 import math
 import os
 import re
@@ -44,6 +45,7 @@ class BM25CacheEntry:
 
 _BM25_INDEX_CACHE: Dict[Tuple[str, int, int, bool], BM25CacheEntry] = {}
 _BM25_CACHE_LOCK = threading.Lock()
+LOG = logging.getLogger(__name__)
 
 
 def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
@@ -51,8 +53,12 @@ def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
         if not filename.endswith(".json"):
             continue
         path = os.path.join(parsed_dir, filename)
-        with open(path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            LOG.warning("Skipping invalid parsed JSON %s: %s", path, exc)
+            continue
         yield {"path": path, **payload}
 
 
