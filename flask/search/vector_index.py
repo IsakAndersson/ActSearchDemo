@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import faiss
 import numpy as np
-import torch
+#import torch
 from transformers import AutoModel, AutoTokenizer
 
 

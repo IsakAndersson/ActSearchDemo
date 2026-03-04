@@ -3,13 +3,13 @@ beautifulsoup4
 pdfminer.six
 python-docx
 faiss-cpu
-numpy
+numpy<2
 --extra-index-url https://download.pytorch.org/whl/cu118
 
-torch==2.3.1+cu118  #for windows
-#torch #for mac
+#torch==2.3.1+cu118  #for windows
+torch==2.2.2  # compatible with current Python 3.12 setup
+transformers<5
 
-transformers
 flask
 ir-measures
 pandas
