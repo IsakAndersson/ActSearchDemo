@@ -7,7 +7,7 @@ const SESSION_KEY = "actsearch-authenticated";
 const USER_NAME_KEY = "actsearch-user-name";
 const DEMO_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
-const METHODS = ["bm25", "vector", "vector_e5", "hybrid_e5"] as const;
+const METHODS = ["bm25", "docplus", "dense_e5", "hybrid_e5"] as const;
 const DEFAULT_TOP_K = 10;
 
 type SearchMethod = (typeof METHODS)[number];
@@ -55,8 +55,8 @@ const getResultUrl = (result: SearchResult): string => {
 
 const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
   bm25: [],
-  vector: [],
-  vector_e5: [],
+  docplus: [],
+  dense_e5: [],
   hybrid_e5: [],
 };
 
@@ -156,8 +156,8 @@ const DUMMY_DOCS: DummyDoc[] = [
 
 const DUMMY_DOC_ORDER_BY_METHOD: Record<SearchMethod, string[]> = {
   bm25: ["dummy-1", "dummy-2", "dummy-3", "dummy-4", "dummy-5", "dummy-6", "dummy-7", "dummy-8", "dummy-9", "dummy-10", "dummy-11", "dummy-12"],
-  vector: ["dummy-3", "dummy-1", "dummy-8", "dummy-2", "dummy-10", "dummy-4", "dummy-6", "dummy-9", "dummy-5", "dummy-7", "dummy-12", "dummy-11"],
-  vector_e5: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
+  docplus: ["dummy-3", "dummy-1", "dummy-8", "dummy-2", "dummy-10", "dummy-4", "dummy-6", "dummy-9", "dummy-5", "dummy-7", "dummy-12", "dummy-11"],
+  dense_e5: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
   hybrid_e5: ["dummy-3", "dummy-8", "dummy-1", "dummy-10", "dummy-2", "dummy-4", "dummy-12", "dummy-5", "dummy-6", "dummy-9", "dummy-7", "dummy-11"],
 };
 
@@ -210,8 +210,8 @@ const runDummySearch = async (query: string, topK: number): Promise<SearchResult
 
   return {
     bm25: buildDummyMethodResults("bm25", query, topK),
-    vector: buildDummyMethodResults("vector", query, topK),
-    vector_e5: buildDummyMethodResults("vector_e5", query, topK),
+    docplus: buildDummyMethodResults("docplus", query, topK),
+    dense_e5: buildDummyMethodResults("dense_e5", query, topK),
     hybrid_e5: buildDummyMethodResults("hybrid_e5", query, topK),
   };
 };
@@ -750,8 +750,8 @@ export default function DemoSearchPage() {
             <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
                 {useDummyData
-                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `vector`, `vector_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
-                  : "Varje sökning anropar `bm25`, `vector`, `vector_e5` och `hybrid_e5`, samlar deras topp 10-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
+                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `docplus`, `dense_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
+                  : "Varje sökning anropar `bm25`, `docplus`, `dense_e5` och `hybrid_e5`, samlar deras topp 10-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
               </p>
             </div>
           ) : null}

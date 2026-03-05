@@ -5,8 +5,10 @@ import csv
 import json
 import os
 import sqlite3
+import sys
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
@@ -15,6 +17,19 @@ from flask import Flask, jsonify, request
 
 from search.bm25_search import bm25_search
 from search.vector_index import DEFAULT_MODEL, VECTOR_MODEL_PROFILES, query_index
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+DOCPLUS_LIVE_IMPORT_ERROR = ""
+try:
+    from evaluation.search_adapter import SearchConfig as LiveSearchConfig
+    from evaluation.search_adapter import docplus_live_search
+except Exception as exc:  # noqa: BLE001
+    LiveSearchConfig = None  # type: ignore[assignment]
+    docplus_live_search = None  # type: ignore[assignment]
+    DOCPLUS_LIVE_IMPORT_ERROR = str(exc)
 
 
 E5_PROFILE = VECTOR_MODEL_PROFILES["e5_large_instruct"]
@@ -267,6 +282,66 @@ def _rrf_hybrid(
     return merged
 
 
+def _safe_int(value: str, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _docplus_live_config(top_k: int) -> Any:
+    if LiveSearchConfig is None:
+        return None
+
+    default_max_pages = max(1, (top_k + 19) // 20)
+    timeout_default = LiveSearchConfig.live_timeout_seconds
+    timeout_value = _safe_int(
+        _get_env_default("DOCPLUS_LIVE_TIMEOUT_SECONDS", str(timeout_default)),
+        timeout_default,
+    )
+    max_pages_value = _safe_int(
+        _get_env_default("DOCPLUS_LIVE_MAX_PAGES", str(default_max_pages)),
+        default_max_pages,
+    )
+
+    return LiveSearchConfig(
+        live_base_url=_get_env_default("DOCPLUS_LIVE_BASE_URL", LiveSearchConfig.live_base_url),
+        live_search_path=_get_env_default("DOCPLUS_LIVE_SEARCH_PATH", LiveSearchConfig.live_search_path),
+        live_timeout_seconds=max(1, timeout_value),
+        live_max_pages=max(1, max_pages_value),
+        live_user_agent=_get_env_default("DOCPLUS_LIVE_USER_AGENT", LiveSearchConfig.live_user_agent),
+    )
+
+
+def _docplus_live_results(query: str, top_k: int) -> List[Dict[str, Any]]:
+    if docplus_live_search is None:
+        detail = DOCPLUS_LIVE_IMPORT_ERROR or "unknown import error"
+        raise RuntimeError(f"docplus_live_search unavailable: {detail}")
+
+    config = _docplus_live_config(top_k)
+    ranked_pairs = docplus_live_search(query=query, top_k=top_k, config=config)
+
+    results: List[Dict[str, Any]] = []
+    for index, pair in enumerate(ranked_pairs):
+        doc_id_raw, score_raw = pair
+        doc_id = _to_text(doc_id_raw) or f"docplus_live_result_{index + 1}"
+        score_value = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+        results.append(
+            {
+                "score": score_value,
+                "chunk_id": index,
+                "text": doc_id,
+                "metadata": {
+                    "title": doc_id,
+                    "source": "docplus_live",
+                },
+                "source_path": f"docplus_live/{doc_id}",
+                "chunk_type": "document",
+            }
+        )
+    return results
+
+
 def _log_search(
     search_id: str,
     query: str,
@@ -291,7 +366,7 @@ def _log_search(
     methods_to_log: Dict[str, List[Dict[str, Any]]] = {}
     if results_by_method:
         methods_to_log = results_by_method
-    elif requested_method in {"bm25", "vector", "vector_e5", "hybrid_e5"}:
+    elif requested_method in {"bm25", "vector", "vector_e5", "hybrid_e5", "docplus_live"}:
         methods_to_log = {requested_method: results}
 
     if not methods_to_log:
@@ -552,6 +627,12 @@ def search() -> Any:
                 e5_results=e5_results,
                 top_k=top_k,
             )
+        elif method == "docplus_live":
+            try:
+                results = _docplus_live_results(query=query, top_k=top_k)
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Docplus live search failed: {exc}")
         elif method == "all":
             results_by_method = {}
             try:

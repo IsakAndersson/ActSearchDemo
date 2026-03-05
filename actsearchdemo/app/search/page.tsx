@@ -7,7 +7,7 @@ const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector" | "vector_e5" | "hybrid_e5" | "all";
+type SearchMethod = "bm25" | "vector" | "vector_e5" | "hybrid_e5" | "docplus_live" | "all";
 
 type SearchResult = {
   score?: number;
@@ -384,6 +384,7 @@ export default function SearchPage() {
                   <option value="vector">Vector (FAISS)</option>
                   <option value="vector_e5">Vector (E5 large instruct)</option>
                   <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
+                  <option value="docplus_live">Docplus Live (web)</option>
                   <option value="all">All (side-by-side)</option>
                 </select>
               </label>
