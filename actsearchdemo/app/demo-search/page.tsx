@@ -17,6 +17,7 @@ type RelevantScope = "whole_document" | "part_of_document";
 
 type SearchResult = {
   score?: number;
+  chunk_id?: number;
   text?: string;
   chunk_text?: string;
   chunk_type?: string;
@@ -32,6 +33,14 @@ type SearchPipeline = {
   pooledBeforeDedup: SearchResult[];
   pooledAfterDedup: SearchResult[];
   finalResults: SearchResult[];
+};
+
+type DummyDoc = {
+  id: string;
+  title: string;
+  url: string;
+  category: string;
+  text: string;
 };
 
 const getResultTitle = (result: SearchResult): string => {
@@ -56,6 +65,155 @@ const EMPTY_PIPELINE: SearchPipeline = {
   pooledBeforeDedup: [],
   pooledAfterDedup: [],
   finalResults: [],
+};
+
+const DUMMY_DOCS: DummyDoc[] = [
+  {
+    id: "dummy-1",
+    title: "Handläggning av feber hos vuxna",
+    url: "https://dummy.local/doc/feber-vuxna",
+    category: "Akutmedicin",
+    text: "Översikt av initial bedömning, vitalparametrar och uppföljning vid feber.",
+  },
+  {
+    id: "dummy-2",
+    title: "Säker läkemedelshantering på avdelning",
+    url: "https://dummy.local/doc/lakemedelshantering",
+    category: "Patientsäkerhet",
+    text: "Rutiner för dubbelkontroll, signering och avvikelsehantering.",
+  },
+  {
+    id: "dummy-3",
+    title: "Postoperativ smärtbehandling",
+    url: "https://dummy.local/doc/postop-smarta",
+    category: "Anestesi",
+    text: "Rekommendationer för multimodal smärtbehandling och monitorering.",
+  },
+  {
+    id: "dummy-4",
+    title: "Vård av nyfött barn första dygnet",
+    url: "https://dummy.local/doc/nyfott-forsta-dygnet",
+    category: "Neonatalvård",
+    text: "Basala kontroller och stödjande vård första dygnet efter förlossning.",
+  },
+  {
+    id: "dummy-5",
+    title: "Trycksårsprevention i slutenvård",
+    url: "https://dummy.local/doc/trycksarsprevention",
+    category: "Omvårdnad",
+    text: "Riskbedömning, lägesändring och hudinspektion enligt lokala riktlinjer.",
+  },
+  {
+    id: "dummy-6",
+    title: "Fallriskbedömning och åtgärder",
+    url: "https://dummy.local/doc/fallrisk-atgarder",
+    category: "Omvårdnad",
+    text: "Strukturerad fallriskbedömning och förebyggande åtgärder på vårdavdelning.",
+  },
+  {
+    id: "dummy-7",
+    title: "Dokumentation i patientjournal",
+    url: "https://dummy.local/doc/journaldokumentation",
+    category: "Administration",
+    text: "Principer för saklig, tydlig och spårbar dokumentation i journal.",
+  },
+  {
+    id: "dummy-8",
+    title: "Basal hygien i vård och omsorg",
+    url: "https://dummy.local/doc/basal-hygien",
+    category: "Vårdhygien",
+    text: "Handhygien, skyddsutrustning och rutiner för att förebygga smittspridning.",
+  },
+  {
+    id: "dummy-9",
+    title: "Handläggning av dehydrering hos äldre",
+    url: "https://dummy.local/doc/dehydrering-aldre",
+    category: "Geriatrik",
+    text: "Bedömning av vätskebrist och rekommenderad initial behandling.",
+  },
+  {
+    id: "dummy-10",
+    title: "Säker överrapportering mellan team",
+    url: "https://dummy.local/doc/overrapportering",
+    category: "Kommunikation",
+    text: "Standardiserad överrapportering med fokus på patientsäkerhet och ansvar.",
+  },
+  {
+    id: "dummy-11",
+    title: "Provtagning och provhantering",
+    url: "https://dummy.local/doc/provtagning-hantering",
+    category: "Laboratoriemedicin",
+    text: "Steg för korrekt provtagning, märkning och transport till lab.",
+  },
+  {
+    id: "dummy-12",
+    title: "Triagering på akutmottagning",
+    url: "https://dummy.local/doc/triagering-akut",
+    category: "Akutmedicin",
+    text: "Prioriteringsprinciper och flöde vid triagering av inkommande patienter.",
+  },
+];
+
+const DUMMY_DOC_ORDER_BY_METHOD: Record<SearchMethod, string[]> = {
+  bm25: ["dummy-1", "dummy-2", "dummy-3", "dummy-4", "dummy-5", "dummy-6", "dummy-7", "dummy-8", "dummy-9", "dummy-10", "dummy-11", "dummy-12"],
+  vector: ["dummy-3", "dummy-1", "dummy-8", "dummy-2", "dummy-10", "dummy-4", "dummy-6", "dummy-9", "dummy-5", "dummy-7", "dummy-12", "dummy-11"],
+  vector_e5: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
+  hybrid_e5: ["dummy-3", "dummy-8", "dummy-1", "dummy-10", "dummy-2", "dummy-4", "dummy-12", "dummy-5", "dummy-6", "dummy-9", "dummy-7", "dummy-11"],
+};
+
+const hashString = (value: string): number => {
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash;
+};
+
+const buildDummyMethodResults = (
+  method: SearchMethod,
+  query: string,
+  topK: number,
+): SearchResult[] => {
+  const queryHash = hashString(`${method}:${query.toLowerCase()}`);
+  const baseOrder = DUMMY_DOC_ORDER_BY_METHOD[method];
+
+  return baseOrder.slice(0, topK).map((docId, index) => {
+    const doc = DUMMY_DOCS.find((item) => item.id === docId);
+    if (!doc) {
+      return {
+        score: 0,
+        text: "Saknar dummydata.",
+        metadata: { title: "Okänd dummyträff", source_url: "#" },
+        source_path: "dummy/missing.json",
+      };
+    }
+
+    const score = Number((1 - index * 0.04 + (queryHash % 17) * 0.001).toFixed(4));
+    return {
+      score,
+      chunk_id: index,
+      text: `${doc.text} Matchad mot sökfrågan: "${query}".`,
+      metadata: {
+        title: doc.title,
+        source_url: doc.url,
+        category: doc.category,
+        source: "dummydata",
+      },
+      source_path: `dummy/${doc.id}.json`,
+      chunk_type: index % 4 === 0 ? "title" : "body",
+    };
+  });
+};
+
+const runDummySearch = async (query: string, topK: number): Promise<SearchResultsByMethod> => {
+  await new Promise((resolve) => setTimeout(resolve, 180));
+
+  return {
+    bm25: buildDummyMethodResults("bm25", query, topK),
+    vector: buildDummyMethodResults("vector", query, topK),
+    vector_e5: buildDummyMethodResults("vector_e5", query, topK),
+    hybrid_e5: buildDummyMethodResults("hybrid_e5", query, topK),
+  };
 };
 
 const withMethodMetadata = (method: SearchMethod, result: SearchResult, rank: number): SearchResult => {
@@ -219,6 +377,7 @@ const buildPipeline = (
 
 export default function DemoSearchPage() {
   const router = useRouter();
+  const stepOneRef = useRef<HTMLElement | null>(null);
   const stepTwoRef = useRef<HTMLElement | null>(null);
   const [informationNeed, setInformationNeed] = useState("");
   const [query, setQuery] = useState("");
@@ -229,6 +388,7 @@ export default function DemoSearchPage() {
   const [searchErrors, setSearchErrors] = useState<string[]>([]);
   const [pipeline, setPipeline] = useState<SearchPipeline>(EMPTY_PIPELINE);
   const [debugMode, setDebugMode] = useState(false);
+  const [useDummyData, setUseDummyData] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
   const [relevantScopes, setRelevantScopes] = useState<Record<string, RelevantScope>>({});
   const [relevantSections, setRelevantSections] = useState<Record<string, string>>({});
@@ -270,27 +430,40 @@ export default function DemoSearchPage() {
     setResultComments({});
 
     try {
-      const response = await fetch(`${DEMO_API_BASE_URL.replace(/\/$/, "")}/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          method: "all" as SearchApiMethod,
-          query: trimmedQuery,
-          top_k: DEFAULT_TOP_K,
-        }),
-      });
-
-      const payload = (await response.json()) as {
+      let payload: {
         errors?: string[];
         results_by_method?: SearchResultsByMethod;
       };
 
-      if (!response.ok) {
-        setPipeline(EMPTY_PIPELINE);
-        setSearchErrors(payload.errors && payload.errors.length > 0 ? payload.errors : ["Search failed."]);
-        return;
+      if (useDummyData) {
+        const resultsByMethod = await runDummySearch(trimmedQuery, DEFAULT_TOP_K);
+        payload = {
+          errors: [],
+          results_by_method: resultsByMethod,
+        };
+      } else {
+        const response = await fetch(`${DEMO_API_BASE_URL.replace(/\/$/, "")}/search`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            method: "all" as SearchApiMethod,
+            query: trimmedQuery,
+            top_k: DEFAULT_TOP_K,
+          }),
+        });
+
+        payload = (await response.json()) as {
+          errors?: string[];
+          results_by_method?: SearchResultsByMethod;
+        };
+
+        if (!response.ok) {
+          setPipeline(EMPTY_PIPELINE);
+          setSearchErrors(payload.errors && payload.errors.length > 0 ? payload.errors : ["Search failed."]);
+          return;
+        }
       }
 
       const nextRunId = runId + 1;
@@ -377,7 +550,27 @@ export default function DemoSearchPage() {
         throw new Error(errorMessage);
       }
 
-      setHasSubmittedRatings(true);
+      if (typeof window !== "undefined") {
+        window.alert(
+          "Ditt bidrag är inskickat! Nu kan du upprepa processen igen. Ju mer data vi får desto bättre blir vårt arbete :)",
+        );
+      }
+
+      setHasSubmittedRatings(false);
+      setInformationNeed("");
+      setQuery("");
+      setComment("");
+      setSubmittedQuery("");
+      setRunId(0);
+      setSearchErrors([]);
+      setPipeline(EMPTY_PIPELINE);
+      setRatings({});
+      setRelevantScopes({});
+      setRelevantSections({});
+      setResultComments({});
+      setSubmitError(null);
+
+      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Kunde inte spara formuläret.");
     } finally {
@@ -454,6 +647,36 @@ export default function DemoSearchPage() {
             />
           </label>
 
+          <label
+            className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
+              useDummyData
+                ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
+                : "border-[#d8ddd3] bg-white text-[#556055]"
+            }`}
+          >
+            <div className="flex flex-col">
+              <span>Sök med dummydata</span>
+              <span className="text-xs font-normal opacity-80">
+                {useDummyData
+                  ? "På: använder lokala dummyfunktioner"
+                  : "Av: använder Flask-backend"}
+              </span>
+            </div>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                useDummyData ? "bg-[#1f6e6e] text-white" : "bg-[#eef1ec] text-[#5f685f]"
+              }`}
+            >
+              {useDummyData ? "På" : "Av"}
+            </span>
+            <input
+              className="toggle border-[#cfd4c9] bg-white text-[#1f6e6e] [--tglbg:#ffffff]"
+              type="checkbox"
+              checked={useDummyData}
+              onChange={(event) => setUseDummyData(event.target.checked)}
+            />
+          </label>
+
           <div className="flex flex-wrap justify-end gap-2">
             <button
               className="rounded-full border border-[#c8cfbf] bg-white/80 px-4 py-2 text-sm text-[#425043] transition hover:border-[#1f6e6e] hover:text-[#1f6e6e]"
@@ -516,6 +739,7 @@ export default function DemoSearchPage() {
         )}
 
         <section
+          ref={stepOneRef}
           className={`rounded-[2rem] border p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)] transition ${
             hasSubmittedQuery
               ? "border-[#e1e4dc] bg-[#f5f4ef]/90 opacity-75"
@@ -525,9 +749,9 @@ export default function DemoSearchPage() {
           {debugMode ? (
             <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
-                Varje sökning anropar `bm25`, `vector`, `vector_e5` och `hybrid_e5`, samlar deras
-                topp 10-resultat från backend, tar bort dubletter och
-                randomiserar ordningen innan visning.
+                {useDummyData
+                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `vector`, `vector_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
+                  : "Varje sökning anropar `bm25`, `vector`, `vector_e5` och `hybrid_e5`, samlar deras topp 10-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
               </p>
             </div>
           ) : null}
