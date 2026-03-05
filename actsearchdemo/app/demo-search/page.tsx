@@ -1,15 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const SESSION_KEY = "actsearch-authenticated";
 const USER_NAME_KEY = "actsearch-user-name";
 const DEMO_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
-const METHODS = ["bm25", "dense", "hybrid", "docplus"] as const;
+const METHODS = ["bm25", "vector", "vector_e5", "hybrid_e5"] as const;
+const DEFAULT_TOP_K = 10;
 
 type SearchMethod = (typeof METHODS)[number];
+type SearchApiMethod = SearchMethod | "all";
 type RelevanceRating = "relevant" | "not_relevant";
 type RelevantScope = "whole_document" | "part_of_document";
 
@@ -20,19 +22,10 @@ type SearchResult = {
   chunk_type?: string;
   metadata?: Record<string, unknown>;
   source_path?: string;
-  demo_method?: SearchMethod;
+  result_method?: SearchMethod;
 };
 
-type DemoDocument = {
-  id: string;
-  title: string;
-  summary: string;
-  body: string;
-  category: string;
-  tags: string[];
-  url: string;
-  chunkType: "body" | "title";
-};
+type SearchResultsByMethod = Partial<Record<SearchMethod, SearchResult[]>>;
 
 type SearchPipeline = {
   byMethod: Record<SearchMethod, SearchResult[]>;
@@ -40,109 +33,6 @@ type SearchPipeline = {
   pooledAfterDedup: SearchResult[];
   finalResults: SearchResult[];
 };
-
-const DEMO_DOCUMENTS: DemoDocument[] = [
-  {
-    id: "anafylaxi-vuxna",
-    title: "Anafylaxi hos vuxna",
-    summary: "Initial handläggning och adrenalinbehandling vid misstänkt anafylaxi.",
-    body: "Rutin för bedömning, adrenalin i.m., observation, luftväg och vidare uppföljning i akutmottagning.",
-    category: "Akutvård",
-    tags: ["adrenalin", "anafylaxi", "allergi", "akut"],
-    url: "https://example.org/documents/anafylaxi-vuxna",
-    chunkType: "title",
-  },
-  {
-    id: "feber-barn",
-    title: "Feber hos barn i primärvård",
-    summary: "Översikt över alarmsymtom och när barnet ska vidare till akut bedömning.",
-    body: "Egenvårdsråd, statusfynd, CRP-överväganden och remisskriterier vid feber hos barn.",
-    category: "Primärvård",
-    tags: ["barn", "feber", "infektion", "primärvård"],
-    url: "https://example.org/documents/feber-barn",
-    chunkType: "body",
-  },
-  {
-    id: "sepsis-tidig",
-    title: "Tidig identifiering av sepsis",
-    summary: "Checklista för NEWS, odlingar och antibiotikastart vid misstänkt sepsis.",
-    body: "Sepsislarm, vitalparametrar, provtagning och antibiotika inom en timme vid klinisk misstanke.",
-    category: "Slutenvård",
-    tags: ["sepsis", "news", "antibiotika", "akut"],
-    url: "https://example.org/documents/sepsis-tidig",
-    chunkType: "body",
-  },
-  {
-    id: "diabetesfot",
-    title: "Diabetesfot och sårbehandling",
-    summary: "Riskklassning, fotstatus och remissvägar till specialistteam.",
-    body: "Sårbehandling, avlastning, infektionstecken och uppföljning av diabetesfot i öppenvård.",
-    category: "Endokrinologi",
-    tags: ["diabetes", "fot", "sår", "remiss"],
-    url: "https://example.org/documents/diabetesfot",
-    chunkType: "body",
-  },
-  {
-    id: "hjartsvikt",
-    title: "Uppfoljning vid hjartsvikt",
-    summary: "Läkemedelsupptrappning och planerad uppföljning efter utskrivning.",
-    body: "Kontroll av vikt, blodtryck, kreatinin och symtom efter inledd behandling vid hjartsvikt.",
-    category: "Kardiologi",
-    tags: ["hjärtsvikt", "uppföljning", "kardiologi", "läkemedel"],
-    url: "https://example.org/documents/hjartsvikt",
-    chunkType: "body",
-  },
-  {
-    id: "stroke-tia",
-    title: "TIA och stroke akut handläggning",
-    summary: "Akut neurologstatus, tidsfönster och kontakt med strokeenhet.",
-    body: "Initial utredning, trombolysbedömning, NIHSS och radiologi vid akut stroke eller TIA.",
-    category: "Neurologi",
-    tags: ["stroke", "tia", "neurologi", "trombolys"],
-    url: "https://example.org/documents/stroke-tia",
-    chunkType: "title",
-  },
-  {
-    id: "astma-barn",
-    title: "Akut astma hos barn",
-    summary: "Bedömning av andningsarbete och inhalationsbehandling i akuta lägen.",
-    body: "Saturation, inhalationer, steroider och observationstid vid akut astma hos barn.",
-    category: "Barnmedicin",
-    tags: ["astma", "barn", "luftväg", "obstruktivitet"],
-    url: "https://example.org/documents/astma-barn",
-    chunkType: "body",
-  },
-  {
-    id: "kol-exacerbation",
-    title: "KOL-exacerbation i akutmottagning",
-    summary: "Syrgas, inhalationer och antibiotikaindikationer vid KOL-exacerbation.",
-    body: "Handläggning med blodgas, saturation, bronkdilaterare och uppföljning efter stabilisering.",
-    category: "Lungmedicin",
-    tags: ["kol", "andning", "akut", "syrgas"],
-    url: "https://example.org/documents/kol-exacerbation",
-    chunkType: "body",
-  },
-  {
-    id: "suicidrisk",
-    title: "Initial bedömning av suicidrisk",
-    summary: "Riskfaktorer, skyddsfaktorer och dokumentation vid akut psykiatrisk bedömning.",
-    body: "Strukturerad anamnes, akut skyddsbedömning och remiss till psykiatrisk specialistvård.",
-    category: "Psykiatri",
-    tags: ["psykiatri", "suicidrisk", "bedömning", "akut"],
-    url: "https://example.org/documents/suicidrisk",
-    chunkType: "body",
-  },
-  {
-    id: "urinvagsinfektion",
-    title: "Urinvägsinfektion hos kvinnor",
-    summary: "Diagnostik, differentialdiagnoser och förstahandsbehandling i primärvård.",
-    body: "Symtombild, odling, antibiotikaval och handläggning vid recidiverande UVI.",
-    category: "Infektion",
-    tags: ["uvi", "antibiotika", "primärvård", "urinväg"],
-    url: "https://example.org/documents/urinvagsinfektion",
-    chunkType: "body",
-  },
-];
 
 const getResultTitle = (result: SearchResult): string => {
   const title = result.metadata?.title;
@@ -154,126 +44,62 @@ const getResultUrl = (result: SearchResult): string => {
   return typeof sourceUrl === "string" ? sourceUrl : "#";
 };
 
-const normalizeText = (value: string): string =>
-  value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-const getQueryTerms = (query: string): string[] =>
-  normalizeText(query)
-    .split(/\s+/)
-    .map((term) => term.trim())
-    .filter(Boolean);
-
-const countMatches = (document: DemoDocument, terms: string[]): number => {
-  if (terms.length === 0) {
-    return 1;
-  }
-
-  const haystack = normalizeText(
-    [
-      document.title,
-      document.summary,
-      document.body,
-      document.category,
-      document.tags.join(" "),
-    ].join(" "),
-  );
-  const normalizedTitle = normalizeText(document.title);
-  const normalizedTags = document.tags.map((tag) => normalizeText(tag));
-
-  let score = 0;
-  for (const term of terms) {
-    if (normalizedTitle.includes(term)) {
-      score += 6;
-    }
-    if (normalizedTags.some((tag) => tag.includes(term))) {
-      score += 4;
-    }
-    if (haystack.includes(term)) {
-      score += 2;
-    }
-  }
-  return score;
+const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
+  bm25: [],
+  vector: [],
+  vector_e5: [],
+  hybrid_e5: [],
 };
 
-const methodBoost = (method: SearchMethod, index: number): number => {
-  const rankBias = Math.max(0, 10 - index) * 0.015;
-
-  switch (method) {
-    case "bm25":
-      return 0.24 + rankBias;
-    case "dense":
-      return 0.28 + (index % 3) * 0.012;
-    case "hybrid":
-      return 0.32 + rankBias / 2;
-    case "docplus":
-      return 0.26 + ((index + 1) % 4) * 0.014;
-  }
+const EMPTY_PIPELINE: SearchPipeline = {
+  byMethod: EMPTY_BY_METHOD,
+  pooledBeforeDedup: [],
+  pooledAfterDedup: [],
+  finalResults: [],
 };
 
-const rotateDocuments = (documents: DemoDocument[], offset: number): DemoDocument[] => {
-  if (documents.length === 0) {
-    return [];
-  }
-  const normalizedOffset = offset % documents.length;
-  return documents.slice(normalizedOffset).concat(documents.slice(0, normalizedOffset));
-};
+const withMethodMetadata = (method: SearchMethod, result: SearchResult, rank: number): SearchResult => {
+  const metadata = result.metadata ?? {};
+  const existingScores =
+    typeof metadata.score_by_method === "object" &&
+    metadata.score_by_method &&
+    !Array.isArray(metadata.score_by_method)
+      ? metadata.score_by_method
+      : {};
+  const existingRanks =
+    typeof metadata.rank_by_method === "object" &&
+    metadata.rank_by_method &&
+    !Array.isArray(metadata.rank_by_method)
+      ? metadata.rank_by_method
+      : {};
 
-const assignRanksByScore = (
-  items: Array<{ document: DemoDocument; score: number }>,
-): Array<{ document: DemoDocument; score: number; rank: number }> =>
-  items
-    .sort((left, right) => right.score - left.score)
-    .map((item, index) => ({
-      ...item,
-      rank: index + 1,
-    }));
-
-const toSearchResult = (
-  document: DemoDocument,
-  method: SearchMethod,
-  score: number,
-  matchedTerms: string[],
-  rank: number,
-): SearchResult => ({
-  score: Math.min(0.99, score),
-  text: document.body,
-  chunk_text: `${document.summary} ${document.body}`,
-  chunk_type: document.chunkType,
-  source_path: `demo/${document.id}.json`,
-  demo_method: method,
-  metadata: {
-    title: document.title,
-    source_url: document.url,
-    category: document.category,
-    tags: document.tags,
-    demo_method: method,
-    matched_terms: matchedTerms,
-    score_by_method: {
-      [method]: Math.min(0.99, score),
+  return {
+    ...result,
+    result_method: method,
+    metadata: {
+      ...metadata,
+      pooled_from: [method],
+      score_by_method: {
+        ...existingScores,
+        [method]: typeof result.score === "number" ? result.score : null,
+      },
+      rank_by_method: {
+        ...existingRanks,
+        [method]: rank,
+      },
     },
-    rank_by_method: {
-      [method]: rank,
-    },
-  },
-});
-
-const runMethod = (method: SearchMethod, query: string): SearchResult[] => {
-  const terms = getQueryTerms(query);
-  const orderedDocuments = rotateDocuments(DEMO_DOCUMENTS, METHODS.indexOf(method) * 2);
-
-  const scoredDocuments = orderedDocuments.map((document, index) => {
-    const matchScore = countMatches(document, terms);
-    const score = methodBoost(method, index) + matchScore * 0.045;
-    return { document, score };
-  });
-
-  return assignRanksByScore(scoredDocuments)
-    .slice(0, 10)
-    .map((item) => toSearchResult(item.document, method, item.score, terms, item.rank));
+  };
 };
+
+const normalizeByMethodResults = (resultsByMethod: SearchResultsByMethod | undefined) =>
+  METHODS.reduce<Record<SearchMethod, SearchResult[]>>((accumulator, method) => {
+    const rawResults = resultsByMethod?.[method];
+    const safeResults = Array.isArray(rawResults) ? rawResults : [];
+    accumulator[method] = safeResults.map((result, index) =>
+      withMethodMetadata(method, result, index + 1),
+    );
+    return accumulator;
+  }, { ...EMPTY_BY_METHOD });
 
 const dedupeResults = (results: SearchResult[]): SearchResult[] => {
   const seen = new Map<string, SearchResult>();
@@ -291,7 +117,7 @@ const dedupeResults = (results: SearchResult[]): SearchResult[] => {
         score: undefined,
         metadata: {
           ...result.metadata,
-          pooled_from: [result.demo_method],
+          pooled_from: result.result_method ? [result.result_method] : [],
         },
       });
       continue;
@@ -337,7 +163,9 @@ const dedupeResults = (results: SearchResult[]): SearchResult[] => {
       score: undefined,
       metadata: {
         ...existing.metadata,
-        pooled_from: Array.from(new Set([...pooledFrom, result.demo_method])),
+        pooled_from: Array.from(
+          new Set(result.result_method ? [...pooledFrom, result.result_method] : pooledFrom),
+        ),
         score_by_method: {
           ...existingScores,
           ...incomingScores,
@@ -370,13 +198,12 @@ const seededShuffle = <T,>(items: T[], seedInput: string): T[] => {
   return output;
 };
 
-const buildPipeline = (query: string, runId: number): SearchPipeline => {
-  const byMethod = {
-    bm25: runMethod("bm25", query),
-    dense: runMethod("dense", query),
-    hybrid: runMethod("hybrid", query),
-    docplus: runMethod("docplus", query),
-  };
+const buildPipeline = (
+  query: string,
+  runId: number,
+  resultsByMethod: SearchResultsByMethod | undefined,
+): SearchPipeline => {
+  const byMethod = normalizeByMethodResults(resultsByMethod);
 
   const pooledBeforeDedup = METHODS.flatMap((method) => byMethod[method]);
   const pooledAfterDedup = dedupeResults(pooledBeforeDedup);
@@ -398,6 +225,9 @@ export default function DemoSearchPage() {
   const [comment, setComment] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [runId, setRunId] = useState(0);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [searchErrors, setSearchErrors] = useState<string[]>([]);
+  const [pipeline, setPipeline] = useState<SearchPipeline>(EMPTY_PIPELINE);
   const [debugMode, setDebugMode] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
   const [relevantScopes, setRelevantScopes] = useState<Record<string, RelevantScope>>({});
@@ -416,11 +246,6 @@ export default function DemoSearchPage() {
       router.replace("/");
     }
   }, [isAuthenticated, router]);
-
-  const pipeline = useMemo(
-    () => buildPipeline(submittedQuery.trim(), runId),
-    [runId, submittedQuery],
-  );
   const allResultsRated =
     hasSubmittedQuery &&
     pipeline.finalResults.length > 0 &&
@@ -429,15 +254,61 @@ export default function DemoSearchPage() {
       return ratings[resultKey] === "relevant" || ratings[resultKey] === "not_relevant";
     });
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return;
+    }
+    setIsLoadingSearch(true);
+    setSearchErrors([]);
     setSubmitError(null);
-    setSubmittedQuery(query);
-    setRunId((current) => current + 1);
     setHasSubmittedRatings(false);
-    requestAnimationFrame(() => {
-      stepTwoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    setRatings({});
+    setRelevantScopes({});
+    setRelevantSections({});
+    setResultComments({});
+
+    try {
+      const response = await fetch(`${DEMO_API_BASE_URL.replace(/\/$/, "")}/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method: "all" as SearchApiMethod,
+          query: trimmedQuery,
+          top_k: DEFAULT_TOP_K,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        errors?: string[];
+        results_by_method?: SearchResultsByMethod;
+      };
+
+      if (!response.ok) {
+        setPipeline(EMPTY_PIPELINE);
+        setSearchErrors(payload.errors && payload.errors.length > 0 ? payload.errors : ["Search failed."]);
+        return;
+      }
+
+      const nextRunId = runId + 1;
+      setRunId(nextRunId);
+      setSubmittedQuery(trimmedQuery);
+      setPipeline(buildPipeline(trimmedQuery, nextRunId, payload.results_by_method));
+      setSearchErrors(payload.errors ?? []);
+      requestAnimationFrame(() => {
+        stepTwoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    } catch (error) {
+      setPipeline(EMPTY_PIPELINE);
+      setSearchErrors([
+        error instanceof Error ? `Request failed: ${error.message}` : "Request failed with an unknown error.",
+      ]);
+    } finally {
+      setIsLoadingSearch(false);
+    }
   };
 
   const onFinalSubmit = async () => {
@@ -610,7 +481,7 @@ export default function DemoSearchPage() {
 
               <div>
                 <p className="font-medium text-[#253229]">Så här går det till:</p>
-                  <p>1. Skapa en sökterm. Tryck på "nästa".</p>
+                  <p>1. Skapa en sökterm. Tryck på &quot;nästa&quot;.</p>
                   <p>2. För varje dokument i listan nedan, bedöm hur relevant resultatet är utifrån din sökterm.</p>
               </div>
 
@@ -654,8 +525,8 @@ export default function DemoSearchPage() {
           {debugMode ? (
             <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
-                Varje sökning anropar `bm25`, `dense`, `hybrid` och `docplus`, samlar deras
-                topp 10-resultat i samma format som riktiga svar, tar bort dubletter och
+                Varje sökning anropar `bm25`, `vector`, `vector_e5` och `hybrid_e5`, samlar deras
+                topp 10-resultat från backend, tar bort dubletter och
                 randomiserar ordningen innan visning.
               </p>
             </div>
@@ -668,8 +539,8 @@ export default function DemoSearchPage() {
             <div className="space-y-2">
               <p className="text-sm leading-6 text-[#4f5850]">
                 Beskriv ett exempel på ett informationsbehov som kan uppstå i ditt dagliga arbete,
-                där du behöver söka i DocPlus. Exempel: "Familjen vill sova med sitt spädbarn
-                mellan sig. Vilken information behöver jag förmedla till föräldrarna?" Eller "Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?".
+                där du behöver söka i DocPlus. Exempel: &quot;Familjen vill sova med sitt spädbarn
+                mellan sig. Vilken information behöver jag förmedla till föräldrarna?&quot; Eller &quot;Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?&quot;.
               </p>
               <input
                 className={`w-full rounded-2xl border px-5 py-4 text-base outline-none transition ${
@@ -721,23 +592,31 @@ export default function DemoSearchPage() {
             </label>
 
             <p className="text-sm leading-6 text-[#4f5850]">
-              När du är nöjd, tryck på "Nästa steg". Du kan inte gå tillbaka och ändra i din information. 
+              När du är nöjd, tryck på &quot;Nästa steg&quot;. Du kan inte gå tillbaka och ändra i din information.
             </p>
 
             <button
               className={`self-start rounded-2xl px-6 py-4 font-semibold text-white transition ${
-                canSubmit && !hasSubmittedQuery
+                canSubmit && !hasSubmittedQuery && !isLoadingSearch
                   ? "bg-[#1f6e6e] hover:bg-[#184f4f]"
                   : "cursor-not-allowed bg-[#9fb8b8]"
               }`}
               type="submit"
-              disabled={!canSubmit || hasSubmittedQuery}
+              disabled={!canSubmit || hasSubmittedQuery || isLoadingSearch}
             >
-              Nästa steg
+              {isLoadingSearch ? "Söker..." : "Nästa steg"}
             </button>
 
           </form>
         </section>
+
+        {searchErrors.length > 0 ? (
+          <section className="rounded-[1.5rem] border border-[#f0b79f] bg-[#ffe8dc] p-4 text-sm text-[#7a2e0d]">
+            {searchErrors.map((error) => (
+              <p key={error}>{error}</p>
+            ))}
+          </section>
+        ) : null}
 
         <section
           ref={stepTwoRef}
