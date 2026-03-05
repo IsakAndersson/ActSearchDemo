@@ -12,6 +12,7 @@ class DownloadResult:
     url: str
     filename: str
     extracted_text_len: int
+    metadata: dict
 
 
 class DocumentStore:

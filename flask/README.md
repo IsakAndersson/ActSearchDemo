@@ -21,29 +21,19 @@ source ../.venv/bin/activate
 The base install is enough for scraping, BM25 search, and the Flask API. Vector search
 (`vector`, `vector_e5`, `hybrid_e5`) needs extra optional dependencies as described below.
 
-### Usage for actsearch!
+### Usage for actsearch
 
-To crawl a contiguous range of search pages (e.g. pages 1 through 618), provide a single
-search path and the page range:
+The scraper now has Region Uppsala defaults baked in and runs as one operation
+(scrape + parse + metadata enrichment + summary):
 
 ```bash
-python -m scraper.docplus_scraper \
-  --base-url https://publikdocplus.regionuppsala.se/ \
-  --start-paths "/Home/Search?searchValue=&oldFilter=&facet=&facetVal=&page=1" \
-  --page-start 1 \
-  --page-end 618 \
-  --output-dir output \
-  --delay 1.0
+python -m scraper.docplus_scraper
 ```
 
-### Alternative usage
+To change how many pages are scraped, override `--page-end`:
 
 ```bash
-python -m scraper.docplus_scraper \
-  --base-url https://publikdocplus.regionuppsala.se/ \
-  --start-paths "/Home/Search?searchValue=&oldFilter=&facet=&facetVal=,/documents,/policies" \
-  --output-dir output \
-  --delay 1.0
+python -m scraper.docplus_scraper --page-end 650
 ```
 
 The scraper writes:

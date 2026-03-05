@@ -1,4 +1,8 @@
-"""Docplus scraper to collect documents and extract text for downstream use."""
+"""Docplus scraper for Region Uppsala search pages.
+
+This script runs as one operation: fetch paginated search result pages, download
+linked documents, extract text, and write parsed JSON + summary metadata.
+"""
 from __future__ import annotations
 
 import argparse
@@ -6,7 +10,6 @@ import dataclasses
 import json
 import logging
 import os
-import queue
 import re
 import time
 from dataclasses import dataclass
@@ -21,16 +24,23 @@ from scraper.storage import DocumentStore, DownloadResult
 
 
 DEFAULT_USER_AGENT = "ThesisSearchDocplusScraper/1.0"
+DEFAULT_BASE_URL = "https://publikdocplus.regionuppsala.se/"
+DEFAULT_START_PATH = "/Home/Search?searchValue=&oldFilter=&facet=&facetVal=&page=1"
+DEFAULT_PAGE_START = 1
+DEFAULT_PAGE_END = 620
+DEFAULT_OUTPUT_DIR = "output"
+DEFAULT_DELAY_SECONDS = 1.0
 DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
 
 
 @dataclass
 class ScraperConfig:
     base_url: str
-    start_paths: tuple[str, ...]
-    output_dir: str
-    delay_seconds: float = 0.5
-    max_pages: Optional[int] = None
+    start_path: str
+    page_start: int
+    page_end: int
+    output_dir: str = DEFAULT_OUTPUT_DIR
+    delay_seconds: float = DEFAULT_DELAY_SECONDS
     user_agent: str = DEFAULT_USER_AGENT
     request_timeout: int = 30
 
@@ -40,7 +50,6 @@ class PageResult:
     url: str
     status_code: int
     document_links: tuple[str, ...]
-    next_links: tuple[str, ...]
 
 
 class DocplusScraper:
@@ -52,34 +61,14 @@ class DocplusScraper:
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def scrape(self) -> list[DownloadResult]:
-        visited: set[str] = set()
-        to_visit: queue.Queue[str] = queue.Queue()
-        for path in self.config.start_paths:
-            to_visit.put(self._build_start_url(path))
-
         downloads: list[DownloadResult] = []
-        pages_processed = 0
-
-        while not to_visit.empty():
-            if self.config.max_pages and pages_processed >= self.config.max_pages:
-                break
-
-            current = to_visit.get()
-            if current in visited:
-                continue
-
-            visited.add(current)
-            self.logger.info("Fetching %s", current)
+        for page in range(self.config.page_start, self.config.page_end + 1):
+            current = build_page_url(self.config.base_url, self.config.start_path, page)
+            self.logger.info("Fetching search page %s", current)
             page_result = self._fetch_page(current)
-            pages_processed += 1
 
             for link in page_result.document_links:
-                download = self._download_document(link)
-                downloads.append(download)
-
-            for link in page_result.next_links:
-                if link not in visited:
-                    to_visit.put(link)
+                downloads.append(self._download_document(link))
 
             time.sleep(self.config.delay_seconds)
 
@@ -90,40 +79,26 @@ class DocplusScraper:
             response = self.session.get(url, timeout=self.config.request_timeout)
             if response.status_code in {404, 410}:
                 self.logger.warning("Skipping missing page %s (status %s)", url, response.status_code)
-                return PageResult(
-                    url=url,
-                    status_code=response.status_code,
-                    document_links=tuple(),
-                    next_links=tuple(),
-                )
+                return PageResult(url=url, status_code=response.status_code, document_links=tuple())
             response.raise_for_status()
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response else 0
             if status_code in {404, 410}:
                 self.logger.warning("Skipping missing page %s (status %s)", url, status_code)
-                return PageResult(
-                    url=url,
-                    status_code=status_code,
-                    document_links=tuple(),
-                    next_links=tuple(),
-                )
+                return PageResult(url=url, status_code=status_code, document_links=tuple())
             raise
+
         soup = BeautifulSoup(response.text, "html.parser")
         document_links: list[str] = []
-        next_links: list[str] = []
-
         for anchor in soup.find_all("a", href=True):
-            href = self._normalize_url(urljoin(url, anchor["href"]))
+            href = normalize_url(urljoin(url, anchor["href"]))
             if self._is_document_link(href):
                 document_links.append(href)
-            elif self._is_same_domain(href):
-                next_links.append(href)
 
         return PageResult(
             url=url,
             status_code=response.status_code,
             document_links=tuple(sorted(set(document_links))),
-            next_links=tuple(sorted(set(next_links))),
         )
 
     def _download_document(self, url: str) -> DownloadResult:
@@ -132,14 +107,15 @@ class DocplusScraper:
             response = self.session.get(url, timeout=self.config.request_timeout)
             if response.status_code in {404, 410}:
                 self.logger.warning("Skipping missing document %s (status %s)", url, response.status_code)
-                return DownloadResult(url=url, filename="", extracted_text_len=0)
+                return DownloadResult(url=url, filename="", extracted_text_len=0, metadata={})
             response.raise_for_status()
         except requests.HTTPError as exc:
             status_code = exc.response.status_code if exc.response else 0
             if status_code in {404, 410}:
                 self.logger.warning("Skipping missing document %s (status %s)", url, status_code)
-                return DownloadResult(url=url, filename="", extracted_text_len=0)
+                return DownloadResult(url=url, filename="", extracted_text_len=0, metadata={})
             raise
+
         filename = self.store.write_binary(url, response.content)
         extracted_text = extract_text(filename)
         document_name = extract_document_name_from_url(url)
@@ -152,7 +128,12 @@ class DocplusScraper:
             "title_source": "url_filename",
         }
         self.store.write_text(filename, extracted_text, metadata)
-        return DownloadResult(url=url, filename=filename, extracted_text_len=len(extracted_text))
+        return DownloadResult(
+            url=url,
+            filename=filename,
+            extracted_text_len=len(extracted_text),
+            metadata=metadata,
+        )
 
     def _is_document_link(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -171,35 +152,15 @@ class DocplusScraper:
                     return True
         return False
 
-    def _is_same_domain(self, url: str) -> bool:
-        return urlparse(url).netloc == urlparse(self.config.base_url).netloc
-
-    def _normalize_url(self, url: str) -> str:
-        normalized, _ = urldefrag(url)
-        return normalized
-
-    def _build_start_url(self, path: str) -> str:
-        if re.match(r"^https?://", path):
-            return self._normalize_url(path)
-        base_url = self.config.base_url
-        if not base_url.endswith("/"):
-            base_url += "/"
-        return self._normalize_url(urljoin(base_url, path.lstrip("/")))
-
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Scrape Docplus documents for later parsing.")
-    parser.add_argument("--base-url", required=True, help="Base URL for Docplus, e.g. https://docplus.example.com/")
-    parser.add_argument(
-        "--start-paths",
-        default="/",
-        help="Comma-separated list of paths to seed the crawl.",
-    )
-    parser.add_argument("--page-start", type=int, help="Starting page number for search pagination.")
-    parser.add_argument("--page-end", type=int, help="Ending page number for search pagination (inclusive).")
-    parser.add_argument("--output-dir", default="output", help="Directory to store downloads and parsed text.")
-    parser.add_argument("--delay", type=float, default=0.5, help="Delay between requests.")
-    parser.add_argument("--max-pages", type=int, help="Maximum number of pages to visit.")
+    parser = argparse.ArgumentParser(description="Scrape Region Uppsala Docplus pages into parsed JSON + summary.")
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Docplus base URL.")
+    parser.add_argument("--start-path", default=DEFAULT_START_PATH, help="Search path template containing page query.")
+    parser.add_argument("--page-start", type=int, default=DEFAULT_PAGE_START, help="Starting page number.")
+    parser.add_argument("--page-end", type=int, default=DEFAULT_PAGE_END, help="Ending page number (inclusive).")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Directory to store downloads and parsed text.")
+    parser.add_argument("--delay", type=float, default=DEFAULT_DELAY_SECONDS, help="Delay between requests.")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT)
     parser.add_argument("--timeout", type=int, default=30)
     parser.add_argument("--log-level", default="INFO")
@@ -218,6 +179,15 @@ def set_page_param(url: str, page: int) -> str:
     updated_query = urlencode(query, doseq=True)
     updated = parsed._replace(query=updated_query)
     return normalize_url(urlunparse(updated))
+
+
+def build_page_url(base_url: str, start_path: str, page: int) -> str:
+    if re.match(r"^https?://", start_path):
+        template_url = normalize_url(start_path)
+    else:
+        base = base_url if base_url.endswith("/") else f"{base_url}/"
+        template_url = normalize_url(urljoin(base, start_path.lstrip("/")))
+    return set_page_param(template_url, page)
 
 
 def extract_document_name_from_url(url: str) -> str:
@@ -243,61 +213,36 @@ def extract_title_from_document_name(document_name: str) -> str:
     return document_name.strip()
 
 
-def build_start_urls(
-    base_url: str,
-    start_paths: tuple[str, ...],
-    page_start: Optional[int],
-    page_end: Optional[int],
-) -> tuple[str, ...]:
-    def build_start_url(path: str) -> str:
-        if re.match(r"^https?://", path):
-            return normalize_url(path)
-        base = base_url
-        if not base.endswith("/"):
-            base += "/"
-        return normalize_url(urljoin(base, path.lstrip("/")))
-
-    if page_start is None and page_end is None:
-        return tuple(build_start_url(path) for path in start_paths)
-
-    if page_start is None or page_end is None:
-        raise ValueError("Both page_start and page_end must be provided when using page range.")
-    if len(start_paths) != 1:
-        raise ValueError("Provide a single start path when using page range options.")
-    if page_start > page_end:
-        raise ValueError("page_start must be less than or equal to page_end.")
-
-    template_url = build_start_url(start_paths[0])
-    return tuple(set_page_param(template_url, page) for page in range(page_start, page_end + 1))
-
-
 def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parse_args(argv)
+    if args.page_start > args.page_end:
+        raise ValueError("page-start must be less than or equal to page-end.")
+
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
     config = ScraperConfig(
         base_url=args.base_url,
-        start_paths=build_start_urls(
-            base_url=args.base_url,
-            start_paths=tuple(path.strip() for path in args.start_paths.split(",") if path.strip()),
-            page_start=args.page_start,
-            page_end=args.page_end,
-        ),
+        start_path=args.start_path,
+        page_start=args.page_start,
+        page_end=args.page_end,
         output_dir=args.output_dir,
         delay_seconds=args.delay,
-        max_pages=args.max_pages,
         user_agent=args.user_agent,
         request_timeout=args.timeout,
     )
+
     scraper = DocplusScraper(config)
     results = scraper.scrape()
+    successful = [result for result in results if result.filename]
     summary = {
-        "downloaded": len(results),
+        "downloaded": len(successful),
+        "attempted": len(results),
         "documents": [dataclasses.asdict(result) for result in results],
     }
+
     output_path = os.path.join(config.output_dir, "summary.json")
     os.makedirs(config.output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
+        json.dump(summary, handle, ensure_ascii=False, indent=2)
     logging.getLogger("DocplusScraper").info("Wrote summary to %s", output_path)
     return 0
 
