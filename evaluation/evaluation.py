@@ -55,7 +55,9 @@ def evaluate_system(
         tuple[pd.DataFrame, float, float]:
             (results_by_query_type, average_rank, average_score)
     """
+    print("[evaluation] Loading qrels data...", flush=True)
     df = load_data()
+    print(f"[evaluation] Loaded {len(df)} rows.", flush=True)
 
 	#tar ut rätt kolumner för qrels 
     doc_ids = df["Titel på rätt dokument"]
@@ -64,6 +66,7 @@ def evaluate_system(
     query_types_cols = df[query_type_list]
 
     #todo: lägg in for-loop som loopar igenom varje sökfunktion och kör evaluate
+    print("[evaluation] Running retrieval evaluation...", flush=True)
     results_by_query, average_rank, average_score, run_df = evaluate(
         search_function, k, doc_ids, query_types_cols, return_runs=True
     )
@@ -143,16 +146,36 @@ def save_results_to_csv(
 def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 	rows = []
 	all_runs = []
+	query_type_count = len(query_types_cols.columns)
 	#loopar över varje query type och beräknar metrics 
-	for query_type in query_types_cols.columns:
+	for query_type_index, query_type in enumerate(query_types_cols.columns, start=1):
+		print(
+			f"[evaluation] Query type {query_type_index}/{query_type_count}: {query_type}",
+			flush=True,
+		)
 		queries = query_types_cols[query_type]
 		if return_runs:
 			rr20, average_rank, run_df = evaluate_query_type(
-				doc_ids, queries, search_function, k, return_run=True
+				doc_ids,
+				queries,
+				search_function,
+				k,
+				return_run=True,
+				progress_label=query_type,
 			)
 		else:
-			rr20, average_rank = evaluate_query_type(doc_ids, queries, search_function, k)
+			rr20, average_rank = evaluate_query_type(
+				doc_ids,
+				queries,
+				search_function,
+				k,
+				progress_label=query_type,
+			)
 			run_df = None
+		print(
+			f"[evaluation] Done query type '{query_type}'. RR@20={rr20:.4f}, avg_rank={average_rank:.2f}",
+			flush=True,
+		)
 		rows.append({"query_type": query_type, "RR@20": rr20, "average_rank": average_rank})
 		if return_runs and run_df is not None and not run_df.empty:
 			run_df = run_df.copy()
@@ -171,9 +194,21 @@ def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 
 	return (results_by_query_type, average_rank, average_score)
 
-def evaluate_query_type(doc_ids, queries, search_function, k, return_run=False):
+def evaluate_query_type(
+	doc_ids,
+	queries,
+	search_function,
+	k,
+	return_run=False,
+	progress_label: Optional[str] = None,
+):
     qrels = create_qrels(doc_ids, queries)
-    run = build_run_df(queries, search_function, k)
+    run = build_run_df(
+		queries,
+		search_function,
+		k,
+		progress_label=progress_label,
+	)
     scores = calculate_metrics(qrels, run)
     rr20 = list(scores.values())[0]
     avg_rank = calculate_average_rank(qrels, run)
@@ -184,10 +219,18 @@ def evaluate_query_type(doc_ids, queries, search_function, k, return_run=False):
 def build_run_df(
     queries: pd.Series,
     search_fn: Callable[[str, int], List[Tuple[str, float]]],
-    top_k: int = 20
+    top_k: int = 20,
+    progress_label: Optional[str] = None,
 ) -> pd.DataFrame:
     rows = []
-    for query in queries:
+    total_queries = len(queries)
+    for index, query in enumerate(queries, start=1):
+        if index == 1 or index % 5 == 0 or index == total_queries:
+            prefix = f"{progress_label}: " if progress_label else ""
+            print(
+                f"[evaluation] {prefix}query {index}/{total_queries}",
+                flush=True,
+            )
         try:
             results = search_fn(query, top_k)
         except Exception as exc:

@@ -344,7 +344,16 @@ export default function SearchPage() {
                   Clean test UI with Flask API as backend.
                 </p>
               </div>
-              <span className="badge badge-outline badge-primary">Next.js + Flask</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="btn btn-outline btn-sm"
+                  type="button"
+                  onClick={() => router.push("/demo-search")}
+                >
+                  Gå till demo med dummy-data
+                </button>
+                <span className="badge badge-outline badge-primary">Next.js + Flask</span>
+              </div>
             </div>
 
             <form className="space-y-4" onSubmit={onSubmit}>

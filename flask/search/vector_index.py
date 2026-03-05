@@ -3,15 +3,39 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
+import threading
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
-import faiss
 import numpy as np
-import torch
-from transformers import AutoModel, AutoTokenizer
+
+try:
+    import faiss
+except ImportError as exc:
+    faiss = None
+    _FAISS_IMPORT_ERROR = exc
+else:
+    _FAISS_IMPORT_ERROR = None
+
+try:
+    import torch
+except ImportError as exc:
+    torch = None
+    _TORCH_IMPORT_ERROR = exc
+else:
+    _TORCH_IMPORT_ERROR = None
+
+try:
+    from transformers import AutoModel, AutoTokenizer
+except ImportError as exc:
+    AutoModel = None
+    AutoTokenizer = None
+    _TRANSFORMERS_IMPORT_ERROR = exc
+else:
+    _TRANSFORMERS_IMPORT_ERROR = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +67,11 @@ DEFAULT_MODEL_PROFILE_KEY = "swedish_bert"
 DEFAULT_MODEL = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].model_name
 DEFAULT_CHUNK_SIZE = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_size
 DEFAULT_CHUNK_OVERLAP = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_overlap
+LOG = logging.getLogger(__name__)
+_MODEL_CACHE: Dict[tuple[str, str], tuple[AutoTokenizer, AutoModel]] = {}
+_INDEX_CACHE: Dict[str, faiss.Index] = {}
+_METADATA_CACHE: Dict[str, List[dict]] = {}
+_CACHE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -54,13 +83,43 @@ class ChunkRecord:
     chunk_type: str = "body"
 
 
+def vector_dependencies_available() -> bool:
+    return all(
+        error is None
+        for error in (_FAISS_IMPORT_ERROR, _TORCH_IMPORT_ERROR, _TRANSFORMERS_IMPORT_ERROR)
+    )
+
+
+def ensure_vector_dependencies() -> None:
+    if vector_dependencies_available():
+        return
+
+    missing: List[str] = []
+    if _FAISS_IMPORT_ERROR is not None:
+        missing.append("faiss")
+    if _TORCH_IMPORT_ERROR is not None:
+        missing.append("torch")
+    if _TRANSFORMERS_IMPORT_ERROR is not None:
+        missing.append("transformers")
+
+    raise RuntimeError(
+        "Vector search dependencies are unavailable. "
+        f"Missing: {', '.join(missing)}. "
+        "Install the optional vector dependencies to enable FAISS-based search."
+    )
+
+
 def iter_parsed_documents(parsed_dir: str) -> Iterable[dict]:
     for filename in sorted(os.listdir(parsed_dir)):
         if not filename.endswith(".json"):
             continue
         path = os.path.join(parsed_dir, filename)
-        with open(path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError as exc:
+            LOG.warning("Skipping invalid parsed JSON %s: %s", path, exc)
+            continue
         yield {"path": path, **payload}
 
 
@@ -206,6 +265,7 @@ def embed_texts(
 
 
 def resolve_device(device_preference: str) -> torch.device:
+    ensure_vector_dependencies()
     if device_preference == "cpu":
         return torch.device("cpu")
     if device_preference == "cuda":
@@ -216,6 +276,7 @@ def resolve_device(device_preference: str) -> torch.device:
 
 
 def load_local_encoder(model_name: str) -> tuple[AutoTokenizer, AutoModel]:
+    ensure_vector_dependencies()
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
         model = AutoModel.from_pretrained(model_name, local_files_only=True)
@@ -225,6 +286,58 @@ def load_local_encoder(model_name: str) -> tuple[AutoTokenizer, AutoModel]:
             "Model files were not found in the local Hugging Face cache. "
             f"Pre-download '{model_name}' before running with offline loading."
         ) from exc
+
+
+def _get_cached_encoder(model_name: str, device: torch.device) -> tuple[AutoTokenizer, AutoModel]:
+    cache_key = (model_name, str(device))
+
+    with _CACHE_LOCK:
+        cached = _MODEL_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    LOG.info("Loading encoder model '%s' on %s...", model_name, device)
+    tokenizer, model = load_local_encoder(model_name)
+    model.to(device)
+    model.eval()
+
+    with _CACHE_LOCK:
+        _MODEL_CACHE[cache_key] = (tokenizer, model)
+    return tokenizer, model
+
+
+def _get_cached_index(index_path: str) -> faiss.Index:
+    normalized_path = os.path.abspath(index_path)
+
+    with _CACHE_LOCK:
+        cached = _INDEX_CACHE.get(normalized_path)
+    if cached is not None:
+        return cached
+
+    LOG.info("Reading FAISS index: %s", normalized_path)
+    index = faiss.read_index(normalized_path)
+    with _CACHE_LOCK:
+        _INDEX_CACHE[normalized_path] = index
+    return index
+
+
+def _get_cached_metadata(metadata_path: str) -> List[dict]:
+    normalized_path = os.path.abspath(metadata_path)
+
+    with _CACHE_LOCK:
+        cached = _METADATA_CACHE.get(normalized_path)
+    if cached is not None:
+        return cached
+
+    LOG.info("Loading metadata JSONL: %s", normalized_path)
+    loaded_metadata: List[dict] = []
+    with open(normalized_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            loaded_metadata.append(json.loads(line))
+
+    with _CACHE_LOCK:
+        _METADATA_CACHE[normalized_path] = loaded_metadata
+    return loaded_metadata
 
 
 def build_index(
@@ -384,20 +497,15 @@ def query_index(
     top_k: int,
     device_preference: str,
 ) -> List[dict]:
-    tokenizer, model = load_local_encoder(model_name)
     device = resolve_device(device_preference)
-    model.to(device)
-    model.eval()
+    tokenizer, model = _get_cached_encoder(model_name=model_name, device=device)
 
+    LOG.info("Embedding query...")
     query_embedding = embed_texts([query], tokenizer, model, device, batch_size=1)
     faiss.normalize_L2(query_embedding)
-    index = faiss.read_index(index_path)
+    index = _get_cached_index(index_path)
     scores, indices = index.search(query_embedding, top_k)
-
-    metadata = []
-    with open(metadata_path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            metadata.append(json.loads(line))
+    metadata = _get_cached_metadata(metadata_path)
 
     results = []
     for score, idx in zip(scores[0].tolist(), indices[0].tolist()):

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
+import sqlite3
 import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
@@ -33,6 +35,20 @@ def _click_log_path() -> str:
 
 def _rating_log_path() -> str:
     return _get_env_default("DOCPLUS_RATING_LOG_PATH", "output/logs/rating_events.csv")
+
+
+def _demo_submission_db_path() -> str:
+    return _get_env_default(
+        "DOCPLUS_DEMO_SUBMISSION_DB_PATH",
+        "output/form_submissions/form_submissions.sqlite3",
+    )
+
+
+def _demo_submission_json_dir() -> str:
+    return _get_env_default(
+        "DOCPLUS_DEMO_SUBMISSION_JSON_DIR",
+        "output/form_submissions/submissions_json_format",
+    )
 
 
 def _utc_now() -> str:
@@ -125,6 +141,84 @@ def _append_csv_row(path: str, fieldnames: List[str], row: Dict[str, Any]) -> No
             if needs_header:
                 writer.writeheader()
             writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
+def _init_demo_submission_db() -> None:
+    path = _demo_submission_db_path()
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                participant_name TEXT NOT NULL,
+                information_need TEXT NOT NULL,
+                query_text TEXT NOT NULL,
+                general_comment TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.commit()
+
+
+def _save_demo_submission(payload: Dict[str, Any]) -> int:
+    _init_demo_submission_db()
+
+    participant_name = _to_text(payload.get("participant_name"))
+    information_need = _to_text(payload.get("information_need"))
+    query_text = _to_text(payload.get("query"))
+    general_comment = _to_text(payload.get("general_comment"))
+    payload_json = json.dumps(payload, ensure_ascii=False)
+
+    with sqlite3.connect(_demo_submission_db_path()) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO submissions (
+                created_at,
+                participant_name,
+                information_need,
+                query_text,
+                general_comment,
+                payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _utc_now(),
+                participant_name,
+                information_need,
+                query_text,
+                general_comment,
+                payload_json,
+            ),
+        )
+        connection.commit()
+        submission_id = int(cursor.lastrowid)
+
+    json_dir = _demo_submission_json_dir()
+    os.makedirs(json_dir, exist_ok=True)
+    json_path = os.path.join(json_dir, f"submission_{submission_id}.json")
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "submission_id": submission_id,
+                "created_at": _utc_now(),
+                "participant_name": participant_name,
+                "information_need": information_need,
+                "query": query_text,
+                "general_comment": general_comment,
+                "payload": payload,
+            },
+            handle,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    return submission_id
 
 
 def _result_key(result: Dict[str, Any]) -> Tuple[str, int]:
@@ -372,7 +466,7 @@ def search() -> Any:
 
     payload = request.get_json(silent=True) or request.form.to_dict()
     search_id = str(uuid4())
-    method = str(payload.get("method", "hybrid_e5")).lower()
+    method = str(payload.get("method", "bm25")).lower()
     query = str(payload.get("query") or "").strip()
 
     defaults = _defaults_from_payload(payload)
@@ -381,6 +475,7 @@ def search() -> Any:
     top_k = 5
     results: List[Dict[str, Any]] | None = None
     results_by_method: Dict[str, List[Dict[str, Any]]] | None = None
+    successful_methods = 0
 
     if not query:
         errors.append("Query cannot be empty.")
@@ -398,6 +493,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
         elif method == "vector":
@@ -410,6 +506,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
         elif method == "vector_e5":
@@ -422,6 +519,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
         elif method == "hybrid_e5":
@@ -434,6 +532,7 @@ def search() -> Any:
                     query=query,
                     top_k=candidate_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
             try:
@@ -445,6 +544,7 @@ def search() -> Any:
                     top_k=candidate_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
             results = _rrf_hybrid(
@@ -460,6 +560,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
@@ -472,6 +573,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
                 results_by_method["vector"] = []
@@ -484,6 +586,7 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
@@ -505,7 +608,7 @@ def search() -> Any:
         errors=errors,
     )
 
-    status_code = 400 if errors else 200
+    status_code = 400 if errors and successful_methods == 0 else 200
     return jsonify(
         {
             "search_id": search_id,
@@ -593,6 +696,38 @@ def search_rating() -> Any:
         },
     )
     return jsonify({"ok": True})
+
+
+@app.route("/demo/submit", methods=["POST", "OPTIONS"])
+def demo_submit() -> Any:
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    participant_name = _to_text(payload.get("participant_name"))
+    information_need = _to_text(payload.get("information_need"))
+    query_text = _to_text(payload.get("query"))
+
+    errors: List[str] = []
+    if not participant_name:
+        errors.append("participant_name is required.")
+    if not information_need:
+        errors.append("information_need is required.")
+    if not query_text:
+        errors.append("query is required.")
+
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+
+    submission_id = _save_demo_submission(payload)
+    return jsonify(
+        {
+            "ok": True,
+            "submission_id": submission_id,
+            "db_path": _demo_submission_db_path(),
+            "json_dir": _demo_submission_json_dir(),
+        }
+    )
 
 
 if __name__ == "__main__":
