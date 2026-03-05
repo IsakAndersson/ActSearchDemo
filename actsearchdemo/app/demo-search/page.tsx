@@ -11,7 +11,7 @@ const METHODS = ["bm25", "docplus", "dense_e5", "hybrid_e5"] as const;
 const DEFAULT_TOP_K = 10;
 
 type SearchMethod = (typeof METHODS)[number];
-type SearchApiMethod = SearchMethod | "all";
+type SearchApiMethod = SearchMethod | "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
 type RelevantScope = "whole_document" | "part_of_document";
 
@@ -448,7 +448,7 @@ export default function DemoSearchPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            method: "all" as SearchApiMethod,
+            method: "evaluation_form_search" as SearchApiMethod,
             query: trimmedQuery,
             top_k: DEFAULT_TOP_K,
           }),

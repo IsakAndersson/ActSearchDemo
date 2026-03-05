@@ -633,6 +633,45 @@ def search() -> Any:
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Docplus live search failed: {exc}")
+        elif method == "evaluation_form_search":
+            results_by_method = {}
+            try:
+                results_by_method["bm25"] = bm25_search(
+                    parsed_dir=defaults["parsed_dir"],
+                    query=query,
+                    top_k=top_k,
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"BM25 search failed: {exc}")
+                results_by_method["bm25"] = []
+            try:
+                results_by_method["docplus"] = _docplus_live_results(
+                    query=query,
+                    top_k=top_k,
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Docplus live search failed: {exc}")
+                results_by_method["docplus"] = []
+            try:
+                results_by_method["dense_e5"] = query_index(
+                    index_path=defaults["e5_index_path"],
+                    metadata_path=defaults["e5_metadata_path"],
+                    query=query,
+                    model_name=defaults["e5_model_name"],
+                    top_k=top_k,
+                    device_preference=defaults["device"],
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Vector E5 search failed: {exc}")
+                results_by_method["dense_e5"] = []
+            results_by_method["hybrid_e5"] = _rrf_hybrid(
+                bm25_results=results_by_method.get("bm25", []),
+                e5_results=results_by_method.get("dense_e5", []),
+                top_k=top_k,
+            )
         elif method == "all":
             results_by_method = {}
             try:
