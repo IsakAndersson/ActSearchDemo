@@ -338,10 +338,9 @@ export default function SearchPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-                  Docplus Search
+                  ActSearch Demo
                 </h1>
                 <p className="mt-1 text-sm text-base-content/70">
-                  Clean test UI with Flask API as backend.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -350,7 +349,7 @@ export default function SearchPage() {
                   type="button"
                   onClick={() => router.push("/demo-search")}
                 >
-                  Gå till demo med dummy-data
+                  Gå till insamling av utvärderingsdata
                 </button>
                 <span className="badge badge-outline badge-primary">Next.js + Flask</span>
               </div>

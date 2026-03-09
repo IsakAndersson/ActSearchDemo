@@ -400,12 +400,22 @@ export default function DemoSearchPage() {
   const hasSubmittedQuery = submittedQuery.trim().length > 0;
   const isAuthenticated =
     typeof window !== "undefined" && localStorage.getItem(SESSION_KEY) === "true";
+  const participantName =
+    typeof window !== "undefined" ? localStorage.getItem(USER_NAME_KEY)?.trim() ?? "" : "";
+  const isAdminUser = participantName === "admin" || participantName === "Admin";
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace("/");
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!isAdminUser) {
+      setDebugMode(false);
+      setUseDummyData(false);
+    }
+  }, [isAdminUser]);
   const allResultsRated =
     hasSubmittedQuery &&
     pipeline.finalResults.length > 0 &&
@@ -488,9 +498,6 @@ export default function DemoSearchPage() {
     if (!allResultsRated) {
       return;
     }
-
-    const participantName =
-      typeof window !== "undefined" ? localStorage.getItem(USER_NAME_KEY)?.trim() ?? "" : "";
 
     const results = pipeline.finalResults.map((result, index) => {
       const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
@@ -618,64 +625,71 @@ export default function DemoSearchPage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8eb,#f3efe6_45%,#eaf4ff)] px-6 py-10 text-[#1e241f]">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+                  <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            Formulär för utvärderingsdata
+          </h1>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <label
-            className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
-              debugMode
-                ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
-                : "border-[#d8ddd3] bg-white text-[#556055]"
-            }`}
-          >
-            <div className="flex flex-col">
-              <span>Debug-läge</span>
-              <span className="text-xs font-normal opacity-80">
-                {debugMode ? "På: visar intern pipeline och metoddata" : "Av: visar bara resultatlistan"}
-              </span>
-            </div>
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
-                debugMode ? "bg-[#1f6e6e] text-white" : "bg-[#eef1ec] text-[#5f685f]"
-              }`}
-            >
-              {debugMode ? "På" : "Av"}
-            </span>
-            <input
-              className="toggle border-[#cfd4c9] bg-white text-[#1f6e6e] [--tglbg:#ffffff]"
-              type="checkbox"
-              checked={debugMode}
-              onChange={(event) => setDebugMode(event.target.checked)}
-            />
-          </label>
+          {isAdminUser ? (
+            <>
+              <label
+                className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
+                  debugMode
+                    ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
+                    : "border-[#d8ddd3] bg-white text-[#556055]"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span>Debug-läge</span>
+                  <span className="text-xs font-normal opacity-80">
+                    {debugMode ? "På: visar intern pipeline och metoddata" : "Av: visar bara resultatlistan"}
+                  </span>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                    debugMode ? "bg-[#1f6e6e] text-white" : "bg-[#eef1ec] text-[#5f685f]"
+                  }`}
+                >
+                  {debugMode ? "På" : "Av"}
+                </span>
+                <input
+                  className="toggle border-[#cfd4c9] bg-white text-[#1f6e6e] [--tglbg:#ffffff]"
+                  type="checkbox"
+                  checked={debugMode}
+                  onChange={(event) => setDebugMode(event.target.checked)}
+                />
+              </label>
 
-          <label
-            className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
-              useDummyData
-                ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
-                : "border-[#d8ddd3] bg-white text-[#556055]"
-            }`}
-          >
-            <div className="flex flex-col">
-              <span>Sök med dummydata</span>
-              <span className="text-xs font-normal opacity-80">
-                {useDummyData
-                  ? "På: använder lokala dummyfunktioner"
-                  : "Av: använder Flask-backend"}
-              </span>
-            </div>
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
-                useDummyData ? "bg-[#1f6e6e] text-white" : "bg-[#eef1ec] text-[#5f685f]"
-              }`}
-            >
-              {useDummyData ? "På" : "Av"}
-            </span>
-            <input
-              className="toggle border-[#cfd4c9] bg-white text-[#1f6e6e] [--tglbg:#ffffff]"
-              type="checkbox"
-              checked={useDummyData}
-              onChange={(event) => setUseDummyData(event.target.checked)}
-            />
-          </label>
+              <label
+                className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition md:min-w-[22rem] ${
+                  useDummyData
+                    ? "border-[#9bc7c7] bg-[#eef6f3] text-[#1f4f4f]"
+                    : "border-[#d8ddd3] bg-white text-[#556055]"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span>Sök med dummydata</span>
+                  <span className="text-xs font-normal opacity-80">
+                    {useDummyData
+                      ? "På: använder lokala dummyfunktioner"
+                      : "Av: använder Flask-backend"}
+                  </span>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                    useDummyData ? "bg-[#1f6e6e] text-white" : "bg-[#eef1ec] text-[#5f685f]"
+                  }`}
+                >
+                  {useDummyData ? "På" : "Av"}
+                </span>
+                <input
+                  className="toggle border-[#cfd4c9] bg-white text-[#1f6e6e] [--tglbg:#ffffff]"
+                  type="checkbox"
+                  checked={useDummyData}
+                  onChange={(event) => setUseDummyData(event.target.checked)}
+                />
+              </label>
+            </>
+          ) : null}
 
           <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -683,7 +697,7 @@ export default function DemoSearchPage() {
               type="button"
               onClick={() => router.push("/search")}
             >
-              Gå till riktig söksida
+              Gå till demosida
             </button>
             <button
               className="rounded-full border border-[#c8cfbf] bg-white/80 px-4 py-2 text-sm text-[#425043] transition hover:border-[#1f6e6e] hover:text-[#1f6e6e]"
@@ -694,6 +708,7 @@ export default function DemoSearchPage() {
             </button>
           </div>
         </div>
+
 
         {debugMode ? null : (
           <section className="rounded-[2rem] border border-[#d6d8cf] bg-[#fffdf8]/95 p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)]">
