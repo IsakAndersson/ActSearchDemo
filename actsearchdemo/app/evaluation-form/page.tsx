@@ -12,7 +12,7 @@ const DEFAULT_TOP_K = 10;
 
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = SearchMethod | "evaluation_form_search";
-type RelevanceRating = "relevant" | "partially_relevant" | "not_relevant";
+type RelevanceRating = "relevant" | "not_relevant";
 type RelevantScope = "whole_document" | "part_of_document";
 
 type SearchResult = {
@@ -377,8 +377,8 @@ const buildPipeline = (
 
 const isRelevantLikeRating = (
   rating: RelevanceRating | null | undefined,
-): rating is "relevant" | "partially_relevant" =>
-  rating === "relevant" || rating === "partially_relevant";
+): rating is "relevant" =>
+  rating === "relevant";
 
 const isAssessmentComplete = (
   rating: RelevanceRating | null | undefined,
@@ -785,7 +785,7 @@ export default function DemoSearchPage() {
               </p>
               <p>
                 Datan kommer användas för att utvärdera vår sökalgoritm och göra den bättre. <br></br>
-                Notera att allt du skriver kommer sparas i utvärderingssyfte. Skriv inte in känslig information såsom patientdata.</p>
+                Notera att allt du skriver kommer sparas, så skriv inte in känslig information såsom patientdata.</p>
               <p></p>
               <p>
                 Vid frågor kontakta:{" "}
@@ -1008,7 +1008,7 @@ export default function DemoSearchPage() {
           <div className="mt-3 space-y-1 text-sm leading-6 text-[#4f5850]">
             <p style={{ marginBottom: '20px' }}>För varje sökträff i listan nedan, klicka på länken för att få upp dokumentet och bedöm hur relevant det är utifrån informationsbehovet du definierade i steget ovan.</p>
             <p>Relevant = Dokumentet innehåller information som hjälper till att besvara informationsbehovet.</p>
-            <p style={{ marginBottom: '20px' }}> Inte relevant = Dokumentet innehåller inte information som hjälper till att besvara informationsbehovet.</p>
+            <p style={{ marginBottom: '20px' }}>Inte relevant = Dokumentet innehåller inte information som hjälper till att besvara informationsbehovet.</p>
             <p style={{ marginBottom: '20px' }}>
               Dokumentet behöver inte vara det bästa eller mest kompletta svaret för att räknas som relevant. <br></br>
               Om flera  dokument innehåller relevant information kan alla markeras som relevanta.<br></br>
@@ -1105,22 +1105,6 @@ export default function DemoSearchPage() {
                             </label>
                             <label className="flex items-center gap-2 border-t border-[#d9ddd4] px-3 py-2 text-xs text-[#465048]">
                             <input
-                              checked={selectedRating === "partially_relevant"}
-                              className="h-4 w-4 accent-[#1f6e6e]"
-                              disabled={hasSubmittedRatings}
-                              name={`rating-${resultKey}`}
-                              type="radio"
-                              onChange={() =>
-                                  setRatings((current) => ({
-                                    ...current,
-                                    [resultKey]: "partially_relevant",
-                                  }))
-                                }
-                              />
-                              Delvis relevant
-                            </label>
-                            <label className="flex items-center gap-2 border-t border-[#d9ddd4] px-3 py-2 text-xs text-[#465048]">
-                            <input
                               checked={selectedRating === "not_relevant"}
                               className="h-4 w-4 accent-[#1f6e6e]"
                               disabled={hasSubmittedRatings}
@@ -1183,7 +1167,7 @@ export default function DemoSearchPage() {
                             {selectedScope === "part_of_document" ? (
                               <label className="flex flex-col gap-2">
                                 <span className="text-xs text-[#2f3a31]">
-                                  Ange i vilken/vilka delar/kapitel
+                                  Ange i vilken/vilka kapitel och/eller sidor
                                 </span>
                                 <textarea
                                   className={`min-h-20 rounded-2xl border px-4 py-3 text-xs outline-none transition ${
