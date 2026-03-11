@@ -4,11 +4,11 @@ This is a Next.js frontend for testing Docplus search against the local Flask AP
 
 - `/` password page (hardcoded client-side password)
 - `/search` search interface that calls Flask `POST /search`
-- `/demo-search` evaluation form page for collecting relevance assessments
+- `/evaluation-form` evaluation form page for collecting relevance assessments
 
 ### Demo form admin controls
 
-On `/demo-search`, the toggles `Debug-läge` and `Sök med dummydata` are only visible when the logged-in participant name is exactly `admin` or `Admin`.
+On `/evaluation-form`, the toggles `Debug-läge` and `Sök med dummydata` are only visible when the logged-in participant name is exactly `admin` or `Admin`.
 
 For any other participant name, both toggles are forced to off.
 

@@ -347,7 +347,7 @@ export default function SearchPage() {
                 <button
                   className="btn btn-outline btn-sm"
                   type="button"
-                  onClick={() => router.push("/demo-search")}
+                  onClick={() => router.push("/evaluation-form")}
                 >
                   Gå till insamling av utvärderingsdata
                 </button>

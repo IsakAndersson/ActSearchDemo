@@ -12,7 +12,7 @@ const DEFAULT_TOP_K = 10;
 
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = SearchMethod | "evaluation_form_search";
-type RelevanceRating = "relevant" | "not_relevant";
+type RelevanceRating = "relevant" | "partially_relevant" | "not_relevant";
 type RelevantScope = "whole_document" | "part_of_document";
 
 type SearchResult = {
@@ -375,6 +375,35 @@ const buildPipeline = (
   };
 };
 
+const isRelevantLikeRating = (
+  rating: RelevanceRating | null | undefined,
+): rating is "relevant" | "partially_relevant" =>
+  rating === "relevant" || rating === "partially_relevant";
+
+const isAssessmentComplete = (
+  rating: RelevanceRating | null | undefined,
+  scope: RelevantScope | undefined,
+  sectionLabel: string | undefined,
+): boolean => {
+  if (rating === "not_relevant") {
+    return true;
+  }
+
+  if (!isRelevantLikeRating(rating)) {
+    return false;
+  }
+
+  if (scope === "whole_document") {
+    return true;
+  }
+
+  if (scope === "part_of_document") {
+    return (sectionLabel ?? "").trim().length > 0;
+  }
+
+  return false;
+};
+
 export default function DemoSearchPage() {
   const router = useRouter();
   const stepOneRef = useRef<HTMLElement | null>(null);
@@ -421,7 +450,11 @@ export default function DemoSearchPage() {
     pipeline.finalResults.length > 0 &&
     pipeline.finalResults.every((result, index) => {
       const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
-      return ratings[resultKey] === "relevant" || ratings[resultKey] === "not_relevant";
+      return isAssessmentComplete(
+        ratings[resultKey],
+        relevantScopes[resultKey],
+        relevantSections[resultKey],
+      );
     });
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -510,9 +543,9 @@ export default function DemoSearchPage() {
         ...result,
         assessment: {
           rating: selectedRating,
-          relevant_scope: selectedRating === "relevant" ? selectedScope : null,
+          relevant_scope: isRelevantLikeRating(selectedRating) ? selectedScope : null,
           relevant_section:
-            selectedRating === "relevant" && selectedScope === "part_of_document"
+            isRelevantLikeRating(selectedRating) && selectedScope === "part_of_document"
               ? sectionLabel
               : "",
           comment: resultComment,
@@ -585,6 +618,22 @@ export default function DemoSearchPage() {
     }
   };
 
+  const onCancelRelevanceStep = () => {
+    setHasSubmittedRatings(false);
+    setSubmitError(null);
+    setSearchErrors([]);
+    setSubmittedQuery("");
+    setRunId(0);
+    setPipeline(EMPTY_PIPELINE);
+    setRatings({});
+    setRelevantScopes({});
+    setRelevantSections({});
+    setResultComments({});
+    requestAnimationFrame(() => {
+      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   const onLogout = () => {
     localStorage.removeItem(SESSION_KEY);
     router.push("/");
@@ -623,10 +672,10 @@ export default function DemoSearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8eb,#f3efe6_45%,#eaf4ff)] px-6 py-10 text-[#1e241f]">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff8eb,#f3efe6_45%,#eaf4ff)] px-4 py-10 text-[#1e241f] md:px-5">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6">
                   <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-            Formulär för utvärderingsdata
+            Insamling av utvärderingsdata
           </h1>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           {isAdminUser ? (
@@ -713,10 +762,6 @@ export default function DemoSearchPage() {
         {debugMode ? null : (
           <section className="rounded-[2rem] border border-[#d6d8cf] bg-[#fffdf8]/95 p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)]">
             <div className="max-w-4xl space-y-5 text-sm leading-7 text-[#4f5850]">
-              <p className="font-medium text-[#253229]">
-                Det här är en del av ett masterarbete som görs i samarbete med DataToValue.
-              </p>
-
               <div>
                 <p className="font-medium text-[#253229]">Så här går det till:</p>
                   <p>1. Skapa en sökterm. Tryck på &quot;nästa&quot;.</p>
@@ -730,7 +775,7 @@ export default function DemoSearchPage() {
               </p>
 
               <div>
-                <p>Notera att dina söktermer kommer sparas. Skriv inte in känslig data såsom patientdata.</p>
+                <p>Notera att allt du skriver kommer sparas i utvärderingssyfte. Skriv inte in känslig information såsom patientdata.</p>
               </div>
 
               <p>
@@ -777,9 +822,14 @@ export default function DemoSearchPage() {
             </p>
             <div className="space-y-2">
               <p className="text-sm leading-6 text-[#4f5850]">
-                Beskriv ett exempel på ett informationsbehov som kan uppstå i ditt dagliga arbete,
-                där du behöver söka i DocPlus. Exempel: &quot;Familjen vill sova med sitt spädbarn
-                mellan sig. Vilken information behöver jag förmedla till föräldrarna?&quot; Eller &quot;Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?&quot;.
+                Beskriv en situation i ditt arbete där du behöver söka information i DocPlus.
+                Beskriv kort vad som händer och vilken information du behöver få fram.
+
+                Exempel:
+
+                &quot;Familjen vill sova med sitt spädbarn mellan sig. Vilken information behöver jag förmedla till föräldrarna?&quot;
+
+                &quot;Jag ska assistera vid en sugklocka. Vilka arbetsuppgifter har undersköterskan?&quot;
               </p>
               <input
                 className={`w-full rounded-2xl border px-5 py-4 text-base outline-none transition ${
@@ -795,10 +845,10 @@ export default function DemoSearchPage() {
             </div>
 
             <p className="pt-2 text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-              2. Skapa en sökterm
+              2. Skapa en sökning
             </p>
             <p className="text-sm leading-6 text-[#4f5850]">
-              Vad skulle du skriva in i sökrutan utifrån ovanstående informationsbehov?
+              Vad skulle du skriva in i sökrutan i DocPlus utifrån informationsbehovet du definierade? Exempel: &quot;undersköterska assistering sugklocka&quot;
             </p>
             <div className="flex flex-col gap-3">
               <input
@@ -831,7 +881,7 @@ export default function DemoSearchPage() {
             </label>
 
             <p className="text-sm leading-6 text-[#4f5850]">
-              När du är nöjd, tryck på &quot;Nästa steg&quot;. Du kan inte gå tillbaka och ändra i din information.
+              När du är nöjd, tryck på &quot;Nästa steg&quot; för att generera sökträffar.
             </p>
 
             <button
@@ -849,11 +899,84 @@ export default function DemoSearchPage() {
           </form>
         </section>
 
+        <div className="mt-1">
+          <button
+            className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+              hasSubmittedQuery && !isLoadingSearch && !isSubmittingToBackend
+                ? "border-[#c8cfbf] bg-white/80 text-[#425043] hover:border-[#aeb7a5] hover:bg-white"
+                : "cursor-not-allowed border-[#d6dcd1] bg-[#f0f2ec] text-[#8a9486]"
+            }`}
+            type="button"
+            disabled={!hasSubmittedQuery || isLoadingSearch || isSubmittingToBackend}
+            onClick={onCancelRelevanceStep}
+          >
+            <span aria-hidden="true">↑</span>{" "}Avbryt steg 3 och gå tillbaka
+          </button>
+          <p className="mt-2 text-sm text-[#4f5850]">
+            Notera att ditt arbete i steg 3 nollställs.
+          </p>
+        </div>
+
         {searchErrors.length > 0 ? (
           <section className="rounded-[1.5rem] border border-[#f0b79f] bg-[#ffe8dc] p-4 text-sm text-[#7a2e0d]">
             {searchErrors.map((error) => (
               <p key={error}>{error}</p>
             ))}
+          </section>
+        ) : null}
+
+        {debugMode ? (
+          <section className="rounded-[1.5rem] border border-[#d6d8cf] bg-[#fcfbf8] p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
+              Debug: Pool per sökfunktion (före dedupe)
+            </h2>
+            <p className="mt-2 text-sm text-[#4f5850]">
+              Lista över dokumenttitlar som respektive sökfunktion bidrar med till poolen.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {METHODS.map((method) => (
+                <div className="rounded-2xl border border-[#d9ddd4] bg-white p-4" key={`pool-list-${method}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
+                    {method}
+                  </p>
+                  {pipeline.byMethod[method].length > 0 ? (
+                    <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-[#465048]">
+                      {pipeline.byMethod[method].map((result, index) => (
+                        <li key={`pool-title-${method}-${result.source_path ?? index}`}>
+                          {getResultTitle(result)}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="mt-3 text-sm text-[#6a7169]">
+                      Inga resultat ännu.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-[#d9ddd4] bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
+                Pool efter dedupe
+              </p>
+              <p className="mt-2 text-sm text-[#4f5850]">
+                Unik lista efter att dubletter tagits bort.
+              </p>
+              {pipeline.pooledAfterDedup.length > 0 ? (
+                <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-[#465048]">
+                  {pipeline.pooledAfterDedup.map((result, index) => (
+                    <li key={`deduped-title-${result.source_path ?? index}`}>
+                      {getResultTitle(result)}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm text-[#6a7169]">
+                  Inga resultat ännu.
+                </p>
+              )}
+            </div>
           </section>
         ) : null}
 
@@ -868,19 +991,16 @@ export default function DemoSearchPage() {
           }`}
         >
           <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-            2. Bedöm relevans
+            3. Bedöm relevans
           </h2>
           <div className="mt-3 space-y-1 text-sm leading-6 text-[#4f5850]">
-            <p>För varje sökträff, klicka på länken för att få upp dokumentet och bedöm hur relevant dokumentet är utifrån söktermen.</p>
-            <p>Observera att rangordningen är slumpartad.</p>
+            <p style={{ marginBottom: '20px' }}>För varje sökträff i listan nedan, klicka på länken för att få upp dokumentet och bedöm hur relevant det är utifrån informationsbehovet du definierade i steget ovan.</p>
+            <p>Relevant = dokumentet svarar tydligt på informationsbehovet.</p>
+            <p>Delvis relevant = dokumentet innehåller viss relevant information men inte ett komplett svar.</p>
+            <p style={{ marginBottom: '20px' }}>Inte relevant = dokumentet hjälper inte med informationsbehovet.</p>
+            <p style={{ fontWeight: '600' }} >Observera att dokumentens rangordning är slumpmässig.</p>
           </div>
           <div className={`mt-4 grid gap-3 text-sm text-[#6b7468] ${debugMode ? "md:grid-cols-4" : "md:grid-cols-1"}`}>
-            <div className="rounded-2xl bg-[#f8f5ee] px-4 py-3">
-              <span className="block text-xs uppercase tracking-[0.16em] text-[#7d7568]">
-                Din sökterm
-              </span>
-              <span>{submittedQuery.trim() || "Ingen query än"}</span>
-            </div>
             {debugMode ? (
               <>
                 <div className="rounded-2xl bg-[#f8f5ee] px-4 py-3">
@@ -915,41 +1035,47 @@ export default function DemoSearchPage() {
               const rankByMethod = getRankByMethod(result);
               const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
               const selectedRating = ratings[resultKey];
+              const isRelevantLike = isRelevantLikeRating(selectedRating);
               const selectedScope = relevantScopes[resultKey];
               const sectionLabel = relevantSections[resultKey] ?? "";
+              const isRatingComplete = isAssessmentComplete(
+                selectedRating,
+                selectedScope,
+                sectionLabel,
+              );
               const resultComment = resultComments[resultKey] ?? "";
 
                 return (
                   <article
-                    className="rounded-[1.5rem] border border-[#d6d8cf] bg-white/90 p-6 shadow-[0_16px_50px_rgba(35,44,32,0.06)]"
+                    className={`rounded-[1.5rem] border p-6 shadow-[0_16px_50px_rgba(35,44,32,0.06)] transition ${
+                      isRatingComplete
+                        ? "border-[#79b8a3] bg-[#f4fbf7]"
+                        : "border-[#d6d8cf] bg-white/90"
+                    }`}
                     key={`${resultKey}-${index}`}
                   >
                     {!debugMode ? (
                       <div
-                        className={`grid gap-4 md:items-start ${
-                          selectedRating === "relevant"
-                            ? "xl:grid-cols-[minmax(0,1.1fr)_12rem_18rem_minmax(0,1fr)]"
-                            : "lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)]"
-                        }`}
+                        className="grid gap-4 md:items-start lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.1fr)_12rem_22rem_minmax(0,0.8fr)]"
                       >
-                        <div className="min-w-0">
-                          <h2 className="font-serif text-xl text-[#203327]">{getResultTitle(result)}</h2>
+                        <div className="min-w-0 lg:col-start-1">
+                          <h2 className="font-serif text-lg text-[#203327]">{getResultTitle(result)}</h2>
                           <a
-                            className="mt-4 inline-flex break-all text-sm font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                            className="mt-4 inline-flex break-all text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
                             href={getResultUrl(result)}
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Öppna exempellänk
+                            Öppna länk{" "}<span aria-hidden="true">{"\u2197"}</span>
                           </a>
                         </div>
 
-                        <fieldset>
+                        <fieldset className="w-full max-w-[10.5rem] self-start lg:col-start-2">
                           <legend className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
                             Relevans
                           </legend>
-                          <div className="mt-3 flex flex-col gap-2">
-                            <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
+                          <div className="mt-3 overflow-hidden rounded-xl border border-[#d9ddd4] bg-white">
+                            <label className="flex items-center gap-2 px-3 py-2 text-xs text-[#465048]">
                             <input
                               checked={selectedRating === "relevant"}
                               className="h-4 w-4 accent-[#1f6e6e]"
@@ -962,7 +1088,23 @@ export default function DemoSearchPage() {
                               />
                               Relevant
                             </label>
-                            <label className="flex items-center gap-2 rounded-full border border-[#d9ddd4] px-4 py-2 text-sm text-[#465048]">
+                            <label className="flex items-center gap-2 border-t border-[#d9ddd4] px-3 py-2 text-xs text-[#465048]">
+                            <input
+                              checked={selectedRating === "partially_relevant"}
+                              className="h-4 w-4 accent-[#1f6e6e]"
+                              disabled={hasSubmittedRatings}
+                              name={`rating-${resultKey}`}
+                              type="radio"
+                              onChange={() =>
+                                  setRatings((current) => ({
+                                    ...current,
+                                    [resultKey]: "partially_relevant",
+                                  }))
+                                }
+                              />
+                              Delvis relevant
+                            </label>
+                            <label className="flex items-center gap-2 border-t border-[#d9ddd4] px-3 py-2 text-xs text-[#465048]">
                             <input
                               checked={selectedRating === "not_relevant"}
                               className="h-4 w-4 accent-[#1f6e6e]"
@@ -981,14 +1123,14 @@ export default function DemoSearchPage() {
                           </div>
                         </fieldset>
 
-                        {selectedRating === "relevant" ? (
-                          <div className="space-y-4 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4">
+                        {isRelevantLike ? (
+                          <div className="space-y-4 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4 lg:col-start-3 xl:col-start-3 xl:ml-[-0.75rem]">
                             <div className="space-y-2">
-                              <p className="text-sm font-medium text-[#2f3a31]">
+                              <p className="text-xs font-medium text-[#2f3a31]">
                                 Var i dokumentet finns den relevanta informationen?
                               </p>
                               <div className="flex flex-col gap-2">
-                                <label className="flex items-center gap-2 text-sm text-[#465048]">
+                                <label className="flex items-center gap-2 text-xs text-[#465048]">
                                   <input
                                     checked={selectedScope === "whole_document"}
                                     className="h-4 w-4 accent-[#1f6e6e]"
@@ -1004,7 +1146,7 @@ export default function DemoSearchPage() {
                                   />
                                   Hela dokumentet
                                 </label>
-                                <label className="flex items-center gap-2 text-sm text-[#465048]">
+                                <label className="flex items-center gap-2 text-xs text-[#465048]">
                                   <input
                                     checked={selectedScope === "part_of_document"}
                                     className="h-4 w-4 accent-[#1f6e6e]"
@@ -1025,17 +1167,16 @@ export default function DemoSearchPage() {
 
                             {selectedScope === "part_of_document" ? (
                               <label className="flex flex-col gap-2">
-                                <span className="text-sm text-[#2f3a31]">
+                                <span className="text-xs text-[#2f3a31]">
                                   Ange i vilken/vilka delar/kapitel
                                 </span>
-                                <input
-                                  className={`rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+                                <textarea
+                                  className={`min-h-20 rounded-2xl border px-4 py-3 text-xs outline-none transition ${
                                     hasSubmittedRatings
                                       ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
                                       : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
                                   }`}
                                   disabled={hasSubmittedRatings}
-                                  type="text"
                                   value={sectionLabel}
                                   onChange={(event) =>
                                     setRelevantSections((current) => ({
@@ -1049,10 +1190,10 @@ export default function DemoSearchPage() {
                           </div>
                         ) : null}
 
-                        <label className={selectedRating === "relevant" ? "" : "lg:col-start-3"}>
-                          <span className="text-sm text-[#2f3a31]">Valfri kommentar</span>
+                        <label className="lg:col-start-3 xl:col-start-4">
+                          <span className="text-xs text-[#2f3a31]">Valfri kommentar</span>
                           <textarea
-                            className={`mt-2 min-h-24 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+                            className={`mt-2 min-h-24 w-full rounded-2xl border px-4 py-3 text-xs outline-none transition ${
                               hasSubmittedRatings
                                 ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
                                 : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
@@ -1077,7 +1218,7 @@ export default function DemoSearchPage() {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Öppna exempellänk
+                          Öppna exempellänk{" "}<span aria-hidden="true">{"\u2197"}</span>
                         </a>
                       </>
                     )}
@@ -1163,7 +1304,7 @@ export default function DemoSearchPage() {
           }`}
         >
           <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-            3. Skicka in
+            4. Skicka in
           </h2>
           <p className="mt-3 text-sm leading-6 text-[#4f5850]">
             När alla sökträffar är bedömda kan du skicka in dina svar.
