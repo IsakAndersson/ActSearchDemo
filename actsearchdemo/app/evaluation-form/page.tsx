@@ -425,19 +425,26 @@ export default function DemoSearchPage() {
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
   const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [participantName, setParticipantName] = useState("");
   const canSubmit = query.trim().length > 0;
   const hasSubmittedQuery = submittedQuery.trim().length > 0;
-  const isAuthenticated =
-    typeof window !== "undefined" && localStorage.getItem(SESSION_KEY) === "true";
-  const participantName =
-    typeof window !== "undefined" ? localStorage.getItem(USER_NAME_KEY)?.trim() ?? "" : "";
   const isAdminUser = participantName === "admin" || participantName === "Admin";
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (typeof window !== "undefined") {
+      setIsAuthenticated(localStorage.getItem(SESSION_KEY) === "true");
+      setParticipantName(localStorage.getItem(USER_NAME_KEY)?.trim() ?? "");
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (isHydrated && !isAuthenticated) {
       router.replace("/");
     }
-  }, [isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, router]);
 
   useEffect(() => {
     if (!isAdminUser) {
@@ -507,6 +514,13 @@ export default function DemoSearchPage() {
           setSearchErrors(payload.errors && payload.errors.length > 0 ? payload.errors : ["Search failed."]);
           return;
         }
+      }
+
+      if (payload.errors && payload.errors.length > 0) {
+        setPipeline(EMPTY_PIPELINE);
+        setSubmittedQuery("");
+        setSearchErrors(payload.errors);
+        return;
       }
 
       const nextRunId = runId + 1;
@@ -636,6 +650,9 @@ export default function DemoSearchPage() {
 
   const onLogout = () => {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(USER_NAME_KEY);
+    setIsAuthenticated(false);
+    setParticipantName("");
     router.push("/");
   };
 
@@ -667,7 +684,7 @@ export default function DemoSearchPage() {
     return Object.fromEntries(entries) as Partial<Record<SearchMethod, number>>;
   };
 
-  if (!isAuthenticated) {
+  if (!isHydrated || !isAuthenticated) {
     return null;
   }
 
@@ -762,25 +779,14 @@ export default function DemoSearchPage() {
         {debugMode ? null : (
           <section className="rounded-[2rem] border border-[#d6d8cf] bg-[#fffdf8]/95 p-8 shadow-[0_24px_80px_rgba(34,42,28,0.08)]">
             <div className="max-w-4xl space-y-5 text-sm leading-7 text-[#4f5850]">
-              <div>
-                <p className="font-medium text-[#253229]">Så här går det till:</p>
-                  <p>1. Skapa en sökterm. Tryck på &quot;nästa&quot;.</p>
-                  <p>2. För varje dokument i listan nedan, bedöm hur relevant resultatet är utifrån din sökterm.</p>
-              </div>
-
+              <p>Hej!</p>
               <p>
-                Upprepa detta så många gånger som du har tid med/orkar. Du kan komma tillbaka när
-                du vill och lägga till fler söktermer. Ju mer data vi har desto bättre blir vårt
-                arbete!
+                Syftet med det här formuläret är att du ska hjälpa oss skapa verklighetstrogna sökningar samt att relevansbedöma sökträffar kopplade till dessa sökningar. När du har gjort klart stegen nedan kommer du kunna göra om dem på nytt. Hur många gånger du vill göra det är helt upp till dig. Ju mer data desto bättre för vår del :). Du kan komma tillbaka till den här sidan när du vill och fortsätta.<br></br>
               </p>
-
-              <div>
-                <p>Notera att allt du skriver kommer sparas i utvärderingssyfte. Skriv inte in känslig information såsom patientdata.</p>
-              </div>
-
               <p>
-                Den här datan kommer användas för att utvärdera och jämföra olika söksystem och för att förbättra vårt söksystem.
-              </p>
+                Datan kommer användas för att utvärdera vår sökalgoritm och göra den bättre. <br></br>
+                Notera att allt du skriver kommer sparas i utvärderingssyfte. Skriv inte in känslig information såsom patientdata.</p>
+              <p></p>
               <p>
                 Vid frågor kontakta:{" "}
                 <a
@@ -822,14 +828,20 @@ export default function DemoSearchPage() {
             </p>
             <div className="space-y-2">
               <p className="text-sm leading-6 text-[#4f5850]">
-                Beskriv en situation i ditt arbete där du behöver söka information i DocPlus.
-                Beskriv kort vad som händer och vilken information du behöver få fram.
+                Tänk på ett informationsbehov som kan uppstå i ditt arbete där du behöver söka i DocPlus. <br></br>
 
-                Exempel:
+                Beskriv kort vilken information du behöver få fram i DocPlus.
+                Formulera det som en fråga eller ett kort informationsbehov. 1–2 meningar räcker.<br></br>
 
-                &quot;Familjen vill sova med sitt spädbarn mellan sig. Vilken information behöver jag förmedla till föräldrarna?&quot;
+                Skriv inte hur du skulle söka ännu, det gör du i nästa steg.<br></br>
 
-                &quot;Jag ska assistera vid en sugklocka. Vilka arbetsuppgifter har undersköterskan?&quot;
+                 <br></br>
+                
+                Exempel: <br></br>
+
+                &quot;Vilka arbetsuppgifter har undersköterskan vid assistering under en vakuumextraktion?<br></br>
+
+                &quot;Vilka åtgärder ska vidtas om ett nyfött barn har 36,0 i temperatur?
               </p>
               <input
                 className={`w-full rounded-2xl border px-5 py-4 text-base outline-none transition ${
@@ -848,7 +860,7 @@ export default function DemoSearchPage() {
               2. Skapa en sökning
             </p>
             <p className="text-sm leading-6 text-[#4f5850]">
-              Vad skulle du skriva in i sökrutan i DocPlus utifrån informationsbehovet du definierade? Exempel: &quot;undersköterska assistering sugklocka&quot;
+              Hur skulle du skriva din sökning i DocPlus för att hitta denna information? Exempel: &quot;undersköterska assistering sugklocka&quot;
             </p>
             <div className="flex flex-col gap-3">
               <input
@@ -995,9 +1007,12 @@ export default function DemoSearchPage() {
           </h2>
           <div className="mt-3 space-y-1 text-sm leading-6 text-[#4f5850]">
             <p style={{ marginBottom: '20px' }}>För varje sökträff i listan nedan, klicka på länken för att få upp dokumentet och bedöm hur relevant det är utifrån informationsbehovet du definierade i steget ovan.</p>
-            <p>Relevant = dokumentet svarar tydligt på informationsbehovet.</p>
-            <p>Delvis relevant = dokumentet innehåller viss relevant information men inte ett komplett svar.</p>
-            <p style={{ marginBottom: '20px' }}>Inte relevant = dokumentet hjälper inte med informationsbehovet.</p>
+            <p>Relevant = Dokumentet innehåller information som hjälper till att besvara informationsbehovet.</p>
+            <p style={{ marginBottom: '20px' }}> Inte relevant = Dokumentet innehåller inte information som hjälper till att besvara informationsbehovet.</p>
+            <p style={{ marginBottom: '20px' }}>
+              Dokumentet behöver inte vara det bästa eller mest kompletta svaret för att räknas som relevant. <br></br>
+              Om flera  dokument innehåller relevant information kan alla markeras som relevanta.<br></br>
+            </p>
             <p style={{ fontWeight: '600' }} >Observera att dokumentens rangordning är slumpmässig.</p>
           </div>
           <div className={`mt-4 grid gap-3 text-sm text-[#6b7468] ${debugMode ? "md:grid-cols-4" : "md:grid-cols-1"}`}>
