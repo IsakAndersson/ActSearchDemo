@@ -28,7 +28,7 @@ export default function LoginPage() {
 
     localStorage.setItem(SESSION_KEY, "true");
     localStorage.setItem(USER_NAME_KEY, name.trim());
-    router.push("/demo-search");
+    router.push("/evaluation-form");
   };
 
   return (
