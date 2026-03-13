@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass
 
 
@@ -36,6 +37,7 @@ class DocumentStore:
         payload = {
             "binary_path": binary_path,
             "text": text,
+            "cleaned_text": clean_text(text),
             "metadata": metadata,
         }
         with open(text_path, "w", encoding="utf-8") as handle:
@@ -46,3 +48,9 @@ class DocumentStore:
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
         ext = os.path.splitext(url)[1] or ".bin"
         return f"doc_{digest}{ext}"
+
+
+def clean_text(text: str) -> str:
+    """Normalize extracted text into a single searchable line."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\f", "\n")
+    return re.sub(r"\s+", " ", normalized).strip()
