@@ -239,12 +239,22 @@ def mean_pooling(token_embeddings: torch.Tensor, attention_mask: torch.Tensor) -
     return sum_embeddings / sum_mask
 
 
+def l2_normalize_rows(embeddings: np.ndarray, epsilon: float = 1e-12) -> np.ndarray:
+    """Return row-wise L2-normalized embeddings while keeping zero rows stable."""
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    safe_norms = np.clip(norms, epsilon, None)
+    normalized = embeddings / safe_norms
+    normalized[norms.squeeze(axis=1) == 0.0] = 0.0
+    return normalized.astype("float32", copy=False)
+
+
 def embed_texts(
     texts: List[str],
     tokenizer: AutoTokenizer,
     model: AutoModel,
     device: torch.device,
     batch_size: int,
+    normalize: bool = True,
 ) -> np.ndarray:
     embeddings: List[np.ndarray] = []
     for start in range(0, len(texts), batch_size):
@@ -261,7 +271,10 @@ def embed_texts(
             outputs = model(**encoded)
         pooled = mean_pooling(outputs.last_hidden_state, encoded["attention_mask"])
         embeddings.append(pooled.cpu().numpy())
-    return np.vstack(embeddings).astype("float32")
+    stacked = np.vstack(embeddings).astype("float32")
+    if normalize:
+        return l2_normalize_rows(stacked)
+    return stacked
 
 
 def resolve_device(device_preference: str) -> torch.device:
@@ -400,7 +413,6 @@ def build_index(
     embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatIP(dimension)
-    faiss.normalize_L2(embeddings)
     index.add(embeddings)
 
     faiss_path = os.path.join(output_dir, "docplus.faiss")
@@ -465,7 +477,6 @@ def build_index_with_titles(
     embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatIP(dimension)
-    faiss.normalize_L2(embeddings)
     index.add(embeddings)
 
     faiss_path = os.path.join(output_dir, "docplus_titles.faiss")
@@ -502,7 +513,6 @@ def query_index(
 
     LOG.info("Embedding query...")
     query_embedding = embed_texts([query], tokenizer, model, device, batch_size=1)
-    faiss.normalize_L2(query_embedding)
     index = _get_cached_index(index_path)
     scores, indices = index.search(query_embedding, top_k)
     metadata = _get_cached_metadata(metadata_path)
