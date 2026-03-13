@@ -26,9 +26,11 @@ DOCPLUS_LIVE_IMPORT_ERROR = ""
 try:
     from evaluation.search_adapter import SearchConfig as LiveSearchConfig
     from evaluation.search_adapter import docplus_live_search
+    from evaluation.search_adapter import docplus_live_search_with_metadata
 except Exception as exc:  # noqa: BLE001
     LiveSearchConfig = None  # type: ignore[assignment]
     docplus_live_search = None  # type: ignore[assignment]
+    docplus_live_search_with_metadata = None  # type: ignore[assignment]
     DOCPLUS_LIVE_IMPORT_ERROR = str(exc)
 
 
@@ -319,26 +321,48 @@ def _docplus_live_results(query: str, top_k: int) -> List[Dict[str, Any]]:
         raise RuntimeError(f"docplus_live_search unavailable: {detail}")
 
     config = _docplus_live_config(top_k)
-    ranked_pairs = docplus_live_search(query=query, top_k=top_k, config=config)
 
     results: List[Dict[str, Any]] = []
-    for index, pair in enumerate(ranked_pairs):
-        doc_id_raw, score_raw = pair
-        doc_id = _to_text(doc_id_raw) or f"docplus_live_result_{index + 1}"
-        score_value = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
-        results.append(
-            {
-                "score": score_value,
-                "chunk_id": index,
-                "text": doc_id,
-                "metadata": {
-                    "title": doc_id,
-                    "source": "docplus_live",
-                },
-                "source_path": f"docplus_live/{doc_id}",
-                "chunk_type": "document",
-            }
-        )
+    if docplus_live_search_with_metadata is not None:
+        ranked_items = docplus_live_search_with_metadata(query=query, top_k=top_k, config=config)
+        for index, item in enumerate(ranked_items):
+            doc_id = _to_text(item.get("doc_id")) or f"docplus_live_result_{index + 1}"
+            score_value = float(item.get("score")) if isinstance(item.get("score"), (int, float)) else 0.0
+            title = _to_text(item.get("title")) or doc_id
+            source_url = _to_text(item.get("source_url"))
+            results.append(
+                {
+                    "score": score_value,
+                    "chunk_id": index,
+                    "text": doc_id,
+                    "metadata": {
+                        "title": title,
+                        "source_url": source_url,
+                        "source": "docplus_live",
+                    },
+                    "source_path": f"docplus_live/{doc_id}",
+                    "chunk_type": "document",
+                }
+            )
+    else:
+        ranked_pairs = docplus_live_search(query=query, top_k=top_k, config=config)
+        for index, pair in enumerate(ranked_pairs):
+            doc_id_raw, score_raw = pair
+            doc_id = _to_text(doc_id_raw) or f"docplus_live_result_{index + 1}"
+            score_value = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+            results.append(
+                {
+                    "score": score_value,
+                    "chunk_id": index,
+                    "text": doc_id,
+                    "metadata": {
+                        "title": doc_id,
+                        "source": "docplus_live",
+                    },
+                    "source_path": f"docplus_live/{doc_id}",
+                    "chunk_type": "document",
+                }
+            )
     return results
 
 

@@ -493,6 +493,73 @@ def docplus_live_search(
     return ranked[:top_k]
 
 
+def docplus_live_search_with_metadata(
+    query: str,
+    top_k: int = 20,
+    config: SearchConfig = DEFAULT_CONFIG,
+    session: Optional[requests.Session] = None,
+) -> List[Dict[str, object]]:
+    """Live Docplus search that preserves title + source_url metadata per hit."""
+    if not query.strip() or top_k <= 0:
+        return []
+
+    search_url = urljoin(config.live_base_url.rstrip("/") + "/", config.live_search_path.lstrip("/"))
+    max_pages = max(config.live_max_pages, (top_k + 19) // 20)
+
+    active_session = session or requests.Session()
+    active_session.headers.update({"User-Agent": config.live_user_agent})
+
+    ranked: List[Dict[str, object]] = []
+    seen_doc_ids: set[str] = set()
+    for page in range(1, max_pages + 1):
+        html = _fetch_live_search_page(
+            session=active_session,
+            search_url=search_url,
+            query=query,
+            page=page,
+            timeout_seconds=config.live_timeout_seconds,
+        )
+        if html is None:
+            if page == 1:
+                return []
+            break
+        page_links = _extract_live_docplus_links(html, search_url)
+        if not page_links:
+            break
+
+        new_docs_on_page = 0
+        for item in page_links:
+            score = float(max(1, top_k - len(ranked)))
+            title = item.get("title", "")
+            source_url = item.get("source_url", "")
+            result_payload: Dict[str, object] = {
+                "metadata": {
+                    "title": title,
+                    "source_url": source_url,
+                },
+                "score": score,
+            }
+            doc_id = _extract_doc_id(result_payload)
+            if not doc_id or doc_id in seen_doc_ids:
+                continue
+            seen_doc_ids.add(doc_id)
+            ranked.append(
+                {
+                    "doc_id": doc_id,
+                    "score": score,
+                    "title": title,
+                    "source_url": source_url,
+                }
+            )
+            new_docs_on_page += 1
+            if len(ranked) >= top_k:
+                return ranked
+        if new_docs_on_page == 0:
+            break
+
+    return ranked[:top_k]
+
+
 def sts_live_search(
     query: str,
     top_k: int = 20,
