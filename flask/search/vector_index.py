@@ -231,6 +231,24 @@ def extract_title(payload: dict) -> Optional[str]:
     return None
 
 
+def _uses_e5_prefixes(model_name: str) -> bool:
+    return "e5" in model_name.lower()
+
+
+def _with_query_prefix(text: str) -> str:
+    stripped = text.strip()
+    if stripped.lower().startswith("query:"):
+        return stripped
+    return f"query: {stripped}"
+
+
+def _with_passage_prefix(text: str) -> str:
+    stripped = text.strip()
+    if stripped.lower().startswith("passage:"):
+        return stripped
+    return f"passage: {stripped}"
+
+
 def mean_pooling(token_embeddings: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
     mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     masked_embeddings = token_embeddings * mask
@@ -371,6 +389,7 @@ def build_index(
 
     chunks: List[ChunkRecord] = []
     texts: List[str] = []
+    use_e5_prefixes = _uses_e5_prefixes(model_name)
     chunk_id = 0
     for payload in iter_parsed_documents(parsed_dir):
         text = payload.get("text") or ""
@@ -388,7 +407,7 @@ def build_index(
                     chunk_type="title",
                 )
             )
-            texts.append(title)
+            texts.append(_with_passage_prefix(title) if use_e5_prefixes else title)
             chunk_id += 1
 
         if not text.strip():
@@ -404,7 +423,7 @@ def build_index(
                     chunk_type="body",
                 )
             )
-            texts.append(chunk_text_value)
+            texts.append(_with_passage_prefix(chunk_text_value) if use_e5_prefixes else chunk_text_value)
             chunk_id += 1
 
     if not texts:
@@ -453,6 +472,7 @@ def build_index_with_titles(
 
     chunks: List[ChunkRecord] = []
     texts: List[str] = []
+    use_e5_prefixes = _uses_e5_prefixes(model_name)
     chunk_id = 0
     for payload in iter_parsed_documents(parsed_dir):
         metadata = payload.get("metadata", {}) or {}
@@ -468,7 +488,7 @@ def build_index_with_titles(
                     chunk_type="title",
                 )
             )
-            texts.append(title)
+            texts.append(_with_passage_prefix(title) if use_e5_prefixes else title)
             chunk_id += 1
 
     if not texts:
@@ -512,7 +532,8 @@ def query_index(
     tokenizer, model = _get_cached_encoder(model_name=model_name, device=device)
 
     LOG.info("Embedding query...")
-    query_embedding = embed_texts([query], tokenizer, model, device, batch_size=1)
+    query_text = _with_query_prefix(query) if _uses_e5_prefixes(model_name) else query
+    query_embedding = embed_texts([query_text], tokenizer, model, device, batch_size=1)
     index = _get_cached_index(index_path)
     scores, indices = index.search(query_embedding, top_k)
     metadata = _get_cached_metadata(metadata_path)
