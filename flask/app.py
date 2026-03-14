@@ -146,6 +146,14 @@ def _extract_score(result: Dict[str, Any]) -> str:
     return _to_text(score)
 
 
+def _extract_user_name(payload: Dict[str, Any]) -> str:
+    for key in ("user_name", "participant_name", "user", "name"):
+        value = _to_text(payload.get(key))
+        if value:
+            return value
+    return ""
+
+
 def _append_csv_row(path: str, fieldnames: List[str], row: Dict[str, Any]) -> None:
     directory = os.path.dirname(path)
     if directory:
@@ -371,6 +379,7 @@ def _log_search(
     query: str,
     requested_method: str,
     top_k: int,
+    user_name: str,
     results: List[Dict[str, Any]],
     results_by_method: Dict[str, List[Dict[str, Any]]],
     errors: List[str],
@@ -381,6 +390,7 @@ def _log_search(
         "query": query,
         "requested_method": requested_method,
         "top_k": top_k,
+        "user_name": user_name,
         "had_errors": "1" if errors else "0",
         "errors": " | ".join(errors),
         "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
@@ -444,6 +454,7 @@ SEARCH_LOG_FIELDS = [
     "search_id",
     "query",
     "requested_method",
+    "user_name",
     "result_method",
     "top_k",
     "rank",
@@ -463,6 +474,7 @@ CLICK_LOG_FIELDS = [
     "search_id",
     "query",
     "requested_method",
+    "user_name",
     "result_method",
     "rank",
     "score",
@@ -478,6 +490,7 @@ RATING_LOG_FIELDS = [
     "search_id",
     "query",
     "requested_method",
+    "user_name",
     "result_method",
     "document",
     "title",
@@ -567,6 +580,7 @@ def search() -> Any:
     search_id = str(uuid4())
     method = str(payload.get("method", "bm25")).lower()
     query = str(payload.get("query") or "").strip()
+    user_name = _extract_user_name(payload)
 
     defaults = _defaults_from_payload(payload)
 
@@ -747,6 +761,7 @@ def search() -> Any:
         query=query,
         requested_method=method,
         top_k=top_k,
+        user_name=user_name,
         results=results or [],
         results_by_method=results_by_method or {},
         errors=errors,
@@ -784,6 +799,7 @@ def search_click() -> Any:
             "search_id": search_id,
             "query": _to_text(payload.get("query")),
             "requested_method": _to_text(payload.get("requested_method")),
+            "user_name": _extract_user_name(payload),
             "result_method": _to_text(payload.get("result_method")),
             "rank": _to_text(payload.get("rank")),
             "score": _to_text(payload.get("score")),
@@ -829,6 +845,7 @@ def search_rating() -> Any:
             "search_id": search_id,
             "query": _to_text(payload.get("query")),
             "requested_method": _to_text(payload.get("requested_method")),
+            "user_name": _extract_user_name(payload),
             "result_method": _to_text(payload.get("result_method")),
             "document": document,
             "title": title,

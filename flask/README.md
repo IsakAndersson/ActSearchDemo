@@ -167,17 +167,19 @@ API endpoints:
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
   `vector`, `vector_e5`, `hybrid_e5`, and `all` (returns `results_by_method`). The
-  default method is `bm25`.
+  default method is `bm25`. Include `user_name` to attach a user identifier to the
+  search logs; `participant_name` is also accepted as a fallback.
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
-  from the frontend when a user clicks a result link.
+  from the frontend when a user clicks a result link. Include `user_name` if you want it
+  recorded in the click log.
 - `POST /search/rating` result-rating endpoint. Expects `search_id`, query/result metadata,
-  and `user_score` (1-5).
+  and `user_score` (1-5). Include `user_name` if you want it recorded in the rating log.
 
 Search and click logs are written as CSV files:
 
-- `output/logs/search_events.csv` (one row per hit, with method, rank, score, URL/title)
-- `output/logs/click_events.csv` (one row per clicked result)
-- `output/logs/rating_events.csv` (one row per user rating)
+- `output/logs/search_events.csv` (one row per hit, including `user_name`, method, rank, score, URL/title)
+- `output/logs/click_events.csv` (one row per clicked result, including `user_name`)
+- `output/logs/rating_events.csv` (one row per user rating, including `user_name`)
 
 Each `/search` response includes a `search_id` that can be used to correlate click rows
 to the exact query and result set.
