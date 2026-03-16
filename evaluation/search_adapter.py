@@ -66,6 +66,7 @@ class SearchConfig:
     bm25_max_chars: int = 250
     bm25_overlap: int = 50
     bm25_include_title_chunk: bool = True
+    bm25_use_chunking: bool = True
 
 
 DEFAULT_CONFIG = SearchConfig(
@@ -94,6 +95,10 @@ DEFAULT_CONFIG = SearchConfig(
     bm25_include_title_chunk=_env_bool(
         "DOCPLUS_BM25_INCLUDE_TITLE_CHUNK",
         SearchConfig.bm25_include_title_chunk,
+    ),
+    bm25_use_chunking=_env_bool(
+        "DOCPLUS_BM25_USE_CHUNKING",
+        SearchConfig.bm25_use_chunking,
     ),
 )
 
@@ -336,6 +341,7 @@ def bm25_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CONF
         max_chars=config.bm25_max_chars,
         overlap=config.bm25_overlap,
         include_title_chunk=config.bm25_include_title_chunk,
+        use_chunking=config.bm25_use_chunking,
     )
     return _dedupe_and_sort(raw_results, top_k=top_k)
 

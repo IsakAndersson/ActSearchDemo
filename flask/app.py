@@ -566,6 +566,10 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
             payload.get("bm25_use_cleaned_text")
             or _get_env_default("DOCPLUS_BM25_USE_CLEANED_TEXT", "true")
         ),
+        "bm25_use_chunking": str(
+            payload.get("bm25_use_chunking")
+            or _get_env_default("DOCPLUS_BM25_USE_CHUNKING", "true")
+        ),
     }
 
 
@@ -612,6 +616,7 @@ def search() -> Any:
             top_k = 5
             errors.append("Top-k must be an integer; defaulted to 5.")
         bm25_use_cleaned_text = _safe_bool(defaults["bm25_use_cleaned_text"], True)
+        bm25_use_chunking = _safe_bool(defaults["bm25_use_chunking"], True)
 
         if method == "bm25":
             try:
@@ -620,6 +625,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                     use_cleaned_text=bm25_use_cleaned_text,
+                    use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -660,6 +666,7 @@ def search() -> Any:
                     query=query,
                     top_k=candidate_k,
                     use_cleaned_text=bm25_use_cleaned_text,
+                    use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -695,6 +702,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                     use_cleaned_text=bm25_use_cleaned_text,
+                    use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -735,6 +743,7 @@ def search() -> Any:
                     query=query,
                     top_k=top_k,
                     use_cleaned_text=bm25_use_cleaned_text,
+                    use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001

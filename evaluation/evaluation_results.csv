@@ -111,3 +111,11 @@ Titel utan stor bokstav,0.9090909090909091,1.0,2026-03-16T02:12:46+01:00,20,13,7
 2 nyckelord med stavfel,0.07692307692307693,1.0,2026-03-16T02:12:46+01:00,20,13,7,bm25_baseline,bm25
 2 nyckelord med synonymer,0.01282051282051282,6.0,2026-03-16T02:12:46+01:00,20,13,7,bm25_baseline,bm25
 Längre sökterm,0.6223776223776223,2.111111111111111,2026-03-16T02:12:46+01:00,20,13,7,bm25_baseline,bm25
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
+Case-beskrivning,0.125,3.6666666666666665,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+Titel på rätt dokument,0.8636363636363636,1.1,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+Titel utan stor bokstav,0.7878787878787878,1.6,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+2 nyckelord,0.43223443223443225,2.7777777777777777,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+2 nyckelord med stavfel,0.0879120879120879,4.0,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+2 nyckelord med synonymer,0.009543088490456911,16.5,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
+Längre sökterm,0.5235042735042735,3.3333333333333335,2026-03-16T02:32:06+01:00,20,13,7,bm25_whole_document,bm25
