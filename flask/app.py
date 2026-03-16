@@ -292,6 +292,36 @@ def _rrf_hybrid(
     return merged
 
 
+def _best_chunk_per_document(results: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+    best_by_source: Dict[str, Dict[str, Any]] = {}
+
+    for result in results:
+        source_path = _to_text(result.get("source_path"))
+        if not source_path:
+            continue
+
+        score_raw = result.get("score")
+        score = float(score_raw) if isinstance(score_raw, (int, float)) else float("-inf")
+        existing = best_by_source.get(source_path)
+        if existing is None:
+            best_by_source[source_path] = result
+            continue
+
+        existing_score_raw = existing.get("score")
+        existing_score = (
+            float(existing_score_raw) if isinstance(existing_score_raw, (int, float)) else float("-inf")
+        )
+        if score > existing_score:
+            best_by_source[source_path] = result
+
+    ranked = sorted(
+        best_by_source.values(),
+        key=lambda item: float(item.get("score")) if isinstance(item.get("score"), (int, float)) else float("-inf"),
+        reverse=True,
+    )
+    return ranked[:top_k]
+
+
 def _safe_int(value: str, fallback: int) -> int:
     try:
         return int(value)
@@ -718,13 +748,18 @@ def search() -> Any:
                 errors.append(f"Docplus live search failed: {exc}")
                 results_by_method["docplus"] = []
             try:
+                dense_candidate_k = max(top_k, 100)
                 results_by_method["dense_e5"] = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
                     model_name=defaults["e5_model_name"],
-                    top_k=top_k,
+                    top_k=dense_candidate_k,
                     device_preference=defaults["device"],
+                )
+                results_by_method["dense_e5"] = _best_chunk_per_document(
+                    results_by_method["dense_e5"],
+                    top_k=top_k,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
