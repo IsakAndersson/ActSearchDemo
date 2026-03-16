@@ -299,6 +299,15 @@ def _safe_int(value: str, fallback: int) -> int:
         return fallback
 
 
+def _safe_bool(value: str, fallback: bool) -> bool:
+    normalized = _to_text(value).lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return fallback
+
+
 def _docplus_live_config(top_k: int) -> Any:
     if LiveSearchConfig is None:
         return None
@@ -553,6 +562,10 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
         ),
         "device": str(payload.get("device") or _get_env_default("DOCPLUS_DEVICE", "auto")),
         "top_k": str(payload.get("top_k") or _get_env_default("DOCPLUS_TOP_K", "5")),
+        "bm25_use_cleaned_text": str(
+            payload.get("bm25_use_cleaned_text")
+            or _get_env_default("DOCPLUS_BM25_USE_CLEANED_TEXT", "true")
+        ),
     }
 
 
@@ -598,6 +611,7 @@ def search() -> Any:
         except ValueError:
             top_k = 5
             errors.append("Top-k must be an integer; defaulted to 5.")
+        bm25_use_cleaned_text = _safe_bool(defaults["bm25_use_cleaned_text"], True)
 
         if method == "bm25":
             try:
@@ -605,6 +619,7 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
+                    use_cleaned_text=bm25_use_cleaned_text,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -644,6 +659,7 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=candidate_k,
+                    use_cleaned_text=bm25_use_cleaned_text,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -678,6 +694,7 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
+                    use_cleaned_text=bm25_use_cleaned_text,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -717,6 +734,7 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
+                    use_cleaned_text=bm25_use_cleaned_text,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001

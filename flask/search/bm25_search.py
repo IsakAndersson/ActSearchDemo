@@ -43,7 +43,7 @@ class BM25CacheEntry:
     index: BM25Index
 
 
-_BM25_INDEX_CACHE: Dict[Tuple[str, int, int, bool], BM25CacheEntry] = {}
+_BM25_INDEX_CACHE: Dict[Tuple[str, int, int, bool, bool], BM25CacheEntry] = {}
 _BM25_CACHE_LOCK = threading.Lock()
 LOG = logging.getLogger(__name__)
 
@@ -130,6 +130,7 @@ def build_bm25_corpus(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
+    use_cleaned_text: bool,
 ) -> Tuple[List[ChunkRecord], List[Dict[str, int]], List[int], Dict[str, int], float]:
     chunks: List[ChunkRecord] = []
     term_freqs: List[Dict[str, int]] = []
@@ -139,7 +140,13 @@ def build_bm25_corpus(
     chunk_id = 0
 
     for payload in iter_parsed_documents(parsed_dir):
-        text = payload.get("text") or ""
+        text_source_key = "cleaned_text" if use_cleaned_text else "text"
+        fallback_key = "text" if use_cleaned_text else "cleaned_text"
+        primary_text = payload.get(text_source_key)
+        fallback_text = payload.get(fallback_key)
+        text = primary_text if isinstance(primary_text, str) else ""
+        if not text and isinstance(fallback_text, str):
+            text = fallback_text
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
 
@@ -229,12 +236,14 @@ def _build_bm25_index(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
+    use_cleaned_text: bool,
 ) -> BM25Index:
     chunks, term_freqs, doc_lengths, doc_freqs, avg_doc_len = build_bm25_corpus(
         parsed_dir=parsed_dir,
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
+        use_cleaned_text=use_cleaned_text,
     )
     postings = _build_postings(term_freqs)
     return BM25Index(
@@ -251,9 +260,10 @@ def _get_or_build_bm25_index(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
+    use_cleaned_text: bool,
 ) -> BM25Index:
     normalized_dir = os.path.abspath(parsed_dir)
-    key = (normalized_dir, max_chars, overlap, include_title_chunk)
+    key = (normalized_dir, max_chars, overlap, include_title_chunk, use_cleaned_text)
     signature = _parsed_dir_signature(normalized_dir)
 
     with _BM25_CACHE_LOCK:
@@ -266,6 +276,7 @@ def _get_or_build_bm25_index(
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
+        use_cleaned_text=use_cleaned_text,
     )
 
     with _BM25_CACHE_LOCK:
@@ -280,6 +291,7 @@ def bm25_search(
     max_chars: int = E5_CHUNK_SIZE,
     overlap: int = E5_CHUNK_OVERLAP,
     include_title_chunk: bool = True,
+    use_cleaned_text: bool = True,
     k1: float = 1.5,
     b: float = 0.75,
 ) -> List[dict]:
@@ -291,6 +303,7 @@ def bm25_search(
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
+        use_cleaned_text=use_cleaned_text,
     )
     query_tokens = tokenize(query)
     if not query_tokens:
@@ -366,6 +379,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable title-only chunks.",
     )
     parser.set_defaults(include_title_chunk=True)
+    parser.add_argument(
+        "--use-cleaned-text",
+        dest="use_cleaned_text",
+        action="store_true",
+        help="Use cleaned_text field from parsed JSON as BM25 source text.",
+    )
+    parser.add_argument(
+        "--no-use-cleaned-text",
+        dest="use_cleaned_text",
+        action="store_false",
+        help="Use raw text field from parsed JSON as BM25 source text.",
+    )
+    parser.set_defaults(use_cleaned_text=True)
     parser.add_argument("--k1", type=float, default=1.5, help="BM25 k1 parameter.")
     parser.add_argument("--b", type=float, default=0.75, help="BM25 b parameter.")
     return parser
@@ -381,6 +407,7 @@ def main() -> None:
         max_chars=args.max_chars,
         overlap=args.overlap,
         include_title_chunk=args.include_title_chunk,
+        use_cleaned_text=args.use_cleaned_text,
         k1=args.k1,
         b=args.b,
     )
