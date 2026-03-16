@@ -429,7 +429,8 @@ def build_index(
     if not texts:
         raise ValueError("No parsed documents with text found to index.")
 
-    embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
+    # Cosine similarity in FAISS: L2-normalize vectors and use inner product index.
+    embeddings = embed_texts(texts, tokenizer, model, device, batch_size, normalize=True)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatIP(dimension)
     index.add(embeddings)
@@ -494,7 +495,8 @@ def build_index_with_titles(
     if not texts:
         raise ValueError("No parsed documents with title metadata found to index.")
 
-    embeddings = embed_texts(texts, tokenizer, model, device, batch_size)
+    # Cosine similarity in FAISS: L2-normalize vectors and use inner product index.
+    embeddings = embed_texts(texts, tokenizer, model, device, batch_size, normalize=True)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatIP(dimension)
     index.add(embeddings)
@@ -533,7 +535,8 @@ def query_index(
 
     LOG.info("Embedding query...")
     query_text = _with_query_prefix(query) if _uses_e5_prefixes(model_name) else query
-    query_embedding = embed_texts([query_text], tokenizer, model, device, batch_size=1)
+    # Cosine similarity in FAISS: L2-normalize query vectors and use inner product index.
+    query_embedding = embed_texts([query_text], tokenizer, model, device, batch_size=1, normalize=True)
     index = _get_cached_index(index_path)
     scores, indices = index.search(query_embedding, top_k)
     metadata = _get_cached_metadata(metadata_path)
