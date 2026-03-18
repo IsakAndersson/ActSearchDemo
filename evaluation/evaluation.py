@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import ir_measures
 import pandas as pd
@@ -47,6 +47,8 @@ def evaluate_system(
     metadata=None,
     output_dir: Optional[str] = None,
     aggregate_dir: Optional[str] = None,
+    qrels_source: str = "google_sheet",
+    qrels_path: Optional[str] = None,
 ):
     """
     Run evaluation and append outputs to CSV files.
@@ -56,27 +58,34 @@ def evaluate_system(
             (results_by_query_type, average_rank, average_score)
     """
     print("[evaluation] Loading qrels data...", flush=True)
-    df = load_data()
-    print(f"[evaluation] Loaded {len(df)} rows.", flush=True)
-
-	#tar ut rätt kolumner för qrels 
-    doc_ids = df["Titel på rätt dokument"]
-    query_type_list = ["Case-beskrivning", "Titel på rätt dokument", "Titel utan stor bokstav", "2 nyckelord", 
-                       "2 nyckelord med stavfel", "2 nyckelord med synonymer", "Längre sökterm"]
-    query_types_cols = df[query_type_list]
+    query_type_frames = load_qrels_dataset(qrels_source=qrels_source, qrels_path=qrels_path)
+    total_qrels_rows = sum(len(frame["qrels"]) for frame in query_type_frames.values())
+    print(
+        f"[evaluation] Loaded {total_qrels_rows} qrels rows across {len(query_type_frames)} query type(s).",
+        flush=True,
+    )
 
     #todo: lägg in for-loop som loopar igenom varje sökfunktion och kör evaluate
     print("[evaluation] Running retrieval evaluation...", flush=True)
     results_by_query, average_rank, average_score, run_df = evaluate(
-        search_function, k, doc_ids, query_types_cols, return_runs=True
+        search_function,
+        k,
+        query_type_frames=query_type_frames,
+        return_runs=True,
     )
     cet = timezone(timedelta(hours=1), name="CET")
     run_metadata = {
         "evaluated_at_cet": datetime.now(cet).isoformat(timespec="seconds"),
         "top_k": int(k),
-        "num_queries_total": int(len(doc_ids)),
-        "num_query_types": int(len(query_types_cols.columns)),
+        "num_queries_total": int(
+            sum(frame["queries"]["query_id"].nunique() for frame in query_type_frames.values())
+        ),
+        "num_query_types": int(len(query_type_frames)),
+        "qrels_source": qrels_source,
+        "data_source": qrels_source,
     }
+    if qrels_path:
+        run_metadata["qrels_path"] = str(Path(qrels_path).resolve())
     run_metadata.update(_validate_flat_metadata(metadata))
     print_results(results_by_query, average_score, average_rank, run_metadata=run_metadata)
     save_results_to_csv(
@@ -143,32 +152,40 @@ def save_results_to_csv(
         for target in targets:
             append_df_to_csv(run_with_metadata, target / "evaluation_run.csv")
 
-def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
+def evaluate(search_function, k, doc_ids=None, query_types_cols=None, return_runs=False, query_type_frames=None):
 	rows = []
 	all_runs = []
-	query_type_count = len(query_types_cols.columns)
+	if query_type_frames is None:
+		if doc_ids is None or query_types_cols is None:
+			raise ValueError("Either query_type_frames or both doc_ids and query_types_cols are required.")
+		query_type_frames = _build_query_type_frames_from_sheet(doc_ids, query_types_cols)
+
+	query_type_names = list(query_type_frames.keys())
+	query_type_count = len(query_type_names)
 	#loopar över varje query type och beräknar metrics 
-	for query_type_index, query_type in enumerate(query_types_cols.columns, start=1):
+	for query_type_index, query_type in enumerate(query_type_names, start=1):
 		print(
 			f"[evaluation] Query type {query_type_index}/{query_type_count}: {query_type}",
 			flush=True,
 		)
-		queries = query_types_cols[query_type]
+		query_frame = query_type_frames[query_type]
+		queries = query_frame["queries"]["query_id"]
+		qrels = query_frame["qrels"]
 		if return_runs:
 			rr20, average_rank, run_df = evaluate_query_type(
-				doc_ids,
-				queries,
-				search_function,
-				k,
+				queries=queries,
+				search_function=search_function,
+				k=k,
+				qrels=qrels,
 				return_run=True,
 				progress_label=query_type,
 			)
 		else:
 			rr20, average_rank = evaluate_query_type(
-				doc_ids,
-				queries,
-				search_function,
-				k,
+				queries=queries,
+				search_function=search_function,
+				k=k,
+				qrels=qrels,
 				progress_label=query_type,
 			)
 			run_df = None
@@ -195,14 +212,18 @@ def evaluate(search_function, k, doc_ids, query_types_cols, return_runs=False):
 	return (results_by_query_type, average_rank, average_score)
 
 def evaluate_query_type(
-	doc_ids,
 	queries,
 	search_function,
 	k,
+	qrels=None,
+	doc_ids=None,
 	return_run=False,
 	progress_label: Optional[str] = None,
 ):
-    qrels = create_qrels(doc_ids, queries)
+    if qrels is None:
+        if doc_ids is None:
+            raise ValueError("doc_ids is required when qrels is not provided.")
+        qrels = create_qrels(doc_ids, queries)
     run = build_run_df(
 		queries,
 		search_function,
@@ -265,6 +286,79 @@ def load_data():
 		if local_snapshot.exists():
 			return pd.read_csv(local_snapshot)
 		raise
+
+
+def _build_query_type_frames_from_sheet(doc_ids, query_types_cols) -> Dict[str, Dict[str, pd.DataFrame]]:
+	frames = {}
+	for query_type in query_types_cols.columns:
+		queries = query_types_cols[query_type]
+		frames[query_type] = {
+			"queries": pd.DataFrame({"query_id": queries}),
+			"qrels": create_qrels(doc_ids, queries),
+		}
+	return frames
+
+
+def _load_google_sheet_query_type_frames() -> Dict[str, Dict[str, pd.DataFrame]]:
+	df = load_data()
+
+	#tar ut rätt kolumner för qrels 
+	doc_ids = df["Titel på rätt dokument"]
+	query_type_list = [
+		"Case-beskrivning",
+		"Titel på rätt dokument",
+		"Titel utan stor bokstav",
+		"2 nyckelord",
+		"2 nyckelord med stavfel",
+		"2 nyckelord med synonymer",
+		"Längre sökterm",
+	]
+	query_types_cols = df[query_type_list]
+	return _build_query_type_frames_from_sheet(doc_ids, query_types_cols)
+
+
+def _load_form_submission_query_type_frames(qrels_path: str) -> Dict[str, Dict[str, pd.DataFrame]]:
+	qrels_df = pd.read_csv(qrels_path)
+	required_columns = {"query_id", "doc_id", "relevance"}
+	missing = required_columns - set(qrels_df.columns)
+	if missing:
+		raise ValueError(
+			f"Qrels CSV is missing required columns: {', '.join(sorted(missing))}"
+		)
+
+	qrels_df = qrels_df.copy()
+	qrels_df["query_id"] = qrels_df["query_id"].astype(str)
+	qrels_df["doc_id"] = qrels_df["doc_id"].astype(str).map(normalize_doc_id)
+	qrels_df = qrels_df[qrels_df["doc_id"] != ""]
+
+	query_type_series = (
+		qrels_df["query_type"].astype(str)
+		if "query_type" in qrels_df.columns
+		else pd.Series(["form_submissions"] * len(qrels_df), index=qrels_df.index)
+	)
+
+	frames: Dict[str, Dict[str, pd.DataFrame]] = {}
+	for query_type, group in qrels_df.groupby(query_type_series, sort=False):
+		group = group[["query_id", "doc_id", "relevance"]].reset_index(drop=True)
+		queries = pd.DataFrame({"query_id": group["query_id"].drop_duplicates().reset_index(drop=True)})
+		frames[str(query_type)] = {
+			"queries": queries,
+			"qrels": group,
+		}
+	return frames
+
+
+def load_qrels_dataset(
+	qrels_source: str = "google_sheet",
+	qrels_path: Optional[str] = None,
+) -> Dict[str, Dict[str, pd.DataFrame]]:
+	if qrels_source == "google_sheet":
+		return _load_google_sheet_query_type_frames()
+	if qrels_source == "form_submissions":
+		if not qrels_path:
+			qrels_path = str(EVALUATION_DIR / "qrels_from_form_submissions.csv")
+		return _load_form_submission_query_type_frames(qrels_path)
+	raise ValueError(f"Unsupported qrels source: {qrels_source}")
 
 """ Format för qrels:
 qrels = pd.DataFrame([
@@ -415,11 +509,23 @@ def main():
         "--aggregate-dir",
         help="Optional directory that also receives appended aggregate CSV files.",
     )
+    parser.add_argument(
+        "--qrels-source",
+        choices=["google_sheet", "form_submissions"],
+        default="google_sheet",
+        help="Where to load qrels from.",
+    )
+    parser.add_argument(
+        "--qrels-path",
+        help="Optional qrels CSV path when --qrels-source=form_submissions.",
+    )
 
     args = parser.parse_args()
 
     if args.top_k <= 0:
         raise ValueError("--top-k must be > 0")
+    if args.qrels_source == "google_sheet" and args.qrels_path:
+        raise ValueError("--qrels-path can only be used with --qrels-source=form_submissions")
 
     search_function = _resolve_search_function(args.method)
     metadata = _parse_meta_args(args.meta)
@@ -430,6 +536,8 @@ def main():
         metadata=metadata,
         output_dir=args.output_dir,
         aggregate_dir=args.aggregate_dir,
+        qrels_source=args.qrels_source,
+        qrels_path=args.qrels_path,
     )
 
 if __name__ == "__main__":

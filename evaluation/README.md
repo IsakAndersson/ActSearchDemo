@@ -114,7 +114,8 @@ evaluate_system(
 evaluate_system(
     search_function=hybrid_search,
     k=20,
-    metadata={"method": "hybrid", "experiment": "baseline"}
+    metadata={"method": "hybrid", "experiment": "baseline"},
+    qrels_source="google_sheet",
 )
 
 # Dense (E5 large instruct)
@@ -156,6 +157,7 @@ Run from terminal with flags:
 ./.venv/bin/python evaluation/evaluation.py --method hybrid_e5 --top-k 20 --meta experiment=hybrid_e5_baseline
 ./.venv/bin/python evaluation/evaluation.py --method docplus_live --top-k 20 --meta experiment=docplus_live
 ./.venv/bin/python evaluation/evaluation.py --method sts_live --top-k 20 --meta experiment=sts_live
+./.venv/bin/python evaluation/evaluation.py --method hybrid --qrels-source form_submissions --qrels-path evaluation/qrels_from_form_submissions.csv
 ```
 
 CLI flags:
@@ -163,6 +165,8 @@ CLI flags:
 - `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid`)
 - `--top-k`: integer > 0 (default: `20`)
 - `--meta KEY=VALUE`: optional metadata entry, repeat for multiple fields
+- `--qrels-source`: `google_sheet` or `form_submissions` (default: `google_sheet`)
+- `--qrels-path`: optional qrels CSV path when `--qrels-source=form_submissions`
 
 `--meta` values are parsed as:
 
@@ -187,9 +191,33 @@ Automatic run metadata written to outputs:
 - `top_k`
 - `num_queries_total`
 - `num_query_types`
+- `qrels_source` / `data_source` (`google_sheet` or `form_submissions`)
 
 Any user-provided `metadata` is also written to the CSV outputs above.
 Run metadata is also printed in the terminal output for each evaluation run.
+
+## Export Qrels From Form Submissions
+
+If you have collected judgments through `/evaluation-form`, you can export them to qrels CSV:
+
+```bash
+./.venv/bin/python evaluation/form_submissions_to_qrels.py
+```
+
+This reads the default SQLite database at:
+
+- `flask/output/form_submissions/form_submissions.sqlite3`
+
+and writes:
+
+- `evaluation/qrels_from_form_submissions.csv`
+
+By default, only results marked as relevant are exported (`relevance=1`).
+To also include explicitly non-relevant results as `relevance=0`:
+
+```bash
+./.venv/bin/python evaluation/form_submissions_to_qrels.py --include-non-relevant
+```
 
 ## Visualization Notebook
 

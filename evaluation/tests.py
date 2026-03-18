@@ -1,6 +1,7 @@
 import pandas as pd
 import evaluation
 import pytest
+from pathlib import Path
 try:
     from .search_adapter import (
         SearchConfig,
@@ -9,6 +10,10 @@ try:
         docplus_live_search,
         sts_live_search,
     )
+    from .form_submissions_to_qrels import (
+        export_qrels_from_db,
+        submission_to_qrels_rows,
+    )
 except ImportError:
     from search_adapter import (
         SearchConfig,
@@ -16,6 +21,10 @@ except ImportError:
         _extract_live_sts_links,
         docplus_live_search,
         sts_live_search,
+    )
+    from form_submissions_to_qrels import (
+        export_qrels_from_db,
+        submission_to_qrels_rows,
     )
  
 def run_tests():
@@ -180,7 +189,188 @@ def test_build_run_df_empty_has_expected_columns():
     )
     assert list(run.columns) == ["doc_id", "query_id", "score"]
     assert run.empty
-    
+
+
+def test_submission_to_qrels_rows_includes_only_relevant_docs_by_default():
+    payload = {
+        "query": "feber barn",
+        "results": [
+            {
+                "title": "Rutin A.pdf",
+                "assessment": {"rating": "relevant"},
+            },
+            {
+                "title": "Rutin B.pdf",
+                "assessment": {"rating": "not_relevant"},
+            },
+        ],
+    }
+
+    rows = submission_to_qrels_rows(payload)
+
+    assert rows == [
+        {
+            "query_id": "feber barn",
+            "doc_id": "rutin a",
+            "relevance": 1,
+        }
+    ]
+
+
+def test_submission_to_qrels_rows_can_include_non_relevant_docs():
+    payload = {
+        "query": "feber barn",
+        "results": [
+            {
+                "metadata": {"title": "Rutin A.pdf"},
+                "assessment": {"rating": "relevant"},
+            },
+            {
+                "source_path": "docs/Rutin B.pdf",
+                "assessment": {"rating": "not_relevant"},
+            },
+        ],
+    }
+
+    rows = submission_to_qrels_rows(payload, include_non_relevant=True)
+
+    assert rows == [
+        {
+            "query_id": "feber barn",
+            "doc_id": "rutin a",
+            "relevance": 1,
+        },
+        {
+            "query_id": "feber barn",
+            "doc_id": "docs/rutin b",
+            "relevance": 0,
+        },
+    ]
+
+
+def test_export_qrels_from_db_writes_csv(tmp_path: Path):
+    db_path = tmp_path / "form_submissions.sqlite3"
+    output_path = tmp_path / "qrels.csv"
+
+    import sqlite3
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                participant_name TEXT NOT NULL,
+                information_need TEXT NOT NULL,
+                query_text TEXT NOT NULL,
+                general_comment TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO submissions (
+                created_at,
+                participant_name,
+                information_need,
+                query_text,
+                general_comment,
+                payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "2025-01-01T00:00:00+00:00",
+                "Test User",
+                "Need A",
+                "feber barn",
+                "",
+                """
+                {
+                  "query": "feber barn",
+                  "results": [
+                    {
+                      "title": "Rutin A.pdf",
+                      "assessment": {"rating": "relevant"}
+                    },
+                    {
+                      "title": "Rutin B.pdf",
+                      "assessment": {"rating": "not_relevant"}
+                    }
+                  ]
+                }
+                """,
+            ),
+        )
+        connection.commit()
+
+    qrels_df = export_qrels_from_db(db_path, output_path, include_non_relevant=True)
+
+    assert list(qrels_df.columns) == ["query_id", "doc_id", "relevance"]
+    assert qrels_df.to_dict("records") == [
+        {"query_id": "feber barn", "doc_id": "rutin a", "relevance": 1},
+        {"query_id": "feber barn", "doc_id": "rutin b", "relevance": 0},
+    ]
+    assert output_path.read_text(encoding="utf-8").splitlines() == [
+        "query_id,doc_id,relevance",
+        "feber barn,rutin a,1",
+        "feber barn,rutin b,0",
+    ]
+
+
+def test_load_qrels_dataset_from_form_submissions_defaults_to_single_query_type(tmp_path: Path):
+    qrels_path = tmp_path / "qrels.csv"
+    qrels_path.write_text(
+        "\n".join(
+            [
+                "query_id,doc_id,relevance",
+                "feber barn,Rutin A.pdf,1",
+                "feber barn,Rutin B.pdf,0",
+                "hosta vuxen,Rutin C.pdf,1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    query_type_frames = evaluation.load_qrels_dataset(
+        qrels_source="form_submissions",
+        qrels_path=str(qrels_path),
+    )
+
+    assert list(query_type_frames.keys()) == ["form_submissions"]
+    frame = query_type_frames["form_submissions"]
+    assert frame["queries"]["query_id"].tolist() == ["feber barn", "hosta vuxen"]
+    assert frame["qrels"].to_dict("records") == [
+        {"query_id": "feber barn", "doc_id": "rutin a", "relevance": 1},
+        {"query_id": "feber barn", "doc_id": "rutin b", "relevance": 0},
+        {"query_id": "hosta vuxen", "doc_id": "rutin c", "relevance": 1},
+    ]
+
+
+def test_load_qrels_dataset_from_form_submissions_supports_query_type_column(tmp_path: Path):
+    qrels_path = tmp_path / "qrels.csv"
+    qrels_path.write_text(
+        "\n".join(
+            [
+                "query_id,doc_id,relevance,query_type",
+                "feber barn,Rutin A.pdf,1,short_query",
+                "hosta vuxen,Rutin C.pdf,1,long_query",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    query_type_frames = evaluation.load_qrels_dataset(
+        qrels_source="form_submissions",
+        qrels_path=str(qrels_path),
+    )
+
+    assert list(query_type_frames.keys()) == ["short_query", "long_query"]
+    assert query_type_frames["short_query"]["queries"]["query_id"].tolist() == ["feber barn"]
+    assert query_type_frames["long_query"]["qrels"].to_dict("records") == [
+        {"query_id": "hosta vuxen", "doc_id": "rutin c", "relevance": 1},
+    ]
+
 
 #Integration test
 
