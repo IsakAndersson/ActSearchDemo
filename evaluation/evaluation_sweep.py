@@ -26,6 +26,7 @@ try:
         DEFAULT_MODEL,
         build_index,
         resolve_model_name,
+        resolve_text_source,
     )
 except ModuleNotFoundError:
     DEFAULT_MODEL = "KBLab/bert-base-swedish-cased"
@@ -34,6 +35,9 @@ except ModuleNotFoundError:
         if model_name:
             return model_name
         return DEFAULT_MODEL
+
+    def resolve_text_source(text_source):
+        return text_source or "text"
 
 
 DEFAULT_TOP_K = 20
@@ -104,6 +108,10 @@ def _vector_paths(index_dir: Path) -> tuple[str, str]:
     return (str(index_dir / "docplus.faiss"), str(index_dir / "docplus_metadata.jsonl"))
 
 
+def _text_source_label(text_source: str) -> str:
+    return resolve_text_source(text_source)
+
+
 def _build_vector_index_for_config(
     parsed_dir: str,
     index_dir: Path,
@@ -113,6 +121,7 @@ def _build_vector_index_for_config(
     include_title_chunk: bool,
     batch_size: int,
     device: str,
+    text_source: str,
 ) -> None:
     index_dir.mkdir(parents=True, exist_ok=True)
     build_index(
@@ -124,6 +133,7 @@ def _build_vector_index_for_config(
         batch_size=batch_size,
         device_preference=device,
         include_title_chunk=include_title_chunk,
+        text_source=text_source,
     )
 
 
@@ -187,11 +197,13 @@ def run_sweep(
     device: str,
     model_name: str | None,
     profile: str | None,
+    text_source: str,
 ) -> None:
     if top_k <= 0:
         raise ValueError("top_k must be > 0")
 
     model = _resolve_vector_model(method=method, profile=profile, model_name=model_name)
+    resolved_text_source = resolve_text_source(text_source)
     model_slug = _slugify(model)
     aggregate_dir = experiment_dir / "results" / "aggregate"
     runs_root = experiment_dir / "results" / "runs"
@@ -208,6 +220,7 @@ def run_sweep(
         "batch_size": int(batch_size),
         "device": device,
         "model_name": model if method in METHODS_WITH_VECTOR else None,
+        "text_source": resolved_text_source,
     }
     _write_json(experiment_dir / "experiment_manifest.json", experiment_manifest)
 
@@ -215,7 +228,10 @@ def run_sweep(
         chunk_size = params["chunk_size"]
         overlap = params["chunk_overlap"]
         include_title_chunk = params["include_title_chunk"]
-        config_slug = f"chunk_{chunk_size}__overlap_{overlap}__{_bool_label(include_title_chunk)}"
+        config_slug = (
+            f"chunk_{chunk_size}__overlap_{overlap}__"
+            f"{_bool_label(include_title_chunk)}__{_text_source_label(resolved_text_source)}"
+        )
 
         if method in METHODS_WITH_VECTOR:
             index_dir = indexes_root / method / model_slug / config_slug
@@ -232,12 +248,14 @@ def run_sweep(
                 include_title_chunk=include_title_chunk,
                 batch_size=batch_size,
                 device=device,
+                text_source=resolved_text_source,
             )
 
         index_manifest = {
             "method": method,
             "model_name": model if method in METHODS_WITH_VECTOR else None,
             "parsed_dir": str(Path(parsed_dir).resolve()),
+            "text_source": resolved_text_source,
             **params,
         }
         if method in METHODS_WITH_VECTOR:
@@ -290,6 +308,7 @@ def run_sweep(
             "model_name": model if method in METHODS_WITH_VECTOR else "bm25",
             "experiment": experiment_dir.name,
             "config_slug": config_slug,
+            "text_source": resolved_text_source,
             **params,
             "index_dir": str(index_dir),
         }
@@ -375,6 +394,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--model-name",
         help="Optional model override for vector methods.",
     )
+    parser.add_argument(
+        "--text-source",
+        choices=["text", "cleaned_text"],
+        default="text",
+        help="Parsed JSON field to use when building vector indexes.",
+    )
     return parser
 
 
@@ -401,6 +426,7 @@ def main() -> None:
         device=args.device,
         model_name=args.model_name,
         profile=args.profile if args.method in METHODS_WITH_VECTOR else None,
+        text_source=args.text_source,
     )
 
 

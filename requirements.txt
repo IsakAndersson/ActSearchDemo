@@ -2,7 +2,6 @@ requests
 beautifulsoup4
 pdfminer.six
 python-docx
-faiss-cpu
 numpy<2
 --extra-index-url https://download.pytorch.org/whl/cu118
 

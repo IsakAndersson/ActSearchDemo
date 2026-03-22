@@ -257,6 +257,7 @@ python evaluation/evaluation_sweep.py \
   --chunk-sizes 150,250,400 \
   --overlaps 25,50 \
   --include-title-chunk true,false \
+  --text-source cleaned_text \
   --top-k 20
 ```
 
@@ -278,6 +279,7 @@ Key flags:
 - `--chunk-sizes`: comma-separated ints
 - `--overlaps`: comma-separated ints
 - `--include-title-chunk`: comma-separated booleans (`true,false`)
+- `--text-source`: `text` or `cleaned_text` for vector index builds
 - `--parsed-dir`: parsed JSON directory (default `flask/output/parsed`)
 - `--experiments-root`: default `evaluation/experiments`
 

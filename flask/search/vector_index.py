@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import logging
 import os
@@ -72,6 +73,7 @@ _MODEL_CACHE: Dict[tuple[str, str], tuple[AutoTokenizer, AutoModel]] = {}
 _INDEX_CACHE: Dict[str, faiss.Index] = {}
 _METADATA_CACHE: Dict[str, List[dict]] = {}
 _CACHE_LOCK = threading.Lock()
+TEXT_SOURCE_KEYS = ("text", "cleaned_text")
 
 
 @dataclass
@@ -83,6 +85,27 @@ class ChunkRecord:
     chunk_type: str = "body"
 
 
+@dataclass
+class IndexBuildState:
+    records: List[ChunkRecord]
+    texts: List[str]
+    next_chunk_id: int = 0
+
+
+def resolve_text_source(text_source: Optional[str]) -> str:
+    candidate = (text_source or "text").strip()
+    if candidate in TEXT_SOURCE_KEYS:
+        return candidate
+    choices = ", ".join(TEXT_SOURCE_KEYS)
+    raise ValueError(f"Unknown text source '{candidate}'. Valid options: {choices}")
+
+
+def get_document_text(payload: dict, text_source: str) -> str:
+    resolved_text_source = resolve_text_source(text_source)
+    value = payload.get(resolved_text_source)
+    return value if isinstance(value, str) else ""
+
+
 def vector_dependencies_available() -> bool:
     return all(
         error is None
@@ -90,8 +113,40 @@ def vector_dependencies_available() -> bool:
     )
 
 
+def _installed_faiss_distributions() -> List[str]:
+    installed: List[str] = []
+    for package_name in ("faiss-cpu", "faiss-gpu"):
+        try:
+            importlib.metadata.version(package_name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        installed.append(package_name)
+    return installed
+
+
+def _validate_faiss_module() -> None:
+    required_symbols = ("IndexFlatIP", "read_index", "write_index")
+    missing_symbols = [name for name in required_symbols if not hasattr(faiss, name)]
+    if missing_symbols:
+        module_path = getattr(faiss, "__file__", None) or "<namespace package>"
+        raise RuntimeError(
+            "The imported FAISS module is incomplete and cannot be used. "
+            f"Missing symbols: {', '.join(missing_symbols)}. "
+            f"Imported module path: {module_path}. "
+            "Reinstall FAISS so the Python bindings are installed correctly."
+        )
+
+
 def ensure_vector_dependencies() -> None:
     if vector_dependencies_available():
+        installed_faiss = _installed_faiss_distributions()
+        if len(installed_faiss) > 1:
+            raise RuntimeError(
+                "Conflicting FAISS installations detected: "
+                f"{', '.join(installed_faiss)}. "
+                "Uninstall one of them so only a single FAISS build remains in the environment."
+            )
+        _validate_faiss_module()
         return
 
     missing: List[str] = []
@@ -295,6 +350,35 @@ def embed_texts(
     return stacked
 
 
+def _flush_index_batch(
+    *,
+    state: IndexBuildState,
+    index: faiss.Index | None,
+    tokenizer: AutoTokenizer,
+    model: AutoModel,
+    device: torch.device,
+    batch_size: int,
+) -> faiss.Index:
+    if not state.texts:
+        if index is None:
+            raise ValueError("Cannot flush empty index batch without an initialized FAISS index.")
+        return index
+
+    embeddings = embed_texts(
+        state.texts,
+        tokenizer,
+        model,
+        device,
+        batch_size,
+        normalize=True,
+    )
+    if index is None:
+        index = faiss.IndexFlatIP(embeddings.shape[1])
+    index.add(embeddings)
+    state.texts.clear()
+    return index
+
+
 def resolve_device(device_preference: str) -> torch.device:
     ensure_vector_dependencies()
     if device_preference == "cpu":
@@ -371,6 +455,28 @@ def _get_cached_metadata(metadata_path: str) -> List[dict]:
     return loaded_metadata
 
 
+def _append_chunk(
+    *,
+    state: IndexBuildState,
+    source_path: str,
+    text: str,
+    metadata: dict,
+    chunk_type: str,
+    use_e5_prefixes: bool,
+) -> None:
+    state.records.append(
+        ChunkRecord(
+            chunk_id=state.next_chunk_id,
+            source_path=source_path,
+            text=text,
+            metadata=metadata,
+            chunk_type=chunk_type,
+        )
+    )
+    state.texts.append(_with_passage_prefix(text) if use_e5_prefixes else text)
+    state.next_chunk_id += 1
+
+
 def build_index(
     parsed_dir: str,
     output_dir: str,
@@ -380,67 +486,75 @@ def build_index(
     batch_size: int,
     device_preference: str,
     include_title_chunk: bool = False,
+    text_source: str = "text",
 ) -> None:
+    resolved_text_source = resolve_text_source(text_source)
     os.makedirs(output_dir, exist_ok=True)
-    tokenizer, model = load_local_encoder(model_name)
     device = resolve_device(device_preference)
-    model.to(device)
-    model.eval()
+    tokenizer, model = _get_cached_encoder(model_name=model_name, device=device)
+    if batch_size <= 0:
+        raise ValueError("batch_size must be > 0")
 
-    chunks: List[ChunkRecord] = []
-    texts: List[str] = []
+    state = IndexBuildState(records=[], texts=[])
     use_e5_prefixes = _uses_e5_prefixes(model_name)
-    chunk_id = 0
+    index: faiss.Index | None = None
+    flush_threshold = max(batch_size * 32, batch_size)
     for payload in iter_parsed_documents(parsed_dir):
-        text = payload.get("text") or ""
+        text = get_document_text(payload, resolved_text_source)
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
 
         if include_title_chunk and title:
             title_metadata = {**metadata, "title": title}
-            chunks.append(
-                ChunkRecord(
-                    chunk_id=chunk_id,
-                    source_path=payload["path"],
-                    text=title,
-                    metadata=title_metadata,
-                    chunk_type="title",
-                )
+            _append_chunk(
+                state=state,
+                source_path=payload["path"],
+                text=title,
+                metadata=title_metadata,
+                chunk_type="title",
+                use_e5_prefixes=use_e5_prefixes,
             )
-            texts.append(_with_passage_prefix(title) if use_e5_prefixes else title)
-            chunk_id += 1
 
         if not text.strip():
             continue
         body_metadata = {**metadata, "title": title} if title else metadata
         for chunk_text_value in chunk_text(text, max_chars=max_chars, overlap=overlap):
-            chunks.append(
-                ChunkRecord(
-                    chunk_id=chunk_id,
-                    source_path=payload["path"],
-                    text=chunk_text_value,
-                    metadata=body_metadata,
-                    chunk_type="body",
-                )
+            _append_chunk(
+                state=state,
+                source_path=payload["path"],
+                text=chunk_text_value,
+                metadata=body_metadata,
+                chunk_type="body",
+                use_e5_prefixes=use_e5_prefixes,
             )
-            texts.append(_with_passage_prefix(chunk_text_value) if use_e5_prefixes else chunk_text_value)
-            chunk_id += 1
+            if len(state.texts) >= flush_threshold:
+                index = _flush_index_batch(
+                    state=state,
+                    index=index,
+                    tokenizer=tokenizer,
+                    model=model,
+                    device=device,
+                    batch_size=batch_size,
+                )
 
-    if not texts:
+    if not state.records:
         raise ValueError("No parsed documents with text found to index.")
 
-    # Cosine similarity in FAISS: L2-normalize vectors and use inner product index.
-    embeddings = embed_texts(texts, tokenizer, model, device, batch_size, normalize=True)
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dimension)
-    index.add(embeddings)
+    index = _flush_index_batch(
+        state=state,
+        index=index,
+        tokenizer=tokenizer,
+        model=model,
+        device=device,
+        batch_size=batch_size,
+    )
 
     faiss_path = os.path.join(output_dir, "docplus.faiss")
     faiss.write_index(index, faiss_path)
 
     metadata_path = os.path.join(output_dir, "docplus_metadata.jsonl")
     with open(metadata_path, "w", encoding="utf-8") as handle:
-        for record in chunks:
+        for record in state.records:
             handle.write(
                 json.dumps(
                     {
@@ -466,47 +580,56 @@ def build_index_with_titles(
     device_preference: str,
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    tokenizer, model = load_local_encoder(model_name)
     device = resolve_device(device_preference)
-    model.to(device)
-    model.eval()
+    tokenizer, model = _get_cached_encoder(model_name=model_name, device=device)
+    if batch_size <= 0:
+        raise ValueError("batch_size must be > 0")
 
-    chunks: List[ChunkRecord] = []
-    texts: List[str] = []
+    state = IndexBuildState(records=[], texts=[])
     use_e5_prefixes = _uses_e5_prefixes(model_name)
-    chunk_id = 0
+    index: faiss.Index | None = None
+    flush_threshold = max(batch_size * 32, batch_size)
     for payload in iter_parsed_documents(parsed_dir):
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
         if title:
             title_metadata = {**metadata, "title": title}
-            chunks.append(
-                ChunkRecord(
-                    chunk_id=chunk_id,
-                    source_path=payload["path"],
-                    text=title,
-                    metadata=title_metadata,
-                    chunk_type="title",
-                )
+            _append_chunk(
+                state=state,
+                source_path=payload["path"],
+                text=title,
+                metadata=title_metadata,
+                chunk_type="title",
+                use_e5_prefixes=use_e5_prefixes,
             )
-            texts.append(_with_passage_prefix(title) if use_e5_prefixes else title)
-            chunk_id += 1
+            if len(state.texts) >= flush_threshold:
+                index = _flush_index_batch(
+                    state=state,
+                    index=index,
+                    tokenizer=tokenizer,
+                    model=model,
+                    device=device,
+                    batch_size=batch_size,
+                )
 
-    if not texts:
+    if not state.records:
         raise ValueError("No parsed documents with title metadata found to index.")
 
-    # Cosine similarity in FAISS: L2-normalize vectors and use inner product index.
-    embeddings = embed_texts(texts, tokenizer, model, device, batch_size, normalize=True)
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dimension)
-    index.add(embeddings)
+    index = _flush_index_batch(
+        state=state,
+        index=index,
+        tokenizer=tokenizer,
+        model=model,
+        device=device,
+        batch_size=batch_size,
+    )
 
     faiss_path = os.path.join(output_dir, "docplus_titles.faiss")
     faiss.write_index(index, faiss_path)
 
     metadata_path = os.path.join(output_dir, "docplus_titles_metadata.jsonl")
     with open(metadata_path, "w", encoding="utf-8") as handle:
-        for record in chunks:
+        for record in state.records:
             handle.write(
                 json.dumps(
                     {
@@ -575,6 +698,12 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--max-chars", type=int, help="Chunk size in characters.")
     build.add_argument("--overlap", type=int, help="Overlap between chunks.")
     build.add_argument("--batch-size", type=int, default=8, help="Embedding batch size.")
+    build.add_argument(
+        "--text-source",
+        choices=TEXT_SOURCE_KEYS,
+        default="text",
+        help="Parsed JSON field used for body text chunks.",
+    )
     build.add_argument(
         "--include-title-chunk",
         action="store_true",
@@ -654,6 +783,7 @@ def main() -> None:
             batch_size=args.batch_size,
             device_preference=args.device,
             include_title_chunk=include_title_chunk,
+            text_source=args.text_source,
         )
         return
 

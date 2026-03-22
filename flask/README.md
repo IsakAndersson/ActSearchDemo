@@ -73,6 +73,9 @@ python -m search.vector_index build \
   --profile e5_large_instruct
 ```
 
+Use `--text-source cleaned_text` to build embeddings from the cleaned parsed field
+instead of the default raw `text` field.
+
 This creates:
 
 - `output/vector_index/docplus.faiss` with normalized embeddings

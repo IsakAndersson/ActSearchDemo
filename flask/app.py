@@ -956,4 +956,5 @@ def demo_submit() -> Any:
 if __name__ == "__main__":
     host = os.getenv("DOCPLUS_HOST", "127.0.0.1")
     port = int(os.getenv("DOCPLUS_PORT", "5000"))
-    app.run(host=host, port=port, debug=True)
+    debug = _safe_bool(os.getenv("DOCPLUS_DEBUG", "false"), False)
+    app.run(host=host, port=port, debug=debug)
