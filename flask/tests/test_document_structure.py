@@ -27,6 +27,7 @@ def test_derive_document_sections_splits_on_headings():
         "TREATMENT OPTIONS",
         "FOLLOW UP",
     ]
+    assert sections[1]["text"] == "First treatment paragraph. Second treatment paragraph."
     assert sections[1]["cleaned_text"] == "First treatment paragraph. Second treatment paragraph."
 
 
@@ -37,7 +38,7 @@ def test_get_document_sections_prefers_stored_sections():
             {
                 "heading": "Stored heading",
                 "level": 2,
-                "text": "Stored raw text",
+                "text": "Stored raw\ntext",
                 "cleaned_text": "Stored raw text",
             }
         ],
@@ -48,3 +49,4 @@ def test_get_document_sections_prefers_stored_sections():
     assert len(sections) == 1
     assert sections[0]["heading"] == "Stored heading"
     assert sections[0]["level"] == 2
+    assert sections[0]["text"] == "Stored raw text"

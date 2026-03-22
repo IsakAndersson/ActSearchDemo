@@ -74,12 +74,14 @@ def _build_section_payload(
     index: int,
 ) -> Dict[str, Any]:
     raw_text = "\n".join(body_lines).strip()
+    cleaned = clean_text(raw_text)
     return {
         "index": index,
         "heading": heading,
         "level": _detect_heading_level(heading),
-        "text": raw_text,
-        "cleaned_text": clean_text(raw_text),
+        "raw_text": raw_text,
+        "text": cleaned,
+        "cleaned_text": cleaned,
     }
 
 
@@ -129,7 +131,8 @@ def derive_document_sections(text: str, fallback_title: Optional[str] = None) ->
             "index": 0,
             "heading": _normalize_line(fallback_title or "Document"),
             "level": 1,
-            "text": text.strip(),
+            "raw_text": text.strip(),
+            "text": cleaned,
             "cleaned_text": cleaned,
         }
     ]
@@ -145,8 +148,11 @@ def get_document_sections(payload: Dict[str, Any], fallback_title: Optional[str]
             heading = _normalize_line(str(item.get("heading") or fallback_title or "Document"))
             raw_text = item.get("text")
             cleaned = item.get("cleaned_text")
+            stored_raw_text = item.get("raw_text")
             if not isinstance(raw_text, str):
                 raw_text = ""
+            if not isinstance(stored_raw_text, str):
+                stored_raw_text = raw_text
             if not isinstance(cleaned, str):
                 cleaned = clean_text(raw_text)
             cleaned = cleaned.strip()
@@ -159,7 +165,8 @@ def get_document_sections(payload: Dict[str, Any], fallback_title: Optional[str]
                     "index": index,
                     "heading": heading,
                     "level": level,
-                    "text": raw_text.strip(),
+                    "raw_text": stored_raw_text.strip(),
+                    "text": cleaned,
                     "cleaned_text": cleaned,
                 }
             )

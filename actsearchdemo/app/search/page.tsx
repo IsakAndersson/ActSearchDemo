@@ -166,6 +166,18 @@ const getResultPreviewText = (result: SearchResult): string => {
   return getStringValue(result.text) ?? "";
 };
 
+const getResultChunkText = (result: SearchResult): string => {
+  const chunk = getStringValue(result.chunk_text);
+  if (chunk) {
+    return chunk;
+  }
+  const fullText = getStringValue(result.text);
+  if (fullText) {
+    return fullText;
+  }
+  return getResultPreviewText(result);
+};
+
 export default function SearchPage() {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
@@ -571,7 +583,7 @@ export default function SearchPage() {
                             const url = getResultUrl(result);
                             const title = getResultTitle(result);
                             const sectionHeading = getResultSectionHeading(result);
-                            const previewText = getResultPreviewText(result);
+                            const chunkText = getResultChunkText(result);
                             const resultMethod = key as SearchMethod;
                             const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
                             const selectedRating = resultRatings[resultKey] ?? 0;
@@ -627,9 +639,14 @@ export default function SearchPage() {
                                     </p>
                                   )}
                                 </div>
-                                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5">
-                                  {previewText}
-                                </p>
+                                <div className="mt-3 rounded-lg border border-base-200 bg-base-200/50 p-3">
+                                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-base-content/55">
+                                    Matched chunk
+                                  </p>
+                                  <p className="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/85">
+                                    {chunkText}
+                                  </p>
+                                </div>
                                 <div className="mt-2 flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <button
@@ -670,7 +687,7 @@ export default function SearchPage() {
               const url = getResultUrl(result);
               const title = getResultTitle(result);
               const sectionHeading = getResultSectionHeading(result);
-              const previewText = getResultPreviewText(result);
+              const chunkText = getResultChunkText(result);
               const resultMethod = lastRequestedMethod;
               const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
               const selectedRating = resultRatings[resultKey] ?? 0;
@@ -713,9 +730,14 @@ export default function SearchPage() {
                         </p>
                       )}
                     </div>
-                    <p className="whitespace-pre-wrap text-sm leading-6">
-                      {previewText}
-                    </p>
+                    <div className="rounded-xl border border-base-200 bg-base-200/50 p-4">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-base-content/55">
+                        Matched chunk
+                      </p>
+                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-base-content/85">
+                        {chunkText}
+                      </p>
+                    </div>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button
