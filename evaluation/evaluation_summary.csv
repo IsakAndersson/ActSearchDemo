@@ -33,3 +33,5 @@ average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_ty
 3.539285714285714,0.3879473700902273,2026-03-16T15:01:36+01:00,20,13,7,hybrid_new,hybrid
 average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,experiment,method
 2.3336219336219335,0.5388762031619174,2026-03-16T15:03:32+01:00,20,13,7,hybrid_e5_new,hybrid_e5
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,experiment,method
+2.7075396825396822,0.495789924361353,2026-03-22T18:53:54+01:00,20,87,7,google_sheet,google_sheet,dense_e5_baseline,dense_e5

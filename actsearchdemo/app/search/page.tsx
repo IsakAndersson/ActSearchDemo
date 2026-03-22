@@ -12,8 +12,12 @@ type SearchMethod = "bm25" | "vector" | "vector_e5" | "hybrid_e5" | "docplus_liv
 type SearchResult = {
   score?: number;
   text?: string;
+  preview_text?: string;
   chunk_text?: string;
   chunk_type?: string;
+  section_heading?: string;
+  section_index?: number;
+  section_level?: number;
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -141,6 +145,26 @@ const getResultTitle = (result: SearchResult): string => {
 };
 
 const RESULT_WIDTH_CLASS = "w-full max-w-4xl mx-auto";
+
+const getResultSectionHeading = (result: SearchResult): string | undefined => {
+  const directHeading = getStringValue(result.section_heading);
+  if (directHeading) {
+    return directHeading;
+  }
+  return getMetadataValue(result.metadata, ["section_heading"]);
+};
+
+const getResultPreviewText = (result: SearchResult): string => {
+  const preview = getStringValue(result.preview_text);
+  if (preview) {
+    return preview;
+  }
+  const chunk = getStringValue(result.chunk_text);
+  if (chunk) {
+    return chunk;
+  }
+  return getStringValue(result.text) ?? "";
+};
 
 export default function SearchPage() {
   const router = useRouter();
@@ -546,6 +570,8 @@ export default function SearchPage() {
                           {methodResults.map((result, index) => {
                             const url = getResultUrl(result);
                             const title = getResultTitle(result);
+                            const sectionHeading = getResultSectionHeading(result);
+                            const previewText = getResultPreviewText(result);
                             const resultMethod = key as SearchMethod;
                             const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
                             const selectedRating = resultRatings[resultKey] ?? 0;
@@ -567,6 +593,11 @@ export default function SearchPage() {
                                   {result.chunk_type === "title" ? (
                                     <span className="badge badge-secondary badge-outline whitespace-nowrap text-xs">
                                       Title match
+                                    </span>
+                                  ) : null}
+                                  {sectionHeading ? (
+                                    <span className="badge badge-accent badge-outline text-xs">
+                                      {sectionHeading}
                                     </span>
                                   ) : null}
                                 </div>
@@ -597,7 +628,7 @@ export default function SearchPage() {
                                   )}
                                 </div>
                                 <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5">
-                                  {String(result.chunk_text ?? result.text ?? "")}
+                                  {previewText}
                                 </p>
                                 <div className="mt-2 flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
@@ -638,6 +669,8 @@ export default function SearchPage() {
             {results.map((result, index) => {
               const url = getResultUrl(result);
               const title = getResultTitle(result);
+              const sectionHeading = getResultSectionHeading(result);
+              const previewText = getResultPreviewText(result);
               const resultMethod = lastRequestedMethod;
               const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
               const selectedRating = resultRatings[resultKey] ?? 0;
@@ -657,6 +690,9 @@ export default function SearchPage() {
                       </span>
                       {result.chunk_type === "title" ? (
                         <span className="badge badge-secondary badge-outline">Title match</span>
+                      ) : null}
+                      {sectionHeading ? (
+                        <span className="badge badge-accent badge-outline">{sectionHeading}</span>
                       ) : null}
                     </div>
                     <div className="space-y-1">
@@ -678,7 +714,7 @@ export default function SearchPage() {
                       )}
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-6">
-                      {String(result.chunk_text ?? result.text ?? "")}
+                      {previewText}
                     </p>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (

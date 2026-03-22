@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 import numpy as np
 import pytest
@@ -145,3 +146,7 @@ def test_build_index_streams_embedding_batches(tmp_path, monkeypatch):
     assert metadata_path.exists()
     assert embed_batch_sizes == [32, 8]
     assert sum(1 for _ in metadata_path.open("r", encoding="utf-8")) == 40
+    first_record = json.loads(metadata_path.read_text(encoding="utf-8").splitlines()[0])
+    assert first_record["chunk_type"] == "section"
+    assert first_record["preview_text"] == "chunk 0"
+    assert first_record["metadata"]["section_heading"] == "Doc 1"

@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(
         app_module,
         "bm25_search",
-        lambda parsed_dir, query, top_k: [
+        lambda parsed_dir, query, top_k, **kwargs: [
             {
                 "score": 1.5,
                 "metadata": {

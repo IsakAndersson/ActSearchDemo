@@ -36,10 +36,12 @@ To change how many pages are scraped, override `--page-end`:
 python -m scraper.docplus_scraper --page-end 650
 ```
 
+Change the --page-end flag to match the number of pages available at "https://publikdocplus.regionuppsala.se/Home/Search?searchValue=&oldFilter=&facet=&facetVal=&page=1"
+
 The scraper writes:
 
 - `output/documents/` for downloaded binaries
-- `output/parsed/` for JSON payloads with extracted text + metadata
+- `output/parsed/` for JSON payloads with extracted text, cleaned text, derived section chunks, and metadata
 - `output/summary.json` for a crawl summary
 
 ## Vector indexing (BERT Swedish)
@@ -75,6 +77,10 @@ python -m search.vector_index build \
 
 Use `--text-source cleaned_text` to build embeddings from the cleaned parsed field
 instead of the default raw `text` field.
+
+Both BM25 and vector indexing now prefer document-aware section chunks derived from
+headings/sub-chapters in the parsed documents. Large sections are only split further
+when they exceed the configured chunk size.
 
 This creates:
 
@@ -134,7 +140,9 @@ driver, CUDA toolkit, and platform.
 
 To run a BM25 search directly over the parsed JSON files, use the BM25 helper.
 Default BM25 chunking now matches the E5 profile (`max_chars=250`, `overlap=50`)
-and includes one title-only chunk per document when a title can be extracted:
+and includes one title-only chunk per document when a title can be extracted.
+Body indexing prefers the stored section chunks so each hit is aligned to a chapter
+or sub-category when possible:
 
 ```bash
 python -m search.bm25_search \

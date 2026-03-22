@@ -12,6 +12,7 @@ from typing import Dict, Iterable, List, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
 import numpy as np
+from document_structure import get_document_sections
 
 try:
     import faiss
@@ -83,6 +84,7 @@ class ChunkRecord:
     text: str
     metadata: dict
     chunk_type: str = "body"
+    preview_text: str = ""
 
 
 @dataclass
@@ -463,6 +465,7 @@ def _append_chunk(
     metadata: dict,
     chunk_type: str,
     use_e5_prefixes: bool,
+    preview_text: str = "",
 ) -> None:
     state.records.append(
         ChunkRecord(
@@ -471,6 +474,7 @@ def _append_chunk(
             text=text,
             metadata=metadata,
             chunk_type=chunk_type,
+            preview_text=preview_text or text,
         )
     )
     state.texts.append(_with_passage_prefix(text) if use_e5_prefixes else text)
@@ -513,29 +517,67 @@ def build_index(
                 metadata=title_metadata,
                 chunk_type="title",
                 use_e5_prefixes=use_e5_prefixes,
+                preview_text=title,
             )
 
         if not text.strip():
             continue
         body_metadata = {**metadata, "title": title} if title else metadata
-        for chunk_text_value in chunk_text(text, max_chars=max_chars, overlap=overlap):
-            _append_chunk(
-                state=state,
-                source_path=payload["path"],
-                text=chunk_text_value,
-                metadata=body_metadata,
-                chunk_type="body",
-                use_e5_prefixes=use_e5_prefixes,
-            )
-            if len(state.texts) >= flush_threshold:
-                index = _flush_index_batch(
+        sections = get_document_sections(payload, fallback_title=title)
+        if sections:
+            for section in sections:
+                section_text = section.get(resolved_text_source) or section.get("cleaned_text") or section.get("text")
+                if not isinstance(section_text, str) or not section_text.strip():
+                    continue
+                heading = str(section.get("heading") or title or "").strip()
+                section_metadata = {
+                    **body_metadata,
+                    "section_heading": heading,
+                    "section_index": section.get("index", 0),
+                    "section_level": section.get("level", 1),
+                }
+                for preview_text in chunk_text(section_text, max_chars=max_chars, overlap=overlap):
+                    chunk_text_value = (
+                        f"{heading}\n\n{preview_text}" if heading and preview_text != heading else preview_text
+                    )
+                    _append_chunk(
+                        state=state,
+                        source_path=payload["path"],
+                        text=chunk_text_value,
+                        metadata=section_metadata,
+                        chunk_type="section",
+                        use_e5_prefixes=use_e5_prefixes,
+                        preview_text=preview_text,
+                    )
+                    if len(state.texts) >= flush_threshold:
+                        index = _flush_index_batch(
+                            state=state,
+                            index=index,
+                            tokenizer=tokenizer,
+                            model=model,
+                            device=device,
+                            batch_size=batch_size,
+                        )
+        else:
+            for preview_text in chunk_text(text, max_chars=max_chars, overlap=overlap):
+                _append_chunk(
                     state=state,
-                    index=index,
-                    tokenizer=tokenizer,
-                    model=model,
-                    device=device,
-                    batch_size=batch_size,
+                    source_path=payload["path"],
+                    text=preview_text,
+                    metadata=body_metadata,
+                    chunk_type="body",
+                    use_e5_prefixes=use_e5_prefixes,
+                    preview_text=preview_text,
                 )
+                if len(state.texts) >= flush_threshold:
+                    index = _flush_index_batch(
+                        state=state,
+                        index=index,
+                        tokenizer=tokenizer,
+                        model=model,
+                        device=device,
+                        batch_size=batch_size,
+                    )
 
     if not state.records:
         raise ValueError("No parsed documents with text found to index.")
@@ -563,6 +605,7 @@ def build_index(
                         "text": record.text,
                         "metadata": record.metadata,
                         "chunk_type": record.chunk_type,
+                        "preview_text": record.preview_text,
                     },
                     ensure_ascii=False,
                 )
@@ -601,6 +644,7 @@ def build_index_with_titles(
                 metadata=title_metadata,
                 chunk_type="title",
                 use_e5_prefixes=use_e5_prefixes,
+                preview_text=title,
             )
             if len(state.texts) >= flush_threshold:
                 index = _flush_index_batch(
@@ -638,6 +682,7 @@ def build_index_with_titles(
                         "text": record.text,
                         "metadata": record.metadata,
                         "chunk_type": record.chunk_type,
+                        "preview_text": record.preview_text,
                     },
                     ensure_ascii=False,
                 )
@@ -675,6 +720,10 @@ def query_index(
             "text": entry["text"],
             "metadata": entry.get("metadata", {}),
             "source_path": entry["source_path"],
+            "preview_text": entry.get("preview_text", entry["text"]),
+            "section_heading": entry.get("metadata", {}).get("section_heading"),
+            "section_index": entry.get("metadata", {}).get("section_index"),
+            "section_level": entry.get("metadata", {}).get("section_level"),
         }
         if "chunk_type" in entry:
             result["chunk_type"] = entry["chunk_type"]

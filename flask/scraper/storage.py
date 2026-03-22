@@ -4,8 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 from dataclasses import dataclass
+
+from document_structure import clean_text, derive_document_sections
 
 
 @dataclass
@@ -34,10 +35,12 @@ class DocumentStore:
     def write_text(self, binary_path: str, text: str, metadata: dict) -> str:
         basename = os.path.splitext(os.path.basename(binary_path))[0]
         text_path = os.path.join(self.text_dir, f"{basename}.json")
+        title = metadata.get("title") if isinstance(metadata.get("title"), str) else ""
         payload = {
             "binary_path": binary_path,
             "text": text,
             "cleaned_text": clean_text(text),
+            "sections": derive_document_sections(text, fallback_title=title),
             "metadata": metadata,
         }
         with open(text_path, "w", encoding="utf-8") as handle:
@@ -48,9 +51,3 @@ class DocumentStore:
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
         ext = os.path.splitext(url)[1] or ".bin"
         return f"doc_{digest}{ext}"
-
-
-def clean_text(text: str) -> str:
-    """Normalize extracted text into a single searchable line."""
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\f", "\n")
-    return re.sub(r"\s+", " ", normalized).strip()

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 
+from document_structure import get_document_sections
+
 
 TOKEN_RE = re.compile(r"[0-9A-Za-zÅÄÖåäö]+")
 E5_CHUNK_SIZE = 250
@@ -26,6 +28,7 @@ class ChunkRecord:
     text: str
     metadata: dict
     chunk_type: str = "body"
+    preview_text: str = ""
 
 
 @dataclass
@@ -160,23 +163,63 @@ def build_bm25_corpus(
                     text=title,
                     metadata={**metadata, "title": title},
                     chunk_type="title",
+                    preview_text=title,
                 )
             )
         if text.strip():
             body_metadata = {**metadata, "title": title} if title else metadata
-            body_texts = (
-                chunk_text(text, max_chars=max_chars, overlap=overlap)
-                if use_chunking
-                else [text]
-            )
-            for chunk_text_value in body_texts:
+            if use_chunking:
+                sections = get_document_sections(payload, fallback_title=title)
+                if sections:
+                    for section in sections:
+                        section_text = section["cleaned_text"] if use_cleaned_text else section["text"]
+                        if not isinstance(section_text, str) or not section_text.strip():
+                            continue
+                        heading = str(section.get("heading") or title or "").strip()
+                        section_metadata = {
+                            **body_metadata,
+                            "section_heading": heading,
+                            "section_index": section.get("index", 0),
+                            "section_level": section.get("level", 1),
+                        }
+                        section_chunks = chunk_text(section_text, max_chars=max_chars, overlap=overlap)
+                        for preview_text in section_chunks:
+                            chunk_text_value = (
+                                f"{heading}\n\n{preview_text}"
+                                if heading and preview_text != heading
+                                else preview_text
+                            )
+                            candidate_chunks.append(
+                                ChunkRecord(
+                                    chunk_id=-1,
+                                    source_path=payload["path"],
+                                    text=chunk_text_value,
+                                    metadata=section_metadata,
+                                    chunk_type="section",
+                                    preview_text=preview_text,
+                                )
+                            )
+                else:
+                    for preview_text in chunk_text(text, max_chars=max_chars, overlap=overlap):
+                        candidate_chunks.append(
+                            ChunkRecord(
+                                chunk_id=-1,
+                                source_path=payload["path"],
+                                text=preview_text,
+                                metadata=body_metadata,
+                                chunk_type="body",
+                                preview_text=preview_text,
+                            )
+                        )
+            else:
                 candidate_chunks.append(
                     ChunkRecord(
                         chunk_id=-1,
                         source_path=payload["path"],
-                        text=chunk_text_value,
+                        text=text,
                         metadata=body_metadata,
                         chunk_type="body",
+                        preview_text=text,
                     )
                 )
 
@@ -356,6 +399,10 @@ def bm25_search(
                 "metadata": record.metadata,
                 "source_path": record.source_path,
                 "chunk_type": record.chunk_type,
+                "preview_text": record.preview_text,
+                "section_heading": record.metadata.get("section_heading"),
+                "section_index": record.metadata.get("section_index"),
+                "section_level": record.metadata.get("section_level"),
             }
         )
     return results
