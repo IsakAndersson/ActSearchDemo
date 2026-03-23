@@ -150,3 +150,4 @@ def test_build_index_streams_embedding_batches(tmp_path, monkeypatch):
     assert first_record["chunk_type"] == "section"
     assert first_record["preview_text"] == "chunk 0"
     assert first_record["metadata"]["section_heading"] == "Doc 1"
+    assert first_record["section_text"] == "ignored"

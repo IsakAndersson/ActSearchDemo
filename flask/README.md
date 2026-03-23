@@ -51,8 +51,8 @@ the indexer against your parsed output.
 
 Available named profiles in `search.vector_index`:
 
-- `swedish_bert` -> `KBLab/bert-base-swedish-cased`, `chunk_size=250`, `chunk_overlap=50`
-- `e5_large_instruct` -> `intfloat/multilingual-e5-large-instruct`, `chunk_size=250`, `chunk_overlap=50`
+- `swedish_bert` -> `KBLab/bert-base-swedish-cased`, `chunk_size=500`, `chunk_overlap=50`
+- `e5_large_instruct` -> `intfloat/multilingual-e5-large-instruct`, `chunk_size=500`, `chunk_overlap=50`
 
 Swedish BERT index:
 
@@ -139,7 +139,7 @@ driver, CUDA toolkit, and platform.
 ## BM25 search (lexical)
 
 To run a BM25 search directly over the parsed JSON files, use the BM25 helper.
-Default BM25 chunking now matches the E5 profile (`max_chars=250`, `overlap=50`)
+Default BM25 chunking now matches the E5 profile (`max_chars=500`, `overlap=50`)
 and includes one title-only chunk per document when a title can be extracted.
 Body indexing prefers the stored section chunks so each hit is aligned to a chapter
 or sub-category when possible:

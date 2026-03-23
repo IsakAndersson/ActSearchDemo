@@ -17,7 +17,7 @@ from document_structure import get_document_sections
 
 
 TOKEN_RE = re.compile(r"[0-9A-Za-zÅÄÖåäö]+")
-E5_CHUNK_SIZE = 250
+E5_CHUNK_SIZE = 500
 E5_CHUNK_OVERLAP = 50
 
 
@@ -181,6 +181,7 @@ def build_bm25_corpus(
                             "section_heading": heading,
                             "section_index": section.get("index", 0),
                             "section_level": section.get("level", 1),
+                            "section_text": section_text,
                         }
                         section_chunks = chunk_text(section_text, max_chars=max_chars, overlap=overlap)
                         for preview_text in section_chunks:
@@ -403,6 +404,7 @@ def bm25_search(
                 "section_heading": record.metadata.get("section_heading"),
                 "section_index": record.metadata.get("section_index"),
                 "section_level": record.metadata.get("section_level"),
+                "section_text": record.metadata.get("section_text"),
             }
         )
     return results

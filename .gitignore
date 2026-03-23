@@ -237,8 +237,8 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # Ignore the files in the output directory
-output/
 **/output/
+**/plots/
 
 requirements_lock.txt
 

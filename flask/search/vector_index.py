@@ -53,14 +53,14 @@ VECTOR_MODEL_PROFILES: Dict[str, VectorModelProfile] = {
     "swedish_bert": VectorModelProfile(
         key="swedish_bert",
         model_name="KBLab/bert-base-swedish-cased",
-        chunk_size=250,
+        chunk_size=500,
         chunk_overlap=50,
         include_title_chunk=True,
     ),
     "e5_large_instruct": VectorModelProfile(
         key="e5_large_instruct",
         model_name="intfloat/multilingual-e5-large-instruct",
-        chunk_size=250,
+        chunk_size=500,
         chunk_overlap=50,
         include_title_chunk=True,
     ),
@@ -535,6 +535,7 @@ def build_index(
                     "section_heading": heading,
                     "section_index": section.get("index", 0),
                     "section_level": section.get("level", 1),
+                    "section_text": section_text,
                 }
                 for preview_text in chunk_text(section_text, max_chars=max_chars, overlap=overlap):
                     chunk_text_value = (
@@ -606,6 +607,7 @@ def build_index(
                         "metadata": record.metadata,
                         "chunk_type": record.chunk_type,
                         "preview_text": record.preview_text,
+                        "section_text": record.metadata.get("section_text"),
                     },
                     ensure_ascii=False,
                 )
@@ -683,6 +685,7 @@ def build_index_with_titles(
                         "metadata": record.metadata,
                         "chunk_type": record.chunk_type,
                         "preview_text": record.preview_text,
+                        "section_text": record.metadata.get("section_text"),
                     },
                     ensure_ascii=False,
                 )
@@ -724,6 +727,7 @@ def query_index(
             "section_heading": entry.get("metadata", {}).get("section_heading"),
             "section_index": entry.get("metadata", {}).get("section_index"),
             "section_level": entry.get("metadata", {}).get("section_level"),
+            "section_text": entry.get("section_text") or entry.get("metadata", {}).get("section_text"),
         }
         if "chunk_type" in entry:
             result["chunk_type"] = entry["chunk_type"]

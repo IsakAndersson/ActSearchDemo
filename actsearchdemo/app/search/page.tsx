@@ -18,6 +18,7 @@ type SearchResult = {
   section_heading?: string;
   section_index?: number;
   section_level?: number;
+  section_text?: string;
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -167,6 +168,14 @@ const getResultPreviewText = (result: SearchResult): string => {
 };
 
 const getResultChunkText = (result: SearchResult): string => {
+  const sectionText = getStringValue(result.section_text);
+  if (sectionText) {
+    return sectionText;
+  }
+  const metadataSectionText = getMetadataValue(result.metadata, ["section_text"]);
+  if (metadataSectionText) {
+    return metadataSectionText;
+  }
   const chunk = getStringValue(result.chunk_text);
   if (chunk) {
     return chunk;

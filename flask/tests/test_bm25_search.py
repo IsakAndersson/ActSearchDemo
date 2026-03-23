@@ -37,3 +37,4 @@ def test_bm25_search_returns_section_metadata(tmp_path):
     assert results[0]["chunk_type"] == "section"
     assert results[0]["preview_text"] == "adrenalin guidance for treatment"
     assert results[0]["section_heading"] == "SECTION ONE"
+    assert results[0]["section_text"] == "adrenalin guidance for treatment"
