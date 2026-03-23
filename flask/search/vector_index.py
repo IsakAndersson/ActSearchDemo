@@ -53,14 +53,14 @@ VECTOR_MODEL_PROFILES: Dict[str, VectorModelProfile] = {
     "swedish_bert": VectorModelProfile(
         key="swedish_bert",
         model_name="KBLab/bert-base-swedish-cased",
-        chunk_size=500,
+        chunk_size=250,
         chunk_overlap=50,
         include_title_chunk=True,
     ),
     "e5_large_instruct": VectorModelProfile(
         key="e5_large_instruct",
         model_name="intfloat/multilingual-e5-large-instruct",
-        chunk_size=500,
+        chunk_size=250,
         chunk_overlap=50,
         include_title_chunk=True,
     ),

@@ -215,24 +215,6 @@ def _extract_live_docplus_links(html: str, page_url: str) -> List[Dict[str, str]
     return links
 
 
-def _extract_live_sts_links(html: str, page_url: str) -> List[Dict[str, str]]:
-    soup = BeautifulSoup(html, "html.parser")
-    links: List[Dict[str, str]] = []
-    seen_urls: set[str] = set()
-
-    for anchor in soup.find_all("a", href=True):
-        absolute_url = urljoin(page_url, str(anchor["href"]).strip())
-        is_docplus_link = "docplus" in absolute_url.lower() or "getdocument" in absolute_url.lower()
-        if not _is_document_link(absolute_url) and not is_docplus_link:
-            continue
-        if absolute_url in seen_urls:
-            continue
-        seen_urls.add(absolute_url)
-        title = anchor.get_text(" ", strip=True) or _filename_from_url(absolute_url)
-        links.append({"source_url": absolute_url, "title": title})
-    return links
-
-
 def _sanitize_live_query(query: str) -> str:
     cleaned = re.sub(r"[^\w\sÅÄÖåäö-]", " ", query, flags=re.UNICODE)
     cleaned = re.sub(r"\s+", " ", cleaned, flags=re.UNICODE).strip()
