@@ -460,6 +460,9 @@ const buildPipeline = (
   };
 };
 
+const hasAnyResults = (resultsByMethod: SearchResultsByMethod | undefined): boolean =>
+  METHODS.some((method) => (resultsByMethod?.[method] ?? []).length > 0);
+
 const isRelevantLikeRating = (
   rating: RelevanceRating | null | undefined,
 ): rating is "relevant" =>
@@ -606,7 +609,9 @@ export default function DemoSearchPage() {
         }
       }
 
-      if (payload.errors && payload.errors.length > 0) {
+      const hasResults = hasAnyResults(payload.results_by_method);
+
+      if (payload.errors && payload.errors.length > 0 && !hasResults) {
         setPipeline(EMPTY_PIPELINE);
         setSubmittedQuery("");
         setSearchErrors(payload.errors);

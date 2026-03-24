@@ -7,7 +7,6 @@ import os
 import sqlite3
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -800,11 +799,9 @@ def search() -> Any:
                     }
                 )
 
-            future_to_bucket = {}
-            with ThreadPoolExecutor(max_workers=min(6, len(bucket_queries))) as executor:
-                for bucket, bucket_query in bucket_queries.items():
-                    future = executor.submit(
-                        _evaluation_form_search_bucket,
+            for bucket, bucket_query in bucket_queries.items():
+                try:
+                    results_by_method[bucket] = _evaluation_form_search_bucket(
                         bucket=bucket,
                         query=bucket_query,
                         defaults=defaults,
@@ -812,16 +809,10 @@ def search() -> Any:
                         bm25_use_cleaned_text=bm25_use_cleaned_text,
                         bm25_use_chunking=bm25_use_chunking,
                     )
-                    future_to_bucket[future] = bucket
-
-                for future in as_completed(future_to_bucket):
-                    bucket = future_to_bucket[future]
-                    try:
-                        results_by_method[bucket] = future.result()
-                        successful_methods += 1
-                    except Exception as exc:  # noqa: BLE001
-                        errors.append(f"{bucket} search failed: {exc}")
-                        results_by_method[bucket] = []
+                    successful_methods += 1
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{bucket} search failed: {exc}")
+                    results_by_method[bucket] = []
         elif method == "all":
             results_by_method = {}
             try:
