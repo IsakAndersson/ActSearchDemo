@@ -246,42 +246,6 @@ and visualizes:
 - RR@20 by query type
 - retrieved score distributions per method
 
-## Script-Based Visualization
-
-To avoid notebook state issues, you can generate the same plots directly as files:
-
-```bash
-./.venv/bin/python evaluation/plot_evaluation.py
-```
-
-This writes PNG plots and companion CSV tables to:
-
-- `evaluation/plots/`
-
-The script includes the current notebook views plus the newer comparison views:
-
-- average score over time
-- best run per method/source
-- RR@20 by query type
-- run-difference view for one selected model/method
-- query-type performance across runs for one selected model/method
-- compare all runs within one selected source or one selected model
-- per-query matrix with queries on one axis and selectable model/method series on the other
-
-Useful flags:
-
-```bash
-./.venv/bin/python evaluation/plot_evaluation.py \
-  --output-dir evaluation/plots_e5 \
-  --model-selector "dense_e5 | google_sheet | intfloat/multilingual-e5-large-instruct" \
-  --run-axis config_slug \
-  --compare-scope-field model_name \
-  --compare-scope-value intfloat/multilingual-e5-large-instruct \
-  --compare-category "Case-beskrivning" \
-  --matrix-source google_sheet \
-  --matrix-category "Case-beskrivning" \
-  --matrix-models "dense_e5 | intfloat/multilingual-e5-large-instruct,hybrid_e5 | intfloat/multilingual-e5-large-instruct"
-```
 
 ## Parameter Sweep Script
 

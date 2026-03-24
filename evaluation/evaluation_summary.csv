@@ -41,3 +41,5 @@ average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_ty
 2.7845238095238094,0.45303676787193264,2026-03-23T13:38:52+01:00,20,87,7,google_sheet,google_sheet,dense_e5_baseline,dense_e5
 average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,experiment,method
 3.2222222222222223,0.4990486924552858,2026-03-23T17:28:41+01:00,20,87,7,google_sheet,google_sheet,dense_e5_baseline,dense_e5
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,experiment,method
+3.1122294372294372,0.502518238781975,2026-03-23T22:53:29+01:00,20,87,7,google_sheet,google_sheet,hybrid_e5_baseline,hybrid_e5

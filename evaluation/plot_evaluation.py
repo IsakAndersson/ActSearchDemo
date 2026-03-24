@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
+import re
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Dict, Iterable, List, Sequence
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(__file__).resolve().parent / ".matplotlib"))
 
 import matplotlib
 
@@ -11,755 +15,424 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.colors import ListedColormap
 
 try:
-    from .evaluation import load_qrels_dataset
+    from .evaluation import EVALUATION_DIR, load_qrels_dataset
 except ImportError:
-    from evaluation import load_qrels_dataset
+    from evaluation import EVALUATION_DIR, load_qrels_dataset
 
 
-plt.style.use("ggplot")
-EVALUATION_DIR = Path(__file__).resolve().parent
-DEFAULT_OUTPUT_DIR = EVALUATION_DIR / "plots"
+DEFAULT_METHOD_ORDER = [
+    "bm25",
+    "dense",
+    "dense_e5",
+    "hybrid",
+    "hybrid_e5",
+    "docplus_live",
+    "sts_live",
+]
 
 
-def load_mixed_csv(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
+def _read_appended_run_csv(path: Path) -> pd.DataFrame:
+    rows: List[Dict[str, str]] = []
+    current_header: List[str] | None = None
 
-    rows = []
-    current_header = None
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.reader(handle)
-        for row in reader:
-            if not row:
+        for raw_row in reader:
+            if not raw_row:
                 continue
-            row = [cell.strip() for cell in row]
-            if row[0] in {"average_rank", "query_type", "doc_id"}:
-                current_header = row
+            if raw_row[0] == "doc_id":
+                current_header = raw_row
                 continue
             if current_header is None:
-                continue
-            if len(row) < len(current_header):
-                row = row + [""] * (len(current_header) - len(row))
-            row = row[: len(current_header)]
-            rows.append(dict(zip(current_header, row)))
+                raise ValueError(f"No CSV header found in {path}")
+            if len(raw_row) != len(current_header):
+                raise ValueError(
+                    f"Malformed row in {path}: expected {len(current_header)} fields, got {len(raw_row)}"
+                )
+            rows.append(dict(zip(current_header, raw_row)))
+
+    if not rows:
+        return pd.DataFrame()
 
     df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df[df.iloc[:, 0] != df.columns[0]]
+    if "evaluated_at_cet" in df.columns:
+        df["evaluated_at_cet"] = pd.to_datetime(df["evaluated_at_cet"], errors="coerce")
     return df
 
 
-def discover_csv_paths(filename: str) -> list[Path]:
-    base_candidates = [
-        Path(filename),
-        Path("evaluation") / filename,
-        Path("../evaluation") / filename,
-    ]
+def _build_qrels_table(qrels_source: str, qrels_path: str | None) -> pd.DataFrame:
+    frames = load_qrels_dataset(qrels_source=qrels_source, qrels_path=qrels_path)
+    ordered_rows: List[Dict[str, str]] = []
 
-    experiment_candidates: list[Path] = []
-    for root in (
-        Path("evaluation/experiments"),
-        Path("../evaluation/experiments"),
-        Path("experiments"),
-    ):
-        if root.exists():
-            experiment_candidates.extend(root.glob(f"*/results/aggregate/{filename}"))
+    for query_type, frame in frames.items():
+        qrels_df = frame["qrels"].copy()
+        qrels_df = qrels_df[qrels_df["relevance"] > 0]
+        seen_queries = set()
 
-    paths = []
-    seen: set[Path] = set()
-    for candidate in base_candidates + sorted(experiment_candidates):
-        resolved = candidate.resolve()
-        if resolved in seen or not candidate.exists():
-            continue
-        seen.add(resolved)
-        paths.append(candidate)
-    return paths
+        for query_id in frame["queries"]["query_id"]:
+            query_id = str(query_id)
+            if query_id in seen_queries:
+                continue
+            seen_queries.add(query_id)
 
+            matching = qrels_df[qrels_df["query_id"].astype(str) == query_id]
+            relevant_doc_ids = sorted({str(doc_id) for doc_id in matching["doc_id"] if str(doc_id).strip()})
+            ordered_rows.append(
+                {
+                    "query_type": str(query_type),
+                    "query_id": query_id,
+                    "query_label": f"{query_type}: {query_id}",
+                    "relevant_doc_ids": relevant_doc_ids,
+                }
+            )
 
-def load_mixed_csvs(paths: Iterable[Path]) -> pd.DataFrame:
-    parts = []
-    for path in paths:
-        df = load_mixed_csv(path)
-        if df.empty:
-            continue
-        df = df.copy()
-        df["file_source"] = str(path)
-        if "data_source" not in df.columns and "qrels_source" not in df.columns:
-            df["data_source"] = str(path)
-        parts.append(df)
-    if not parts:
-        return pd.DataFrame()
-    return pd.concat(parts, ignore_index=True)
+    return pd.DataFrame(ordered_rows)
 
 
-def pick_time_col(df: pd.DataFrame) -> str | None:
-    for col in ("evaluated_at_cet", "evaluated_at_utc", "evaluated_at"):
-        if col in df.columns:
-            return col
-    return None
+def _pick_latest_run_per_method(run_df: pd.DataFrame, methods: Sequence[str] | None) -> pd.DataFrame:
+    if run_df.empty:
+        return run_df
+
+    if methods:
+        wanted = {method.strip() for method in methods if method.strip()}
+        run_df = run_df[run_df["method"].astype(str).isin(wanted)].copy()
+
+    run_df = run_df.dropna(subset=["method", "evaluated_at_cet"]).copy()
+    latest_per_method = (
+        run_df.groupby("method", dropna=False)["evaluated_at_cet"].max().rename("latest_evaluated_at_cet")
+    )
+    selected = run_df.merge(
+        latest_per_method,
+        left_on=["method", "evaluated_at_cet"],
+        right_on=["method", "latest_evaluated_at_cet"],
+        how="inner",
+    )
+    return selected.drop(columns=["latest_evaluated_at_cet"])
 
 
-def pick_method_col(df: pd.DataFrame) -> str | None:
-    for col in ("method", "search_method"):
-        if col in df.columns:
-            return col
-    return None
+def _ordered_methods(methods: Iterable[str]) -> List[str]:
+    method_list = list(dict.fromkeys(str(method) for method in methods))
+    preferred = [method for method in DEFAULT_METHOD_ORDER if method in method_list]
+    extras = sorted(method for method in method_list if method not in DEFAULT_METHOD_ORDER)
+    return preferred + extras
 
 
-def pick_source_col(df: pd.DataFrame) -> str | None:
-    for col in ("qrels_source", "data_source", "file_source"):
-        if col in df.columns:
-            return col
-    return None
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", value.strip()).strip("_").lower()
+    return slug or "unnamed"
 
 
-def save_table(df: pd.DataFrame, output_path: Path) -> None:
+def _build_hit_matrix(qrels_df: pd.DataFrame, latest_runs_df: pd.DataFrame) -> pd.DataFrame:
+    methods = _ordered_methods(latest_runs_df["method"].dropna().astype(str).tolist())
+    hit_rows: List[Dict[str, object]] = []
+
+    for _, qrel_row in qrels_df.iterrows():
+        relevant_doc_ids = set(qrel_row["relevant_doc_ids"])
+        row: Dict[str, object] = {
+            "query_type": qrel_row["query_type"],
+            "query_id": qrel_row["query_id"],
+            "query_label": qrel_row["query_label"],
+        }
+        for method in methods:
+            method_hits = latest_runs_df[
+                (latest_runs_df["method"].astype(str) == method)
+                & (latest_runs_df["query_id"].astype(str) == str(qrel_row["query_id"]))
+            ]
+            retrieved_doc_ids = {str(doc_id) for doc_id in method_hits["doc_id"] if str(doc_id).strip()}
+            row[method] = int(bool(relevant_doc_ids & retrieved_doc_ids))
+        hit_rows.append(row)
+
+    matrix_df = pd.DataFrame(hit_rows)
+    if not matrix_df.empty:
+        matrix_df["query_type"] = pd.Categorical(
+            matrix_df["query_type"],
+            categories=list(dict.fromkeys(qrels_df["query_type"].tolist())),
+            ordered=True,
+        )
+        matrix_df = matrix_df.sort_values(["query_type"], kind="stable").reset_index(drop=True)
+    return matrix_df
+
+
+def _build_named_hit_matrix(qrels_df: pd.DataFrame, run_df: pd.DataFrame, column_names: Sequence[str]) -> pd.DataFrame:
+    hit_rows: List[Dict[str, object]] = []
+
+    for _, qrel_row in qrels_df.iterrows():
+        relevant_doc_ids = set(qrel_row["relevant_doc_ids"])
+        row: Dict[str, object] = {
+            "query_type": qrel_row["query_type"],
+            "query_id": qrel_row["query_id"],
+            "query_label": qrel_row["query_label"],
+        }
+        for column_name in column_names:
+            run_hits = run_df[
+                (run_df["run_label"].astype(str) == column_name)
+                & (run_df["query_id"].astype(str) == str(qrel_row["query_id"]))
+            ]
+            retrieved_doc_ids = {str(doc_id) for doc_id in run_hits["doc_id"] if str(doc_id).strip()}
+            row[column_name] = int(bool(relevant_doc_ids & retrieved_doc_ids))
+        hit_rows.append(row)
+
+    matrix_df = pd.DataFrame(hit_rows)
+    if not matrix_df.empty:
+        matrix_df["query_type"] = pd.Categorical(
+            matrix_df["query_type"],
+            categories=list(dict.fromkeys(qrels_df["query_type"].tolist())),
+            ordered=True,
+        )
+        matrix_df = matrix_df.sort_values(["query_type"], kind="stable").reset_index(drop=True)
+    return matrix_df
+
+
+def _plot_hit_matrix(matrix_df: pd.DataFrame, x_labels: Sequence[str], output_path: Path, title: str) -> None:
+    plot_data = matrix_df.loc[:, x_labels]
+    query_labels = matrix_df["query_label"].tolist()
+
+    fig_width = max(8, len(x_labels) * 1.25)
+    fig_height = max(10, len(query_labels) * 0.32)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    image = ax.imshow(plot_data.to_numpy(), aspect="auto", cmap=ListedColormap(["#d73027", "#1a9850"]), vmin=0, vmax=1)
+
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels(x_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks(range(len(query_labels)))
+    ax.set_yticklabels(query_labels, fontsize=8)
+    ax.set_xlabel("Run")
+    ax.set_ylabel("Query")
+    ax.set_title(title)
+
+    ax.set_xticks([x - 0.5 for x in range(1, len(x_labels))], minor=True)
+    ax.set_yticks([y - 0.5 for y in range(1, len(query_labels))], minor=True)
+    ax.grid(which="minor", color="white", linewidth=0.6)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    colorbar = fig.colorbar(image, ax=ax, ticks=[0, 1], fraction=0.03, pad=0.02)
+    colorbar.ax.set_yticklabels(["Miss", "Hit"])
+
+    longest_label = max((len(label) for label in query_labels), default=0)
+    left_margin = min(0.72, max(0.22, longest_label * 0.0045))
+    fig.subplots_adjust(left=left_margin, bottom=0.12, right=0.95, top=0.94)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
-
-
-def save_figure(fig: plt.Figure, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
-def sanitize_slug(value: str) -> str:
-    cleaned = "".join(char.lower() if char.isalnum() else "_" for char in value.strip())
-    while "__" in cleaned:
-        cleaned = cleaned.replace("__", "_")
-    return cleaned.strip("_") or "plot"
+def _plot_total_hits_bar_chart(matrix_df: pd.DataFrame, x_labels: Sequence[str], output_path: Path, title: str) -> None:
+    totals = matrix_df.loc[:, x_labels].sum(axis=0).sort_values(ascending=False)
 
-
-def prepare_frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    summary_df = load_mixed_csvs(discover_csv_paths("evaluation_summary.csv"))
-    results_df = load_mixed_csvs(discover_csv_paths("evaluation_results.csv"))
-    run_df = load_mixed_csvs(discover_csv_paths("evaluation_run.csv"))
-
-    for numeric_col in (
-        "average_rank",
-        "average_score",
-        "RR@20",
-        "score",
-        "top_k",
-        "num_queries_total",
-        "num_query_types",
-        "chunk_size",
-        "chunk_overlap",
-    ):
-        if numeric_col in summary_df.columns:
-            summary_df[numeric_col] = pd.to_numeric(summary_df[numeric_col], errors="coerce")
-        if numeric_col in results_df.columns:
-            results_df[numeric_col] = pd.to_numeric(results_df[numeric_col], errors="coerce")
-        if numeric_col in run_df.columns:
-            run_df[numeric_col] = pd.to_numeric(run_df[numeric_col], errors="coerce")
-
-    for df in (summary_df, results_df, run_df):
-        time_col = pick_time_col(df)
-        if time_col:
-            df["evaluated_at"] = pd.to_datetime(df[time_col], errors="coerce")
-        method_col = pick_method_col(df)
-        source_col = pick_source_col(df)
-        df["method_name"] = (
-            df[method_col].fillna("").replace("", "unknown") if method_col else "unknown"
-        )
-        df["source_name"] = (
-            df[source_col].fillna("").replace("", "unknown_source") if source_col else "unknown_source"
-        )
-        df["series_name"] = df["method_name"].astype(str) + " | " + df["source_name"].astype(str)
-
-    return summary_df, results_df, run_df
-
-
-def build_run_labels(df: pd.DataFrame, include_method: bool = True) -> pd.Series:
-    labels = pd.Series(["run"] * len(df), index=df.index, dtype="object")
-    if "config_slug" in df.columns:
-        labels = df["config_slug"].fillna("").astype(str)
-    if "text_source" in df.columns:
-        text_suffix = df["text_source"].fillna("").astype(str)
-        labels = labels.where(
-            text_suffix.eq("") | labels.str.contains(text_suffix, regex=False),
-            labels + " | " + text_suffix,
-        )
-    if "evaluated_at" in df.columns:
-        time_suffix = pd.to_datetime(df["evaluated_at"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M").fillna("")
-        labels = labels.where(time_suffix.eq(""), labels + " | " + time_suffix)
-    if include_method and "method_name" in df.columns:
-        labels = df["method_name"].fillna("unknown").astype(str) + " | " + labels.astype(str)
-    return labels.str.strip(" |")
-
-
-def plot_average_score_over_time(summary_df: pd.DataFrame, output_dir: Path) -> None:
-    plot_df = summary_df.dropna(subset=["average_score"]).copy()
-    if plot_df.empty:
-        return
-    if "evaluated_at" in plot_df.columns:
-        plot_df = plot_df.sort_values("evaluated_at")
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    for method, group in plot_df.groupby("series_name"):
-        x_values = group["evaluated_at"] if "evaluated_at" in group.columns else range(len(group))
-        ax.plot(x_values, group["average_score"], marker="o", label=method)
-    ax.set_title("Average RR@20 / score over time")
-    ax.set_ylabel("average_score")
-    ax.set_xlabel("run time")
-    if plot_df["series_name"].nunique() > 1:
-        ax.legend(title="method | source")
-    plt.xticks(rotation=30, ha="right")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "average_score_over_time.png")
-
-
-def plot_best_run_per_method(summary_df: pd.DataFrame, output_dir: Path) -> None:
-    best_per_method = (
-        summary_df.dropna(subset=["average_score"])
-        .sort_values("average_score", ascending=False)
-        .groupby("series_name", as_index=False)
-        .first()
-    )
-    if best_per_method.empty:
-        return
-
-    columns = [
-        col
-        for col in ("series_name", "average_score", "average_rank", "evaluated_at")
-        if col in best_per_method.columns
-    ]
-    save_table(best_per_method[columns], output_dir / "best_run_per_method.csv")
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(best_per_method["series_name"], best_per_method["average_score"])
-    ax.set_title("Best average_score per method/source")
-    ax.set_ylabel("average_score")
-    ax.set_xlabel("method | source")
-    plt.xticks(rotation=20, ha="right")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "best_run_per_method.png")
-
-
-def plot_query_type_profile(results_df: pd.DataFrame, output_dir: Path) -> None:
-    if results_df.empty or "RR@20" not in results_df.columns:
-        return
-    plot_df = results_df.dropna(subset=["RR@20"]).copy()
-    if plot_df.empty:
-        return
-
-    if "series_name" in plot_df.columns and plot_df["series_name"].nunique() > 1:
-        pivot = plot_df.pivot_table(
-            index="query_type",
-            columns="series_name",
-            values="RR@20",
-            aggfunc="mean",
-        ).sort_index()
-        save_table(pivot.reset_index(), output_dir / "query_type_rr20_profile.csv")
-
-        fig, ax = plt.subplots(figsize=(12, 6))
-        pivot.plot(kind="bar", ax=ax)
-        ax.set_title("RR@20 by query type and method/source")
-        ax.set_ylabel("RR@20")
-        ax.set_xlabel("query_type")
-        ax.legend(title="method | source", bbox_to_anchor=(1.02, 1), loc="upper left")
-        plt.xticks(rotation=35, ha="right")
-        fig.tight_layout()
-        save_figure(fig, output_dir / "query_type_rr20_profile.png")
-    else:
-        grouped = (
-            plot_df.groupby("query_type", as_index=False)["RR@20"]
-            .mean()
-            .sort_values("RR@20", ascending=False)
-        )
-        save_table(grouped, output_dir / "query_type_rr20_profile.csv")
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.bar(grouped["query_type"], grouped["RR@20"])
-        ax.set_title("RR@20 by query type")
-        ax.set_ylabel("RR@20")
-        ax.set_xlabel("query_type")
-        plt.xticks(rotation=35, ha="right")
-        fig.tight_layout()
-        save_figure(fig, output_dir / "query_type_rr20_profile.png")
-
-
-def build_viz_df(summary_df: pd.DataFrame, results_df: pd.DataFrame) -> pd.DataFrame:
-    viz_df = summary_df.copy()
-    join_priority = [
-        "series_name",
-        "method_name",
-        "model_name",
-        "experiment",
-        "config_slug",
-        "chunk_size",
-        "chunk_overlap",
-        "include_title_chunk",
-        "top_k",
-    ]
-    join_keys = [col for col in join_priority if col in summary_df.columns and col in results_df.columns]
-    if join_keys and "RR@20" in results_df.columns:
-        rr_by_run = (
-            results_df.dropna(subset=["RR@20"])
-            .groupby(join_keys, dropna=False)["RR@20"]
-            .mean()
-            .reset_index(name="rr20_mean")
-        )
-        viz_df = viz_df.merge(rr_by_run, on=join_keys, how="left")
-
-    if "model_name" in viz_df.columns:
-        viz_df["model_selector"] = (
-            viz_df["series_name"].astype(str)
-            + " | "
-            + viz_df["model_name"].fillna("unknown").astype(str)
-        )
-    else:
-        viz_df["model_selector"] = viz_df["series_name"].astype(str)
-    return viz_df
-
-
-def plot_model_differences(
-    summary_df: pd.DataFrame,
-    results_df: pd.DataFrame,
-    output_dir: Path,
-    model_selector: Optional[str] = None,
-    x_axis: Optional[str] = None,
-    metrics: Optional[list[str]] = None,
-) -> None:
-    viz_df = build_viz_df(summary_df, results_df)
-    if viz_df.empty:
-        return
-
-    model_options = sorted(viz_df["model_selector"].dropna().unique().tolist())
-    if not model_options:
-        return
-    selected_model = model_selector or model_options[0]
-    sub = viz_df[viz_df["model_selector"] == selected_model].copy()
-    if sub.empty:
-        return
-
-    x_candidates = [
-        col
-        for col in ("chunk_size", "chunk_overlap", "top_k", "include_title_chunk", "config_slug", "evaluated_at")
-        if col in sub.columns and sub[col].nunique(dropna=False) > 1
-    ]
-    selected_x = x_axis or (x_candidates[0] if x_candidates else "evaluated_at")
-    metric_candidates = [
-        col
-        for col in ("average_score", "average_rank", "rr20_mean", "num_queries_total", "num_query_types")
-        if col in sub.columns and pd.api.types.is_numeric_dtype(sub[col])
-    ]
-    selected_metrics = [metric for metric in (metrics or metric_candidates[:2]) if metric in metric_candidates]
-    if not selected_metrics:
-        return
-
-    dedupe_cols = [selected_x] + selected_metrics + [
-        col for col in ("chunk_size", "chunk_overlap", "top_k", "include_title_chunk", "config_slug") if col in sub.columns
-    ]
-    sub = sub.drop_duplicates(subset=[col for col in dedupe_cols if col in sub.columns])
-    if selected_x == "evaluated_at" and "evaluated_at" in sub.columns:
-        sub = sub.sort_values("evaluated_at")
-        x_values = sub["evaluated_at"].dt.strftime("%Y-%m-%d %H:%M").fillna("unknown_time")
-    else:
-        sub = sub.sort_values(selected_x, kind="stable")
-        x_values = sub[selected_x].astype(str)
-
-    preview_cols = [col for col in [selected_x, "chunk_size", "chunk_overlap", "top_k", "include_title_chunk", "config_slug"] if col in sub.columns]
-    preview_cols += selected_metrics
-    save_table(sub[preview_cols].reset_index(drop=True), output_dir / "model_differences.csv")
-
-    fig, ax = plt.subplots(figsize=(12, 5))
-    for metric in selected_metrics:
-        ax.plot(x_values, sub[metric], marker="o", label=metric)
-    ax.set_title(f"Run differences for {selected_model}")
-    ax.set_xlabel(selected_x)
-    ax.set_ylabel("metric value")
-    ax.legend(title="field")
-    plt.xticks(rotation=30, ha="right")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "model_differences.png")
-
-
-def plot_query_type_between_runs(
-    results_df: pd.DataFrame,
-    output_dir: Path,
-    model_selector: Optional[str] = None,
-    run_axis: Optional[str] = None,
-) -> None:
-    if results_df.empty or "RR@20" not in results_df.columns:
-        return
-    qt_df = results_df.dropna(subset=["RR@20"]).copy()
-    if qt_df.empty:
-        return
-
-    if "model_name" in qt_df.columns:
-        qt_df["model_selector"] = (
-            qt_df["series_name"].astype(str)
-            + " | "
-            + qt_df["model_name"].fillna("unknown").astype(str)
-        )
-    else:
-        qt_df["model_selector"] = qt_df["series_name"].astype(str)
-
-    model_options = sorted(qt_df["model_selector"].dropna().unique().tolist())
-    if not model_options:
-        return
-    selected_model = model_selector or model_options[0]
-    sub = qt_df[qt_df["model_selector"] == selected_model].copy()
-    if sub.empty:
-        return
-
-    run_axis_candidates = [
-        col
-        for col in ("config_slug", "chunk_size", "chunk_overlap", "top_k", "include_title_chunk", "evaluated_at")
-        if col in sub.columns and sub[col].nunique(dropna=False) > 1
-    ]
-    selected_axis = run_axis or (run_axis_candidates[0] if run_axis_candidates else "evaluated_at")
-
-    if selected_axis == "evaluated_at" and "evaluated_at" in sub.columns:
-        sub["run_label"] = sub["evaluated_at"].dt.strftime("%Y-%m-%d %H:%M").fillna("unknown_time")
-    else:
-        sub["run_label"] = sub[selected_axis].astype(str)
-
-    pivot = sub.pivot_table(
-        index="query_type",
-        columns="run_label",
-        values="RR@20",
-        aggfunc="mean",
-    ).sort_index()
-    if pivot.empty:
-        return
-
-    save_table(pivot.reset_index(), output_dir / "query_type_between_runs.csv")
-    fig, ax = plt.subplots(figsize=(12, 6))
-    pivot.plot(kind="bar", ax=ax)
-    ax.set_title(f"RR@20 by query type across runs for {selected_model}")
-    ax.set_ylabel("RR@20")
-    ax.set_xlabel("query_type")
-    ax.legend(title=selected_axis, bbox_to_anchor=(1.02, 1), loc="upper left")
-    plt.xticks(rotation=35, ha="right")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "query_type_between_runs.png")
-
-
-def plot_runs_in_scope(
-    summary_df: pd.DataFrame,
-    results_df: pd.DataFrame,
-    output_dir: Path,
-    scope_field: Optional[str] = None,
-    scope_value: Optional[str] = None,
-    query_category: str = "__all__",
-) -> None:
-    comparison_summary_df = summary_df.copy()
-    comparison_results_df = results_df.copy()
-    comparison_summary_df["run_label"] = build_run_labels(comparison_summary_df)
-    comparison_results_df["run_label"] = build_run_labels(comparison_results_df)
-
-    scope_options: list[tuple[str, str]] = []
-    if "source_name" in comparison_summary_df.columns:
-        scope_options.extend([("source_name", value) for value in sorted(comparison_summary_df["source_name"].dropna().astype(str).unique().tolist())])
-    if "model_name" in comparison_summary_df.columns:
-        scope_options.extend([("model_name", value) for value in sorted(comparison_summary_df["model_name"].dropna().astype(str).unique().tolist())])
-    if not scope_options:
-        return
-
-    selected_field, selected_value = (
-        (scope_field, scope_value) if scope_field and scope_value else scope_options[0]
-    )
-
-    if query_category == "__all__":
-        sub = comparison_summary_df[comparison_summary_df[selected_field].astype(str) == str(selected_value)].copy()
-        metric_col = "average_score"
-        title = f"All runs for {selected_field}={selected_value} (overall average_score)"
-    else:
-        sub = comparison_results_df[
-            (comparison_results_df[selected_field].astype(str) == str(selected_value))
-            & (comparison_results_df["query_type"].astype(str) == str(query_category))
-        ].copy()
-        metric_col = "RR@20"
-        title = f"All runs for {selected_field}={selected_value} | category={query_category}"
-
-    if sub.empty or metric_col not in sub.columns:
-        return
-    sub[metric_col] = pd.to_numeric(sub[metric_col], errors="coerce")
-    sub = sub.dropna(subset=[metric_col]).sort_values(metric_col, ascending=True)
-    if sub.empty:
-        return
-
-    display_cols = [
-        col
-        for col in (
-            "run_label",
-            "method_name",
-            "source_name",
-            "model_name",
-            "query_type",
-            metric_col,
-            "chunk_size",
-            "chunk_overlap",
-            "include_title_chunk",
-            "text_source",
-            "config_slug",
-            "evaluated_at",
-        )
-        if col in sub.columns
-    ]
-    save_table(
-        sub[display_cols].sort_values(metric_col, ascending=False).reset_index(drop=True),
-        output_dir / "compare_runs_in_scope.csv",
-    )
-
-    fig, ax = plt.subplots(figsize=(12, max(4, 0.45 * len(sub))))
-    ax.barh(sub["run_label"], sub[metric_col], color="#3b82f6")
-    ax.set_title(title)
-    ax.set_xlabel(metric_col)
-    ax.set_ylabel("run")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "compare_runs_in_scope.png")
-
-
-def load_qrels_long_from_runs(run_df: pd.DataFrame) -> pd.DataFrame:
-    requested_sources = set()
-    if "qrels_source" in run_df.columns:
-        requested_sources.update(value for value in run_df["qrels_source"].dropna().astype(str).tolist() if value)
-    if not requested_sources:
-        requested_sources.add("google_sheet")
-
-    parts = []
-    for qrels_source in sorted(requested_sources):
-        try:
-            query_type_frames = load_qrels_dataset(qrels_source=qrels_source)
-        except Exception:
-            continue
-        for query_type, frame in query_type_frames.items():
-            qrels_part = frame["qrels"][["query_id", "doc_id", "relevance"]].copy()
-            qrels_part["qrels_query_type"] = query_type
-            qrels_part["source_name"] = qrels_source
-            parts.append(qrels_part)
-    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
-
-
-def plot_query_model_matrix(
-    run_df: pd.DataFrame,
-    output_dir: Path,
-    source_name: Optional[str] = None,
-    query_category: str = "__all__",
-    selected_models: Optional[list[str]] = None,
-) -> None:
-    if run_df.empty:
-        return
-    qrels_long_df = load_qrels_long_from_runs(run_df)
-    if qrels_long_df.empty:
-        return
-
-    run_work_df = run_df.copy()
-    run_work_df["score"] = pd.to_numeric(run_work_df["score"], errors="coerce")
-    run_work_df = run_work_df.dropna(subset=["score"]).copy()
-    run_work_df["run_label"] = build_run_labels(run_work_df, include_method=False)
-    run_work_df["model_selector"] = run_work_df["method_name"].fillna("unknown").astype(str)
-    if "model_name" in run_work_df.columns:
-        run_work_df["model_selector"] = (
-            run_work_df["model_selector"].astype(str)
-            + " | "
-            + run_work_df["model_name"].fillna("unknown").astype(str)
-        )
-
-    run_id_cols = [
-        col
-        for col in (
-            "method_name",
-            "source_name",
-            "model_name",
-            "experiment",
-            "config_slug",
-            "chunk_size",
-            "chunk_overlap",
-            "include_title_chunk",
-            "text_source",
-            "evaluated_at",
-            "file_source",
-            "run_label",
-            "model_selector",
-        )
-        if col in run_work_df.columns
-    ]
-
-    run_work_df = run_work_df.sort_values(
-        run_id_cols + ["query_id", "score"],
-        ascending=[True] * len(run_id_cols) + [True, False],
-    )
-    run_work_df["rank"] = run_work_df.groupby(run_id_cols + ["query_id"], dropna=False)["score"].rank(
-        method="first",
-        ascending=False,
-    )
-    run_join_cols = run_id_cols if "source_name" in run_id_cols else run_id_cols + ["source_name"]
-
-    relevant_df = qrels_long_df.copy()
-    relevant_df["relevance"] = pd.to_numeric(relevant_df["relevance"], errors="coerce").fillna(0)
-    relevant_df = relevant_df[relevant_df["relevance"] > 0].copy()
-
-    hit_df = run_work_df.merge(
-        relevant_df[["query_id", "doc_id", "qrels_query_type", "source_name"]],
-        on=["query_id", "doc_id", "source_name"],
-        how="inner",
-    )
-    best_hit_df = (
-        hit_df.groupby(run_join_cols + ["query_id", "qrels_query_type"], dropna=False)["rank"]
-        .min()
-        .reset_index()
-    )
-    best_hit_df["RR@20"] = best_hit_df["rank"].apply(
-        lambda value: 1.0 / value if pd.notna(value) and value <= 20 else 0.0
-    )
-
-    query_catalog_df = relevant_df[["query_id", "qrels_query_type", "source_name"]].drop_duplicates()
-    run_catalog_df = run_work_df[run_join_cols].drop_duplicates()
-    all_pairs_df = run_catalog_df.merge(query_catalog_df, on="source_name", how="inner")
-    query_rr_df = all_pairs_df.merge(
-        best_hit_df[run_join_cols + ["query_id", "qrels_query_type", "RR@20"]],
-        on=run_join_cols + ["query_id", "qrels_query_type"],
-        how="left",
-    )
-    query_rr_df["RR@20"] = query_rr_df["RR@20"].fillna(0.0)
-
-    source_options = sorted(query_rr_df["source_name"].dropna().astype(str).unique().tolist())
-    if not source_options:
-        return
-    chosen_source = source_name or source_options[0]
-    sub = query_rr_df[query_rr_df["source_name"].astype(str) == str(chosen_source)].copy()
-    if query_category != "__all__":
-        sub = sub[sub["qrels_query_type"].astype(str) == str(query_category)].copy()
-    if selected_models:
-        sub = sub[sub["model_selector"].isin(selected_models)].copy()
-    if sub.empty:
-        return
-
-    pivot = sub.pivot_table(
-        index="query_id",
-        columns="model_selector",
-        values="RR@20",
-        aggfunc="mean",
-        fill_value=0.0,
-    )
-    if pivot.empty:
-        return
-
-    save_table(pivot.reset_index(), output_dir / "query_model_matrix.csv")
-    fig_width = max(8, 1.4 * len(pivot.columns))
-    fig_height = max(6, 0.45 * len(pivot.index))
+    fig_width = max(10, len(x_labels) * 0.45)
+    fig_height = 6
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-    image = ax.imshow(pivot.values, aspect="auto", cmap="viridis", vmin=0, vmax=1)
-    ax.set_title(f"Per-query RR@20 matrix | source={chosen_source} | category={query_category}")
-    ax.set_xlabel("model / method")
-    ax.set_ylabel("query")
-    ax.set_xticks(range(len(pivot.columns)))
-    ax.set_xticklabels(pivot.columns, rotation=35, ha="right")
-    ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index)
-    color_bar = fig.colorbar(image, ax=ax)
-    color_bar.set_label("RR@20")
-    fig.tight_layout()
-    save_figure(fig, output_dir / "query_model_matrix.png")
+
+    ax.bar(range(len(totals)), totals.to_numpy(), color="#1a9850", edgecolor="#0f5c30", linewidth=0.6)
+    ax.set_xticks(range(len(totals)))
+    ax.set_xticklabels(totals.index.tolist(), rotation=60, ha="right", fontsize=8)
+    ax.set_ylabel("Total hits")
+    ax.set_xlabel("Run")
+    ax.set_title(title)
+    ax.set_ylim(0, max(1, int(totals.max())) * 1.1)
+    ax.grid(axis="y", color="#d9d9d9", linewidth=0.8)
+    ax.set_axisbelow(True)
+
+    fig.subplots_adjust(left=0.08, bottom=0.42, right=0.98, top=0.9)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Generate evaluation plots without the notebook.")
+def _load_experiment_run_rows(experiments_root: Path) -> pd.DataFrame:
+    frames: List[pd.DataFrame] = []
+    for path in sorted(experiments_root.rglob("results/runs/**/evaluation_run.csv")):
+        df = _read_appended_run_csv(path)
+        if df.empty:
+            continue
+        df["source_file"] = str(path.resolve())
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    if "evaluated_at_cet" in combined.columns:
+        combined["evaluated_at_cet"] = pd.to_datetime(combined["evaluated_at_cet"], errors="coerce")
+    return combined
+
+
+def _build_run_label(row: pd.Series) -> str:
+    parts = []
+    method = str(row.get("method", "")).strip()
+    experiment = str(row.get("experiment", "")).strip()
+    config_slug = str(row.get("config_slug", "")).strip()
+
+    if method:
+        parts.append(method)
+    if experiment:
+        parts.append(experiment)
+    if config_slug:
+        parts.append(config_slug)
+    elif row.get("evaluated_at_cet") is not pd.NaT and pd.notna(row.get("evaluated_at_cet")):
+        parts.append(pd.Timestamp(row["evaluated_at_cet"]).strftime("%Y-%m-%d %H:%M"))
+    return " | ".join(parts) if parts else "run"
+
+
+def _prepare_experiment_runs(experiment_runs_df: pd.DataFrame) -> pd.DataFrame:
+    if experiment_runs_df.empty:
+        return experiment_runs_df
+
+    experiment_runs_df = experiment_runs_df.copy()
+    if "model_name" in experiment_runs_df.columns:
+        model_name = experiment_runs_df["model_name"].fillna("").astype(str).str.strip()
+    else:
+        model_name = pd.Series([""] * len(experiment_runs_df), index=experiment_runs_df.index)
+    experiment_runs_df["model_key"] = model_name.where(model_name != "", experiment_runs_df["method"].astype(str))
+    experiment_runs_df["run_label"] = experiment_runs_df.apply(_build_run_label, axis=1)
+    return experiment_runs_df
+
+
+def _ordered_run_labels(run_df: pd.DataFrame) -> List[str]:
+    run_order_df = (
+        run_df[["run_label", "evaluated_at_cet", "model_key", "method", "experiment", "config_slug"]]
+        .drop_duplicates()
+        .sort_values(
+            by=["model_key", "evaluated_at_cet", "method", "experiment", "config_slug"],
+            kind="stable",
+            na_position="last",
+        )
+    )
+    return run_order_df["run_label"].tolist()
+
+
+def _write_model_run_matrices(qrels_df: pd.DataFrame, experiment_runs_df: pd.DataFrame, output_dir: Path) -> List[Path]:
+    if experiment_runs_df.empty:
+        return []
+
+    experiment_runs_df = _prepare_experiment_runs(experiment_runs_df)
+
+    written_paths: List[Path] = []
+    for model_key, model_df in experiment_runs_df.groupby("model_key", sort=True):
+        run_labels = _ordered_run_labels(model_df)
+        matrix_df = _build_named_hit_matrix(qrels_df, model_df, run_labels)
+        model_slug = _slugify(str(model_key))
+
+        csv_output_path = output_dir / f"query_run_hit_matrix__{model_slug}.csv"
+        png_output_path = output_dir / f"query_run_hit_matrix__{model_slug}.png"
+        matrix_df.to_csv(csv_output_path, index=False)
+        _plot_hit_matrix(
+            matrix_df,
+            run_labels,
+            png_output_path,
+            title=f"Relevant document present in results: {model_key}",
+        )
+        written_paths.extend([csv_output_path, png_output_path])
+
+    return written_paths
+
+
+def _write_all_runs_matrix(qrels_df: pd.DataFrame, experiment_runs_df: pd.DataFrame, output_dir: Path) -> List[Path]:
+    if experiment_runs_df.empty:
+        return []
+
+    experiment_runs_df = _prepare_experiment_runs(experiment_runs_df)
+    run_labels = _ordered_run_labels(experiment_runs_df)
+    matrix_df = _build_named_hit_matrix(qrels_df, experiment_runs_df, run_labels)
+
+    csv_output_path = output_dir / "query_run_hit_matrix__all_runs.csv"
+    png_output_path = output_dir / "query_run_hit_matrix__all_runs.png"
+    totals_csv_output_path = output_dir / "run_total_hits__all_runs.csv"
+    totals_png_output_path = output_dir / "run_total_hits__all_runs.png"
+    matrix_df.to_csv(csv_output_path, index=False)
+    _plot_hit_matrix(
+        matrix_df,
+        run_labels,
+        png_output_path,
+        title="Relevant document present in results: all experiment runs",
+    )
+    totals_df = pd.DataFrame(
+        {
+            "run_label": run_labels,
+            "total_hits": [int(matrix_df[label].sum()) for label in run_labels],
+        }
+    ).sort_values("total_hits", ascending=False, kind="stable")
+    totals_df.to_csv(totals_csv_output_path, index=False)
+    _plot_total_hits_bar_chart(
+        matrix_df,
+        run_labels,
+        totals_png_output_path,
+        title="Total hits across all queries for each run",
+    )
+    return [csv_output_path, png_output_path, totals_csv_output_path, totals_png_output_path]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Plot a red/green query-method hit matrix from evaluation_run.csv."
+    )
+    parser.add_argument(
+        "--run-csv",
+        default=str(EVALUATION_DIR / "evaluation_run.csv"),
+        help="Path to evaluation_run.csv.",
+    )
     parser.add_argument(
         "--output-dir",
-        default=str(DEFAULT_OUTPUT_DIR),
-        help=f"Directory for generated plots/tables. Default: {DEFAULT_OUTPUT_DIR}",
+        default=str(EVALUATION_DIR / "plots"),
+        help="Directory where the plot and CSV are written.",
     )
     parser.add_argument(
-        "--compare-scope-field",
-        choices=("source_name", "model_name"),
-        help="Scope field for the compare-runs-in-scope plot.",
+        "--qrels-source",
+        choices=["google_sheet", "form_submissions"],
+        default="google_sheet",
+        help="Qrels source used to decide which document is relevant for each query.",
     )
     parser.add_argument(
-        "--compare-scope-value",
-        help="Specific source/model value for the compare-runs-in-scope plot.",
+        "--qrels-path",
+        help="Optional qrels CSV path when --qrels-source=form_submissions.",
     )
     parser.add_argument(
-        "--compare-category",
-        default="__all__",
-        help="Query category for compare-runs-in-scope. Use __all__ for overall scores.",
+        "--methods",
+        help="Optional comma-separated method list. Default: all methods found in the run CSV.",
     )
     parser.add_argument(
-        "--model-selector",
-        help="Specific model selector for the model-differences and query-type-between-runs plots.",
+        "--experiments-root",
+        default=str(EVALUATION_DIR / "experiments"),
+        help="Root directory scanned for experiment run CSVs used for per-model run matrices.",
     )
-    parser.add_argument(
-        "--model-x-axis",
-        help="X-axis field for the model-differences plot.",
-    )
-    parser.add_argument(
-        "--model-metrics",
-        help="Comma-separated metrics for the model-differences plot.",
-    )
-    parser.add_argument(
-        "--run-axis",
-        help="Run axis for the query-type-between-runs plot.",
-    )
-    parser.add_argument(
-        "--matrix-source",
-        help="Source for the query-model matrix plot.",
-    )
-    parser.add_argument(
-        "--matrix-category",
-        default="__all__",
-        help="Query category for the query-model matrix plot.",
-    )
-    parser.add_argument(
-        "--matrix-models",
-        help="Comma-separated model selectors to include in the query-model matrix plot.",
-    )
-    return parser
-
-
-def main() -> int:
-    parser = build_parser()
     args = parser.parse_args()
+
+    run_csv_path = Path(args.run_csv).resolve()
     output_dir = Path(args.output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    experiments_root = Path(args.experiments_root).resolve()
+    selected_methods = args.methods.split(",") if args.methods else None
 
-    summary_df, results_df, run_df = prepare_frames()
+    run_df = _read_appended_run_csv(run_csv_path)
+    if run_df.empty:
+        raise ValueError(f"No run rows found in {run_csv_path}")
+    if "method" not in run_df.columns:
+        raise ValueError(f"{run_csv_path} does not contain a 'method' column")
 
-    plot_average_score_over_time(summary_df, output_dir)
-    plot_best_run_per_method(summary_df, output_dir)
-    plot_query_type_profile(results_df, output_dir)
-    plot_model_differences(
-        summary_df,
-        results_df,
-        output_dir,
-        model_selector=args.model_selector,
-        x_axis=args.model_x_axis,
-        metrics=[value.strip() for value in args.model_metrics.split(",") if value.strip()]
-        if args.model_metrics
-        else None,
-    )
-    plot_query_type_between_runs(
-        results_df,
-        output_dir,
-        model_selector=args.model_selector,
-        run_axis=args.run_axis,
-    )
-    plot_runs_in_scope(
-        summary_df,
-        results_df,
-        output_dir,
-        scope_field=args.compare_scope_field,
-        scope_value=args.compare_scope_value,
-        query_category=args.compare_category,
-    )
-    plot_query_model_matrix(
-        run_df,
-        output_dir,
-        source_name=args.matrix_source,
-        query_category=args.matrix_category,
-        selected_models=[value.strip() for value in args.matrix_models.split(",") if value.strip()]
-        if args.matrix_models
-        else None,
-    )
+    latest_runs_df = _pick_latest_run_per_method(run_df, selected_methods)
+    if latest_runs_df.empty:
+        raise ValueError("No matching methods found in the run CSV")
 
-    print(f"Saved plots and tables to {output_dir}")
-    return 0
+    qrels_df = _build_qrels_table(args.qrels_source, args.qrels_path)
+    matrix_df = _build_hit_matrix(qrels_df, latest_runs_df)
+
+    methods = _ordered_methods(latest_runs_df["method"].dropna().astype(str).tolist())
+    csv_output_path = output_dir / "query_method_hit_matrix.csv"
+    png_output_path = output_dir / "query_method_hit_matrix.png"
+
+    matrix_df.to_csv(csv_output_path, index=False)
+    _plot_hit_matrix(matrix_df, methods, png_output_path, title="Relevant document present in results")
+
+    written_paths = [csv_output_path, png_output_path]
+    experiment_runs_df = _load_experiment_run_rows(experiments_root)
+    written_paths.extend(_write_all_runs_matrix(qrels_df, experiment_runs_df, output_dir))
+    written_paths.extend(_write_model_run_matrices(qrels_df, experiment_runs_df, output_dir))
+
+    for path in written_paths:
+        print(f"Wrote {path}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

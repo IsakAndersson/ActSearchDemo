@@ -239,6 +239,7 @@ yarn-error.log*
 # Ignore the files in the output directory
 **/output/
 **/plots/
+**/.matplotlib/
 
 requirements_lock.txt
 
