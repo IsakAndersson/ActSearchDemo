@@ -7,11 +7,18 @@ const SESSION_KEY = "actsearch-authenticated";
 const USER_NAME_KEY = "actsearch-user-name";
 const DEMO_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
-const METHODS = ["bm25", "dense_e5", "hybrid_e5"] as const;
+const METHODS = [
+  "bm25_query",
+  "bm25_information_need",
+  "dense_e5_query",
+  "dense_e5_information_need",
+  "hybrid_e5_query",
+  "hybrid_e5_information_need",
+] as const;
 const DEFAULT_TOP_K = 5;
 
 type SearchMethod = (typeof METHODS)[number];
-type SearchApiMethod = SearchMethod | "evaluation_form_search";
+type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
 type RelevantScope = "whole_document" | "part_of_document";
 
@@ -47,6 +54,17 @@ type DummyDoc = {
   category: string;
   text: string;
 };
+
+const METHOD_LABELS: Record<SearchMethod, string> = {
+  bm25_query: "BM25 via query",
+  bm25_information_need: "BM25 via informationsbehov",
+  dense_e5_query: "Dense E5 via query",
+  dense_e5_information_need: "Dense E5 via informationsbehov",
+  hybrid_e5_query: "Hybrid E5 via query",
+  hybrid_e5_information_need: "Hybrid E5 via informationsbehov",
+};
+
+const getMethodLabel = (method: SearchMethod): string => METHOD_LABELS[method];
 
 const getResultTitle = (result: SearchResult): string => {
   const title = result.metadata?.title;
@@ -111,9 +129,12 @@ const getResultChunkText = (result: SearchResult): string => {
 };
 
 const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
-  bm25: [],
-  dense_e5: [],
-  hybrid_e5: [],
+  bm25_query: [],
+  bm25_information_need: [],
+  dense_e5_query: [],
+  dense_e5_information_need: [],
+  hybrid_e5_query: [],
+  hybrid_e5_information_need: [],
 };
 
 const EMPTY_PIPELINE: SearchPipeline = {
@@ -211,9 +232,12 @@ const DUMMY_DOCS: DummyDoc[] = [
 ];
 
 const DUMMY_DOC_ORDER_BY_METHOD: Record<SearchMethod, string[]> = {
-  bm25: ["dummy-1", "dummy-2", "dummy-3", "dummy-4", "dummy-5", "dummy-6", "dummy-7", "dummy-8", "dummy-9", "dummy-10", "dummy-11", "dummy-12"],
-  dense_e5: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
-  hybrid_e5: ["dummy-3", "dummy-8", "dummy-1", "dummy-10", "dummy-2", "dummy-4", "dummy-12", "dummy-5", "dummy-6", "dummy-9", "dummy-7", "dummy-11"],
+  bm25_query: ["dummy-1", "dummy-2", "dummy-3", "dummy-4", "dummy-5", "dummy-6", "dummy-7", "dummy-8", "dummy-9", "dummy-10", "dummy-11", "dummy-12"],
+  bm25_information_need: ["dummy-2", "dummy-1", "dummy-4", "dummy-6", "dummy-3", "dummy-5", "dummy-8", "dummy-7", "dummy-9", "dummy-10", "dummy-12", "dummy-11"],
+  dense_e5_query: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
+  dense_e5_information_need: ["dummy-4", "dummy-8", "dummy-3", "dummy-1", "dummy-6", "dummy-2", "dummy-12", "dummy-9", "dummy-5", "dummy-11", "dummy-10", "dummy-7"],
+  hybrid_e5_query: ["dummy-3", "dummy-8", "dummy-1", "dummy-10", "dummy-2", "dummy-4", "dummy-12", "dummy-5", "dummy-6", "dummy-9", "dummy-7", "dummy-11"],
+  hybrid_e5_information_need: ["dummy-4", "dummy-3", "dummy-8", "dummy-6", "dummy-1", "dummy-2", "dummy-12", "dummy-9", "dummy-5", "dummy-10", "dummy-7", "dummy-11"],
 };
 
 const hashString = (value: string): number => {
@@ -260,13 +284,20 @@ const buildDummyMethodResults = (
   });
 };
 
-const runDummySearch = async (query: string, topK: number): Promise<SearchResultsByMethod> => {
+const runDummySearch = async (
+  query: string,
+  informationNeed: string,
+  topK: number,
+): Promise<SearchResultsByMethod> => {
   await new Promise((resolve) => setTimeout(resolve, 180));
 
   return {
-    bm25: buildDummyMethodResults("bm25", query, topK),
-    dense_e5: buildDummyMethodResults("dense_e5", query, topK),
-    hybrid_e5: buildDummyMethodResults("hybrid_e5", query, topK),
+    bm25_query: buildDummyMethodResults("bm25_query", query, topK),
+    bm25_information_need: buildDummyMethodResults("bm25_information_need", informationNeed, topK),
+    dense_e5_query: buildDummyMethodResults("dense_e5_query", query, topK),
+    dense_e5_information_need: buildDummyMethodResults("dense_e5_information_need", informationNeed, topK),
+    hybrid_e5_query: buildDummyMethodResults("hybrid_e5_query", query, topK),
+    hybrid_e5_information_need: buildDummyMethodResults("hybrid_e5_information_need", informationNeed, topK),
   };
 };
 
@@ -482,7 +513,7 @@ export default function DemoSearchPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [participantName, setParticipantName] = useState("");
-  const canSubmit = query.trim().length > 0;
+  const canSubmit = query.trim().length > 0 && informationNeed.trim().length > 0;
   const hasSubmittedQuery = submittedQuery.trim().length > 0;
   const isAdminUser = participantName === "admin" || participantName === "Admin";
 
@@ -540,7 +571,11 @@ export default function DemoSearchPage() {
       };
 
       if (useDummyData) {
-        const resultsByMethod = await runDummySearch(trimmedQuery, DEFAULT_TOP_K);
+        const resultsByMethod = await runDummySearch(
+          trimmedQuery,
+          informationNeed.trim(),
+          DEFAULT_TOP_K,
+        );
         payload = {
           errors: [],
           results_by_method: resultsByMethod,
@@ -871,8 +906,8 @@ export default function DemoSearchPage() {
             <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
                 {useDummyData
-                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `dense_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
-                  : "Varje sökning anropar `bm25`, `dense_e5` och `hybrid_e5` för både sökfrasen och informationsbehovet, samlar deras topp 5-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
+                  ? "Varje sökning använder sex lokala dummykörningar: tre metoder gånger två textfält, därefter poolas upp till 30 träffar, dubletter tas bort och ordningen randomiseras."
+                  : "Varje sökning anropar sex backend-körningar: `bm25`, `dense_e5` och `hybrid_e5` för både sökfrasen och informationsbehovet. Därefter poolas upp till 30 träffar, dubletter tas bort och ordningen randomiseras."}
               </p>
             </div>
           ) : null}
@@ -1004,7 +1039,7 @@ export default function DemoSearchPage() {
               {METHODS.map((method) => (
                 <div className="rounded-2xl border border-[#d9ddd4] bg-white p-4" key={`pool-list-${method}`}>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-                    {method}
+                    {getMethodLabel(method)}
                   </p>
                   {pipeline.byMethod[method].length > 0 ? (
                     <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-[#465048]">
@@ -1077,7 +1112,7 @@ export default function DemoSearchPage() {
                   <span className="block text-xs uppercase tracking-[0.16em] text-[#7d7568]">
                     Pool före dedupe
                   </span>
-                  <span>{pipeline.pooledBeforeDedup.length} resultat</span>
+                        <span>{pipeline.pooledBeforeDedup.length} resultat</span>
                 </div>
                 <div className="rounded-2xl bg-[#f8f5ee] px-4 py-3">
                   <span className="block text-xs uppercase tracking-[0.16em] text-[#7d7568]">
@@ -1304,7 +1339,9 @@ export default function DemoSearchPage() {
                             className="rounded-full border border-[#d9ddd4] px-3 py-1 uppercase tracking-[0.14em] text-[#556055]"
                             key={`${result.source_path}-${method}`}
                           >
-                            {method}
+                            {typeof method === "string" && METHODS.includes(method as SearchMethod)
+                              ? getMethodLabel(method as SearchMethod)
+                              : method}
                           </span>
                         ))}
                       </div>
@@ -1319,7 +1356,7 @@ export default function DemoSearchPage() {
                               className="rounded-full border border-[#d9ddd4] px-3 py-1 text-[#465048]"
                               key={`${result.source_path}-score-${method}`}
                             >
-                              {method}:{" "}
+                              {getMethodLabel(method)}:{" "}
                               {typeof scoreByMethod[method] === "number"
                                 ? scoreByMethod[method]?.toFixed(2)
                                 : "-"}
@@ -1338,7 +1375,7 @@ export default function DemoSearchPage() {
                               className="rounded-full border border-[#d9ddd4] px-3 py-1 text-[#465048]"
                               key={`${result.source_path}-rank-${method}`}
                             >
-                              {method}:{" "}
+                              {getMethodLabel(method)}:{" "}
                               {typeof rankByMethod[method] === "number" ? `#${rankByMethod[method]}` : "-"}
                             </span>
                           ))}
@@ -1405,7 +1442,7 @@ export default function DemoSearchPage() {
                 {METHODS.map((method) => (
                   <div className="rounded-2xl bg-white p-4" key={method}>
                     <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-                      {method}
+                      {getMethodLabel(method)}
                     </p>
                     <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-5 text-[#465048]">
                       {JSON.stringify(pipeline.byMethod[method], null, 2)}
