@@ -322,6 +322,21 @@ def _best_chunk_per_document(results: List[Dict[str, Any]], top_k: int) -> List[
     return ranked[:top_k]
 
 
+def _merge_ranked_results(*result_lists: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen_keys: set[Tuple[str, int]] = set()
+
+    for results in result_lists:
+        for result in results:
+            key = _result_key(result)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            merged.append(result)
+
+    return merged
+
+
 def _safe_int(value: str, fallback: int) -> int:
     try:
         return int(value)
@@ -627,6 +642,7 @@ def search() -> Any:
     search_id = str(uuid4())
     method = str(payload.get("method", "bm25")).lower()
     query = str(payload.get("query") or "").strip()
+    information_need = str(payload.get("information_need") or "").strip()
     user_name = _extract_user_name(payload)
 
     defaults = _defaults_from_payload(payload)
@@ -726,30 +742,37 @@ def search() -> Any:
                 errors.append(f"Docplus live search failed: {exc}")
         elif method == "evaluation_form_search":
             results_by_method = {}
+            query_bm25_results: List[Dict[str, Any]] = []
+            information_need_bm25_results: List[Dict[str, Any]] = []
+            query_dense_results: List[Dict[str, Any]] = []
+            information_need_dense_results: List[Dict[str, Any]] = []
             try:
-                results_by_method["bm25"] = bm25_search(
+                query_bm25_results = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
                     use_cleaned_text=bm25_use_cleaned_text,
                     use_chunking=bm25_use_chunking,
                 )
+                if information_need:
+                    information_need_bm25_results = bm25_search(
+                        parsed_dir=defaults["parsed_dir"],
+                        query=information_need,
+                        top_k=top_k,
+                        use_cleaned_text=bm25_use_cleaned_text,
+                        use_chunking=bm25_use_chunking,
+                    )
+                results_by_method["bm25"] = _merge_ranked_results(
+                    query_bm25_results,
+                    information_need_bm25_results,
+                )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
             try:
-                results_by_method["docplus"] = _docplus_live_results(
-                    query=query,
-                    top_k=top_k,
-                )
-                successful_methods += 1
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"Docplus live search failed: {exc}")
-                results_by_method["docplus"] = []
-            try:
                 dense_candidate_k = max(top_k, 100)
-                results_by_method["dense_e5"] = query_index(
+                query_dense_results = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
@@ -757,19 +780,52 @@ def search() -> Any:
                     top_k=dense_candidate_k,
                     device_preference=defaults["device"],
                 )
-                results_by_method["dense_e5"] = _best_chunk_per_document(
-                    results_by_method["dense_e5"],
+                query_dense_results = _best_chunk_per_document(
+                    query_dense_results,
                     top_k=top_k,
+                )
+                if information_need:
+                    information_need_dense_results = query_index(
+                        index_path=defaults["e5_index_path"],
+                        metadata_path=defaults["e5_metadata_path"],
+                        query=information_need,
+                        model_name=defaults["e5_model_name"],
+                        top_k=dense_candidate_k,
+                        device_preference=defaults["device"],
+                    )
+                    information_need_dense_results = _best_chunk_per_document(
+                        information_need_dense_results,
+                        top_k=top_k,
+                    )
+                results_by_method["dense_e5"] = _merge_ranked_results(
+                    query_dense_results,
+                    information_need_dense_results,
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["dense_e5"] = []
-            results_by_method["hybrid_e5"] = _rrf_hybrid(
-                bm25_results=results_by_method.get("bm25", []),
-                e5_results=results_by_method.get("dense_e5", []),
-                top_k=top_k,
-            )
+            try:
+                query_hybrid_results = _rrf_hybrid(
+                    bm25_results=query_bm25_results,
+                    e5_results=query_dense_results,
+                    top_k=top_k,
+                )
+                information_need_hybrid_results: List[Dict[str, Any]] = []
+                if information_need:
+                    information_need_hybrid_results = _rrf_hybrid(
+                        bm25_results=information_need_bm25_results,
+                        e5_results=information_need_dense_results,
+                        top_k=top_k,
+                    )
+                results_by_method["hybrid_e5"] = _merge_ranked_results(
+                    query_hybrid_results,
+                    information_need_hybrid_results,
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"Hybrid E5 search failed: {exc}")
+                results_by_method["hybrid_e5"] = []
         elif method == "all":
             results_by_method = {}
             try:

@@ -7,8 +7,8 @@ const SESSION_KEY = "actsearch-authenticated";
 const USER_NAME_KEY = "actsearch-user-name";
 const DEMO_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
-const METHODS = ["bm25", "docplus", "dense_e5", "hybrid_e5"] as const;
-const DEFAULT_TOP_K = 10;
+const METHODS = ["bm25", "dense_e5", "hybrid_e5"] as const;
+const DEFAULT_TOP_K = 5;
 
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = SearchMethod | "evaluation_form_search";
@@ -19,8 +19,13 @@ type SearchResult = {
   score?: number;
   chunk_id?: number;
   text?: string;
+  preview_text?: string;
   chunk_text?: string;
   chunk_type?: string;
+  section_heading?: string;
+  section_index?: number;
+  section_level?: number;
+  section_text?: string;
   metadata?: Record<string, unknown>;
   source_path?: string;
   result_method?: SearchMethod;
@@ -53,9 +58,60 @@ const getResultUrl = (result: SearchResult): string => {
   return typeof sourceUrl === "string" ? sourceUrl : "#";
 };
 
+const getStringValue = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getMetadataValue = (
+  metadata: Record<string, unknown> | undefined,
+  keys: string[],
+): string | undefined => {
+  if (!metadata) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const value = getStringValue(metadata[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const getResultSectionHeading = (result: SearchResult): string | undefined => {
+  const directHeading = getStringValue(result.section_heading);
+  if (directHeading) {
+    return directHeading;
+  }
+  return getMetadataValue(result.metadata, ["section_heading"]);
+};
+
+const getResultChunkText = (result: SearchResult): string => {
+  const sectionText = getStringValue(result.section_text);
+  if (sectionText) {
+    return sectionText;
+  }
+  const metadataSectionText = getMetadataValue(result.metadata, ["section_text"]);
+  if (metadataSectionText) {
+    return metadataSectionText;
+  }
+  const chunk = getStringValue(result.chunk_text);
+  if (chunk) {
+    return chunk;
+  }
+  const preview = getStringValue(result.preview_text);
+  if (preview) {
+    return preview;
+  }
+  return getStringValue(result.text) ?? "";
+};
+
 const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
   bm25: [],
-  docplus: [],
   dense_e5: [],
   hybrid_e5: [],
 };
@@ -156,7 +212,6 @@ const DUMMY_DOCS: DummyDoc[] = [
 
 const DUMMY_DOC_ORDER_BY_METHOD: Record<SearchMethod, string[]> = {
   bm25: ["dummy-1", "dummy-2", "dummy-3", "dummy-4", "dummy-5", "dummy-6", "dummy-7", "dummy-8", "dummy-9", "dummy-10", "dummy-11", "dummy-12"],
-  docplus: ["dummy-3", "dummy-1", "dummy-8", "dummy-2", "dummy-10", "dummy-4", "dummy-6", "dummy-9", "dummy-5", "dummy-7", "dummy-12", "dummy-11"],
   dense_e5: ["dummy-8", "dummy-3", "dummy-1", "dummy-10", "dummy-2", "dummy-12", "dummy-4", "dummy-5", "dummy-9", "dummy-11", "dummy-6", "dummy-7"],
   hybrid_e5: ["dummy-3", "dummy-8", "dummy-1", "dummy-10", "dummy-2", "dummy-4", "dummy-12", "dummy-5", "dummy-6", "dummy-9", "dummy-7", "dummy-11"],
 };
@@ -210,7 +265,6 @@ const runDummySearch = async (query: string, topK: number): Promise<SearchResult
 
   return {
     bm25: buildDummyMethodResults("bm25", query, topK),
-    docplus: buildDummyMethodResults("docplus", query, topK),
     dense_e5: buildDummyMethodResults("dense_e5", query, topK),
     hybrid_e5: buildDummyMethodResults("hybrid_e5", query, topK),
   };
@@ -500,6 +554,7 @@ export default function DemoSearchPage() {
           body: JSON.stringify({
             method: "evaluation_form_search" as SearchApiMethod,
             query: trimmedQuery,
+            information_need: informationNeed.trim(),
             top_k: DEFAULT_TOP_K,
           }),
         });
@@ -816,8 +871,8 @@ export default function DemoSearchPage() {
             <div className="mb-8">
               <p className="max-w-3xl text-sm leading-6 text-[#5e655e]">
                 {useDummyData
-                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `docplus`, `dense_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
-                  : "Varje sökning anropar `bm25`, `docplus`, `dense_e5` och `hybrid_e5`, samlar deras topp 10-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
+                  ? "Varje sökning använder lokala dummyfunktioner för `bm25`, `dense_e5` och `hybrid_e5`, tar bort dubletter och randomiserar ordningen innan visning."
+                  : "Varje sökning anropar `bm25`, `dense_e5` och `hybrid_e5` för både sökfrasen och informationsbehovet, samlar deras topp 5-resultat från backend, tar bort dubletter och randomiserar ordningen innan visning."}
               </p>
             </div>
           ) : null}
@@ -1075,6 +1130,11 @@ export default function DemoSearchPage() {
                       >
                         <div className="min-w-0 lg:col-start-1">
                           <h2 className="font-serif text-lg text-[#203327]">{getResultTitle(result)}</h2>
+                          {getResultSectionHeading(result) ? (
+                            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6f7b72]">
+                              {getResultSectionHeading(result)}
+                            </p>
+                          ) : null}
                           <a
                             className="mt-4 inline-flex break-all text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
                             href={getResultUrl(result)}
@@ -1083,6 +1143,14 @@ export default function DemoSearchPage() {
                           >
                             Öppna länk{" "}<span aria-hidden="true">{"\u2197"}</span>
                           </a>
+                          <div className="mt-5 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4">
+                            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
+                              Förhandsvisning av underkapitel
+                            </p>
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#314135]">
+                              {getResultChunkText(result)}
+                            </p>
+                          </div>
                         </div>
 
                         <fieldset className="w-full max-w-[10.5rem] self-start lg:col-start-2">
@@ -1277,7 +1345,7 @@ export default function DemoSearchPage() {
                         </div>
                       </div>
 
-                      <p className="leading-6">{String(result.chunk_text ?? result.text ?? "")}</p>
+                      <p className="leading-6">{getResultChunkText(result)}</p>
 
                       <pre className="overflow-x-auto whitespace-pre-wrap text-xs leading-5 text-[#465048]">
                         {JSON.stringify(result, null, 2)}
