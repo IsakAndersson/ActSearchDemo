@@ -133,7 +133,6 @@ def build_bm25_corpus(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
-    use_cleaned_text: bool,
     use_chunking: bool,
 ) -> Tuple[List[ChunkRecord], List[Dict[str, int]], List[int], Dict[str, int], float]:
     chunks: List[ChunkRecord] = []
@@ -144,13 +143,6 @@ def build_bm25_corpus(
     chunk_id = 0
 
     for payload in iter_parsed_documents(parsed_dir):
-        text_source_key = "cleaned_text" if use_cleaned_text else "text"
-        fallback_key = "text" if use_cleaned_text else "cleaned_text"
-        primary_text = payload.get(text_source_key)
-        fallback_text = payload.get(fallback_key)
-        text = primary_text if isinstance(primary_text, str) else ""
-        if not text and isinstance(fallback_text, str):
-            text = fallback_text
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
 
@@ -166,63 +158,104 @@ def build_bm25_corpus(
                     preview_text=title,
                 )
             )
-        if text.strip():
-            body_metadata = {**metadata, "title": title} if title else metadata
-            if use_chunking:
-                sections = get_document_sections(payload, fallback_title=title)
-                if sections:
-                    for section in sections:
-                        section_text = section["cleaned_text"] if use_cleaned_text else section["text"]
-                        if not isinstance(section_text, str) or not section_text.strip():
-                            continue
-                        heading = str(section.get("heading") or title or "").strip()
-                        section_metadata = {
-                            **body_metadata,
-                            "section_heading": heading,
-                            "section_index": section.get("index", 0),
-                            "section_level": section.get("level", 1),
-                            "section_text": section_text,
-                        }
-                        section_chunks = chunk_text(section_text, max_chars=max_chars, overlap=overlap)
-                        for preview_text in section_chunks:
-                            chunk_text_value = (
-                                f"{heading}\n\n{preview_text}"
-                                if heading and preview_text != heading
-                                else preview_text
-                            )
-                            candidate_chunks.append(
-                                ChunkRecord(
-                                    chunk_id=-1,
-                                    source_path=payload["path"],
-                                    text=chunk_text_value,
-                                    metadata=section_metadata,
-                                    chunk_type="section",
-                                    preview_text=preview_text,
-                                )
-                            )
-                else:
-                    for preview_text in chunk_text(text, max_chars=max_chars, overlap=overlap):
+        body_metadata = {**metadata, "title": title} if title else metadata
+        sections = get_document_sections(payload, fallback_title=title)
+        if use_chunking:
+            if sections:
+                for section in sections:
+                    section_text = section["text"]
+                    heading = str(section.get("heading") or title or "").strip()
+                    section_metadata = {
+                        **body_metadata,
+                        "section_heading": heading,
+                        "section_index": section.get("index", 0),
+                        "section_level": section.get("level", 1),
+                        "section_page": section.get("page"),
+                        "section_path": section.get("path") or [heading],
+                        "section_path_text": section.get("path_text") or heading,
+                        "section_title": heading,
+                        "section_text": section_text,
+                    }
+                    if heading:
+                        title_chunk_text = (
+                            f"{title}\n\n{heading}"
+                            if title and heading != title
+                            else heading
+                        )
                         candidate_chunks.append(
                             ChunkRecord(
                                 chunk_id=-1,
                                 source_path=payload["path"],
-                                text=preview_text,
-                                metadata=body_metadata,
-                                chunk_type="body",
+                                text=title_chunk_text,
+                                metadata=section_metadata,
+                                chunk_type="section_title",
+                                preview_text=heading,
+                            )
+                        )
+                    if not isinstance(section_text, str) or not section_text.strip():
+                        continue
+                    section_chunks = chunk_text(section_text, max_chars=max_chars, overlap=overlap)
+                    for chunk_index, preview_text in enumerate(section_chunks):
+                        chunk_text_value = preview_text
+                        if heading and chunk_index == 0:
+                            chunk_text_value = f"{heading}\n\n{preview_text}"
+                        candidate_chunks.append(
+                            ChunkRecord(
+                                chunk_id=-1,
+                                source_path=payload["path"],
+                                text=chunk_text_value,
+                                metadata=section_metadata,
+                                chunk_type="section",
                                 preview_text=preview_text,
                             )
                         )
-            else:
-                candidate_chunks.append(
-                    ChunkRecord(
-                        chunk_id=-1,
-                        source_path=payload["path"],
-                        text=text,
-                        metadata=body_metadata,
-                        chunk_type="body",
-                        preview_text=text,
+        else:
+            if sections:
+                for section in sections:
+                    section_text = section["text"]
+                    heading = str(section.get("heading") or title or "").strip()
+                    section_metadata = {
+                        **body_metadata,
+                        "section_heading": heading,
+                        "section_index": section.get("index", 0),
+                        "section_level": section.get("level", 1),
+                        "section_page": section.get("page"),
+                        "section_path": section.get("path") or [heading],
+                        "section_path_text": section.get("path_text") or heading,
+                        "section_title": heading,
+                        "section_text": section_text,
+                    }
+                    if heading:
+                        title_chunk_text = (
+                            f"{title}\n\n{heading}"
+                            if title and heading != title
+                            else heading
+                        )
+                        candidate_chunks.append(
+                            ChunkRecord(
+                                chunk_id=-1,
+                                source_path=payload["path"],
+                                text=title_chunk_text,
+                                metadata=section_metadata,
+                                chunk_type="section_title",
+                                preview_text=heading,
+                            )
+                        )
+                    if not isinstance(section_text, str) or not section_text.strip():
+                        continue
+                    chunk_text_value = section_text
+                    if heading:
+                        chunk_text_value = f"{heading}\n\n{section_text}"
+                    candidate_chunks.append(
+                        ChunkRecord(
+                            chunk_id=-1,
+                            source_path=payload["path"],
+                            text=chunk_text_value,
+                            metadata=section_metadata,
+                            chunk_type="section",
+                            preview_text=section_text,
+                        )
                     )
-                )
 
         for candidate in candidate_chunks:
             chunk_text_value = candidate.text
@@ -286,7 +319,6 @@ def _build_bm25_index(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
-    use_cleaned_text: bool,
     use_chunking: bool,
 ) -> BM25Index:
     chunks, term_freqs, doc_lengths, doc_freqs, avg_doc_len = build_bm25_corpus(
@@ -294,7 +326,6 @@ def _build_bm25_index(
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
-        use_cleaned_text=use_cleaned_text,
         use_chunking=use_chunking,
     )
     postings = _build_postings(term_freqs)
@@ -312,11 +343,10 @@ def _get_or_build_bm25_index(
     max_chars: int,
     overlap: int,
     include_title_chunk: bool,
-    use_cleaned_text: bool,
     use_chunking: bool,
 ) -> BM25Index:
     normalized_dir = os.path.abspath(parsed_dir)
-    key = (normalized_dir, max_chars, overlap, include_title_chunk, use_cleaned_text, use_chunking)
+    key = (normalized_dir, max_chars, overlap, include_title_chunk, use_chunking)
     signature = _parsed_dir_signature(normalized_dir)
 
     with _BM25_CACHE_LOCK:
@@ -329,7 +359,6 @@ def _get_or_build_bm25_index(
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
-        use_cleaned_text=use_cleaned_text,
         use_chunking=use_chunking,
     )
 
@@ -345,7 +374,6 @@ def bm25_search(
     max_chars: int = E5_CHUNK_SIZE,
     overlap: int = E5_CHUNK_OVERLAP,
     include_title_chunk: bool = True,
-    use_cleaned_text: bool = True,
     use_chunking: bool = True,
     k1: float = 1.5,
     b: float = 0.75,
@@ -358,7 +386,6 @@ def bm25_search(
         max_chars=max_chars,
         overlap=overlap,
         include_title_chunk=include_title_chunk,
-        use_cleaned_text=use_cleaned_text,
         use_chunking=use_chunking,
     )
     query_tokens = tokenize(query)
@@ -404,6 +431,8 @@ def bm25_search(
                 "section_heading": record.metadata.get("section_heading"),
                 "section_index": record.metadata.get("section_index"),
                 "section_level": record.metadata.get("section_level"),
+                "section_path": record.metadata.get("section_path"),
+                "section_path_text": record.metadata.get("section_path_text"),
                 "section_text": record.metadata.get("section_text"),
             }
         )
@@ -441,29 +470,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.set_defaults(include_title_chunk=True)
     parser.add_argument(
-        "--use-cleaned-text",
-        dest="use_cleaned_text",
-        action="store_true",
-        help="Use cleaned_text field from parsed JSON as BM25 source text.",
-    )
-    parser.add_argument(
-        "--no-use-cleaned-text",
-        dest="use_cleaned_text",
-        action="store_false",
-        help="Use raw text field from parsed JSON as BM25 source text.",
-    )
-    parser.set_defaults(use_cleaned_text=True)
-    parser.add_argument(
         "--use-chunking",
         dest="use_chunking",
         action="store_true",
-        help="Chunk document text before BM25 indexing.",
+        help="Chunk section text before BM25 indexing.",
     )
     parser.add_argument(
         "--no-use-chunking",
         dest="use_chunking",
         action="store_false",
-        help="Index whole document text as one BM25 unit (no chunking).",
+        help="Disable section chunk splitting and index one chunk per section.",
     )
     parser.set_defaults(use_chunking=True)
     parser.add_argument("--k1", type=float, default=1.5, help="BM25 k1 parameter.")
@@ -481,7 +497,6 @@ def main() -> None:
         max_chars=args.max_chars,
         overlap=args.overlap,
         include_title_chunk=args.include_title_chunk,
-        use_cleaned_text=args.use_cleaned_text,
         use_chunking=args.use_chunking,
         k1=args.k1,
         b=args.b,

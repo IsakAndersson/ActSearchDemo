@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.metadata
 import json
 import logging
@@ -74,7 +75,7 @@ _MODEL_CACHE: Dict[tuple[str, str], tuple[AutoTokenizer, AutoModel]] = {}
 _INDEX_CACHE: Dict[str, faiss.Index] = {}
 _METADATA_CACHE: Dict[str, List[dict]] = {}
 _CACHE_LOCK = threading.Lock()
-TEXT_SOURCE_KEYS = ("text", "cleaned_text")
+TEXT_SOURCE_KEYS = ("text",)
 
 
 @dataclass
@@ -457,6 +458,25 @@ def _get_cached_metadata(metadata_path: str) -> List[dict]:
     return loaded_metadata
 
 
+def clear_runtime_caches() -> None:
+    """Release cached models, indexes, and metadata between long-running batches."""
+    with _CACHE_LOCK:
+        cached_models = list(_MODEL_CACHE.values())
+        _MODEL_CACHE.clear()
+        _INDEX_CACHE.clear()
+        _METADATA_CACHE.clear()
+
+    for _, model in cached_models:
+        try:
+            model.to("cpu")
+        except Exception:
+            continue
+
+    if torch is not None and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
+
 def _append_chunk(
     *,
     state: IndexBuildState,
@@ -504,7 +524,6 @@ def build_index(
     index: faiss.Index | None = None
     flush_threshold = max(batch_size * 32, batch_size)
     for payload in iter_parsed_documents(parsed_dir):
-        text = get_document_text(payload, resolved_text_source)
         metadata = payload.get("metadata", {}) or {}
         title = extract_title(payload)
 
@@ -520,27 +539,49 @@ def build_index(
                 preview_text=title,
             )
 
-        if not text.strip():
-            continue
         body_metadata = {**metadata, "title": title} if title else metadata
         sections = get_document_sections(payload, fallback_title=title)
         if sections:
             for section in sections:
-                section_text = section.get(resolved_text_source) or section.get("cleaned_text") or section.get("text")
-                if not isinstance(section_text, str) or not section_text.strip():
-                    continue
+                section_text = section.get("text")
                 heading = str(section.get("heading") or title or "").strip()
                 section_metadata = {
                     **body_metadata,
                     "section_heading": heading,
                     "section_index": section.get("index", 0),
                     "section_level": section.get("level", 1),
+                    "section_page": section.get("page"),
+                    "section_path": section.get("path") or [heading],
+                    "section_path_text": section.get("path_text") or heading,
+                    "section_title": heading,
                     "section_text": section_text,
                 }
-                for preview_text in chunk_text(section_text, max_chars=max_chars, overlap=overlap):
-                    chunk_text_value = (
-                        f"{heading}\n\n{preview_text}" if heading and preview_text != heading else preview_text
+                if heading:
+                    title_chunk_text = f"{title}\n\n{heading}" if title and heading != title else heading
+                    _append_chunk(
+                        state=state,
+                        source_path=payload["path"],
+                        text=title_chunk_text,
+                        metadata=section_metadata,
+                        chunk_type="section_title",
+                        use_e5_prefixes=use_e5_prefixes,
+                        preview_text=heading,
                     )
+                    if len(state.texts) >= flush_threshold:
+                        index = _flush_index_batch(
+                            state=state,
+                            index=index,
+                            tokenizer=tokenizer,
+                            model=model,
+                            device=device,
+                            batch_size=batch_size,
+                        )
+                if not isinstance(section_text, str) or not section_text.strip():
+                    continue
+                for chunk_index, preview_text in enumerate(chunk_text(section_text, max_chars=max_chars, overlap=overlap)):
+                    chunk_text_value = preview_text
+                    if heading and chunk_index == 0:
+                        chunk_text_value = f"{heading}\n\n{preview_text}"
                     _append_chunk(
                         state=state,
                         source_path=payload["path"],
@@ -559,27 +600,6 @@ def build_index(
                             device=device,
                             batch_size=batch_size,
                         )
-        else:
-            for preview_text in chunk_text(text, max_chars=max_chars, overlap=overlap):
-                _append_chunk(
-                    state=state,
-                    source_path=payload["path"],
-                    text=preview_text,
-                    metadata=body_metadata,
-                    chunk_type="body",
-                    use_e5_prefixes=use_e5_prefixes,
-                    preview_text=preview_text,
-                )
-                if len(state.texts) >= flush_threshold:
-                    index = _flush_index_batch(
-                        state=state,
-                        index=index,
-                        tokenizer=tokenizer,
-                        model=model,
-                        device=device,
-                        batch_size=batch_size,
-                    )
-
     if not state.records:
         raise ValueError("No parsed documents with text found to index.")
 
@@ -727,6 +747,8 @@ def query_index(
             "section_heading": entry.get("metadata", {}).get("section_heading"),
             "section_index": entry.get("metadata", {}).get("section_index"),
             "section_level": entry.get("metadata", {}).get("section_level"),
+            "section_path": entry.get("metadata", {}).get("section_path"),
+            "section_path_text": entry.get("metadata", {}).get("section_path_text"),
             "section_text": entry.get("section_text") or entry.get("metadata", {}).get("section_text"),
         }
         if "chunk_type" in entry:
@@ -755,12 +777,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--text-source",
         choices=TEXT_SOURCE_KEYS,
         default="text",
-        help="Parsed JSON field used for body text chunks.",
+        help="Parsed JSON field used for section text chunks.",
     )
     build.add_argument(
         "--include-title-chunk",
         action="store_true",
-        help="Include one extra title chunk per document in addition to body chunks.",
+        help="Include one extra title chunk per document in addition to section chunks.",
     )
     build.add_argument(
         "--device",

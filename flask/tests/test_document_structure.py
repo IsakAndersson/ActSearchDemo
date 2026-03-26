@@ -28,7 +28,7 @@ def test_derive_document_sections_splits_on_headings():
         "FOLLOW UP",
     ]
     assert sections[1]["text"] == "First treatment paragraph. Second treatment paragraph."
-    assert sections[1]["cleaned_text"] == "First treatment paragraph. Second treatment paragraph."
+    assert sections[1]["raw_text"] == "First treatment paragraph.\nSecond treatment paragraph."
 
 
 def test_get_document_sections_prefers_stored_sections():
@@ -38,8 +38,8 @@ def test_get_document_sections_prefers_stored_sections():
             {
                 "heading": "Stored heading",
                 "level": 2,
-                "text": "Stored raw\ntext",
-                "cleaned_text": "Stored raw text",
+                "raw_text": "Stored raw\ntext",
+                "text": "Stored raw text",
             }
         ],
     }
@@ -50,3 +50,66 @@ def test_get_document_sections_prefers_stored_sections():
     assert sections[0]["heading"] == "Stored heading"
     assert sections[0]["level"] == 2
     assert sections[0]["text"] == "Stored raw text"
+    assert sections[0]["raw_text"] == "Stored raw\ntext"
+
+
+def test_derive_document_sections_prefers_table_of_contents_and_keeps_levels():
+    text = """
+    Demo Document
+
+    Innehåll
+    Overview ................................ 1
+      Details ................................ 2
+        Deep Dive ............................ 3
+    Follow Up ............................... 4
+
+    Overview
+    Intro body.
+
+    Details
+    Detail body.
+
+    Deep Dive
+    Deep body.
+
+    Follow Up
+    Final body.
+    """
+
+    sections = derive_document_sections(text, fallback_title="Demo Document")
+
+    assert [section["heading"] for section in sections] == [
+        "Overview",
+        "Details",
+        "Deep Dive",
+        "Follow Up",
+    ]
+    assert [section["level"] for section in sections] == [1, 2, 3, 1]
+    assert sections[2]["path"] == ["Overview", "Details", "Deep Dive"]
+    assert sections[3]["path_text"] == "Follow Up"
+
+
+def test_derive_document_sections_does_not_split_tabular_values_into_headings():
+    text = """
+    Innehåll
+    Titrering ................................ 1
+    Uppföljning .............................. 2
+
+    Titrering
+    Steg 1
+    5 mg
+    Dos
+    1+0+0
+    10 mg
+    Dos
+    1+0+1
+
+    Uppföljning
+    Kontrollera blodtryck efter tre veckor.
+    """
+
+    sections = derive_document_sections(text, fallback_title="Demo Document")
+
+    assert [section["heading"] for section in sections] == ["Titrering", "Uppföljning"]
+    assert "5 mg" in sections[0]["text"]
+    assert "10 mg" in sections[0]["text"]

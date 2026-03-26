@@ -32,7 +32,6 @@ def test_l2_normalize_rows_keeps_zero_rows_zero():
 
 def test_resolve_text_source_accepts_supported_fields():
     assert resolve_text_source("text") == "text"
-    assert resolve_text_source("cleaned_text") == "cleaned_text"
 
 
 def test_ensure_vector_dependencies_rejects_conflicting_faiss_installs(monkeypatch):
@@ -63,17 +62,15 @@ def test_ensure_vector_dependencies_rejects_incomplete_faiss_module(monkeypatch)
 def test_get_document_text_uses_requested_field_only():
     payload = {
         "text": "raw text",
-        "cleaned_text": "clean text",
     }
 
     assert get_document_text(payload, "text") == "raw text"
-    assert get_document_text(payload, "cleaned_text") == "clean text"
 
 
 def test_get_document_text_returns_empty_string_when_selected_field_missing():
-    payload = {"text": "raw text"}
+    payload = {"raw_text": "raw text"}
 
-    assert get_document_text(payload, "cleaned_text") == ""
+    assert get_document_text(payload, "text") == ""
 
 
 def test_build_index_rejects_non_positive_batch_size(tmp_path, monkeypatch):
@@ -144,10 +141,10 @@ def test_build_index_streams_embedding_batches(tmp_path, monkeypatch):
 
     metadata_path = output_dir / "docplus_metadata.jsonl"
     assert metadata_path.exists()
-    assert embed_batch_sizes == [32, 8]
-    assert sum(1 for _ in metadata_path.open("r", encoding="utf-8")) == 40
+    assert embed_batch_sizes == [32, 9]
+    assert sum(1 for _ in metadata_path.open("r", encoding="utf-8")) == 41
     first_record = json.loads(metadata_path.read_text(encoding="utf-8").splitlines()[0])
-    assert first_record["chunk_type"] == "section"
-    assert first_record["preview_text"] == "chunk 0"
+    assert first_record["chunk_type"] == "section_title"
+    assert first_record["preview_text"] == "Doc 1"
     assert first_record["metadata"]["section_heading"] == "Doc 1"
     assert first_record["section_text"] == "ignored"

@@ -1,2 +1,2 @@
-average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,method,model_name,experiment,config_slug,chunk_size,chunk_overlap,include_title_chunk,index_dir
-2.86031746031746,0.4236549165120594,2026-02-26T22:24:51+01:00,20,13,7,bm25,bm25,test-run-bm25,chunk_250__overlap_25__title_on,250,25,True,/home/isak/Repos/ActSearchDemo/evaluation/experiments/test-run-bm25/indexes/bm25/chunk_250__overlap_25__title_on
+average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,method,model_name,experiment,config_slug,chunk_size,chunk_overlap,include_title_chunk,index_dir
+4.433333333333334,0.4504376019413613,2026-03-25T10:15:02+01:00,20,80,7,google_sheet,google_sheet,bm25,bm25,test-run-bm25,chunk_250__overlap_25__title_on,250,25,True,/home/isak/Repos/ActSearchDemo/evaluation/experiments/test-run-bm25/indexes/bm25/chunk_250__overlap_25__title_on

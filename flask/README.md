@@ -41,7 +41,7 @@ Change the --page-end flag to match the number of pages available at "https://pu
 The scraper writes:
 
 - `output/documents/` for downloaded binaries
-- `output/parsed/` for JSON payloads with extracted text, cleaned text, derived section chunks, and metadata
+- `output/parsed/` for JSON payloads with `raw_text`, cleaned `text`, derived section chunks, and metadata
 - `output/summary.json` for a crawl summary
 
 ## Vector indexing (BERT Swedish)
@@ -75,12 +75,12 @@ python -m search.vector_index build \
   --profile e5_large_instruct
 ```
 
-Use `--text-source cleaned_text` to build embeddings from the cleaned parsed field
-instead of the default raw `text` field.
+Body embeddings use the cleaned parsed `text` field by default.
 
 Both BM25 and vector indexing now prefer document-aware section chunks derived from
 headings/sub-chapters in the parsed documents. Large sections are only split further
-when they exceed the configured chunk size.
+when they exceed the configured chunk size, and the full top-level document `text`
+is not used as a fallback indexing body.
 
 This creates:
 
@@ -97,7 +97,7 @@ python -m search.vector_index query \
 ```
 
 For both `swedish_bert` and `e5_large_instruct`, regular `build` includes
-title chunks per document together with chunked body text.
+title chunks per document together with chapter-aware section chunks.
 
 ### Choosing CPU or GPU
 
@@ -141,8 +141,8 @@ driver, CUDA toolkit, and platform.
 To run a BM25 search directly over the parsed JSON files, use the BM25 helper.
 Default BM25 chunking now matches the E5 profile (`max_chars=250`, `overlap=50`)
 and includes one title-only chunk per document when a title can be extracted.
-Body indexing prefers the stored section chunks so each hit is aligned to a chapter
-or sub-category when possible:
+Body indexing uses the stored section chunks so each hit is aligned to a chapter
+or sub-category:
 
 ```bash
 python -m search.bm25_search \

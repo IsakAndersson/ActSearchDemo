@@ -3,7 +3,7 @@
     "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
     "index_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus.faiss",
     "metadata_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus_metadata.jsonl",
-    "model_name": "KBLab/bert-base-swedish-cased",
+    "model_name": "intfloat/multilingual-e5-large-instruct",
     "e5_index_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/chapter-based-e5-cleaned-text/indexes/dense_e5/intfloat-multilingual-e5-large-instruct/chunk_750__overlap_50__title_on__cleaned_text/docplus.faiss",
     "e5_metadata_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/chapter-based-e5-cleaned-text/indexes/dense_e5/intfloat-multilingual-e5-large-instruct/chunk_750__overlap_50__title_on__cleaned_text/docplus_metadata.jsonl",
     "e5_model_name": "intfloat/multilingual-e5-large-instruct",

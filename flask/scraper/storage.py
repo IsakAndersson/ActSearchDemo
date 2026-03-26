@@ -38,8 +38,8 @@ class DocumentStore:
         title = metadata.get("title") if isinstance(metadata.get("title"), str) else ""
         payload = {
             "binary_path": binary_path,
-            "text": text,
-            "cleaned_text": clean_text(text),
+            "raw_text": text,
+            "text": clean_text(text),
             "sections": derive_document_sections(text, fallback_title=title),
             "metadata": metadata,
         }

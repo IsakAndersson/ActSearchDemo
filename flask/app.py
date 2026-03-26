@@ -335,7 +335,6 @@ def _evaluation_form_search_bucket(
     query: str,
     defaults: Dict[str, str],
     top_k: int,
-    bm25_use_cleaned_text: bool,
     bm25_use_chunking: bool,
 ) -> List[Dict[str, Any]]:
     if bucket.startswith("bm25_"):
@@ -343,7 +342,6 @@ def _evaluation_form_search_bucket(
             parsed_dir=defaults["parsed_dir"],
             query=query,
             top_k=top_k,
-            use_cleaned_text=bm25_use_cleaned_text,
             use_chunking=bm25_use_chunking,
         )
 
@@ -367,7 +365,6 @@ def _evaluation_form_search_bucket(
             parsed_dir=defaults["parsed_dir"],
             query=query,
             top_k=candidate_k,
-            use_cleaned_text=bm25_use_cleaned_text,
             use_chunking=bm25_use_chunking,
         )
         e5_results = query_index(
@@ -650,10 +647,6 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
         ),
         "device": str(payload.get("device") or _get_env_default("DOCPLUS_DEVICE", "auto")),
         "top_k": str(payload.get("top_k") or _get_env_default("DOCPLUS_TOP_K", "5")),
-        "bm25_use_cleaned_text": str(
-            payload.get("bm25_use_cleaned_text")
-            or _get_env_default("DOCPLUS_BM25_USE_CLEANED_TEXT", "true")
-        ),
         "bm25_use_chunking": str(
             payload.get("bm25_use_chunking")
             or _get_env_default("DOCPLUS_BM25_USE_CHUNKING", "true")
@@ -704,7 +697,6 @@ def search() -> Any:
         except ValueError:
             top_k = 5
             errors.append("Top-k must be an integer; defaulted to 5.")
-        bm25_use_cleaned_text = _safe_bool(defaults["bm25_use_cleaned_text"], True)
         bm25_use_chunking = _safe_bool(defaults["bm25_use_chunking"], True)
 
         if method == "bm25":
@@ -713,7 +705,6 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
-                    use_cleaned_text=bm25_use_cleaned_text,
                     use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
@@ -754,7 +745,6 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=candidate_k,
-                    use_cleaned_text=bm25_use_cleaned_text,
                     use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1
@@ -806,7 +796,6 @@ def search() -> Any:
                         query=bucket_query,
                         defaults=defaults,
                         top_k=top_k,
-                        bm25_use_cleaned_text=bm25_use_cleaned_text,
                         bm25_use_chunking=bm25_use_chunking,
                     )
                     successful_methods += 1
@@ -820,7 +809,6 @@ def search() -> Any:
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
-                    use_cleaned_text=bm25_use_cleaned_text,
                     use_chunking=bm25_use_chunking,
                 )
                 successful_methods += 1

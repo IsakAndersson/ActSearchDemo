@@ -20,7 +20,8 @@
     "sts_live_user_agent": "ActSearchEvaluation/1.0",
     "bm25_max_chars": 400,
     "bm25_overlap": 25,
-    "bm25_include_title_chunk": true
+    "bm25_include_title_chunk": true,
+    "bm25_use_chunking": true
   },
   "run_metadata": {
     "method": "bm25",

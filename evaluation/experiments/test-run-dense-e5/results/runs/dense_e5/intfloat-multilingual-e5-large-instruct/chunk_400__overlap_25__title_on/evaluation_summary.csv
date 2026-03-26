@@ -1,2 +1,0 @@
-average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,method,model_name,experiment,config_slug,chunk_size,chunk_overlap,include_title_chunk,index_dir
-3.732142857142857,0.43640863553597875,2026-02-26T20:30:19+01:00,20,13,7,dense_e5,intfloat/multilingual-e5-large-instruct,test-run-dense-e5,chunk_400__overlap_25__title_on,400,25,True,/home/isak/Repos/ActSearchDemo/evaluation/experiments/test-run-dense-e5/indexes/dense_e5/intfloat-multilingual-e5-large-instruct/chunk_400__overlap_25__title_on
