@@ -8,8 +8,8 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Optional, TextIO
 from urllib.parse import parse_qs, unquote, urlparse
 
 import numpy as np
@@ -61,8 +61,8 @@ VECTOR_MODEL_PROFILES: Dict[str, VectorModelProfile] = {
     "e5_large_instruct": VectorModelProfile(
         key="e5_large_instruct",
         model_name="intfloat/multilingual-e5-large-instruct",
-        chunk_size=250,
-        chunk_overlap=50,
+        chunk_size=500,
+        chunk_overlap=25,
         include_title_chunk=True,
     ),
 }
@@ -73,7 +73,7 @@ DEFAULT_CHUNK_OVERLAP = VECTOR_MODEL_PROFILES[DEFAULT_MODEL_PROFILE_KEY].chunk_o
 LOG = logging.getLogger(__name__)
 _MODEL_CACHE: Dict[tuple[str, str], tuple[AutoTokenizer, AutoModel]] = {}
 _INDEX_CACHE: Dict[str, faiss.Index] = {}
-_METADATA_CACHE: Dict[str, List[dict]] = {}
+_METADATA_CACHE: Dict[str, "MetadataStore"] = {}
 _CACHE_LOCK = threading.Lock()
 TEXT_SOURCE_KEYS = ("text",)
 
@@ -93,6 +93,35 @@ class IndexBuildState:
     records: List[ChunkRecord]
     texts: List[str]
     next_chunk_id: int = 0
+
+
+@dataclass
+class MetadataStore:
+    path: str
+    offsets: List[int]
+    _handle: Optional[TextIO] = None
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def __len__(self) -> int:
+        return len(self.offsets)
+
+    def get(self, idx: int) -> dict:
+        if idx < 0 or idx >= len(self.offsets):
+            raise IndexError(idx)
+
+        with self._lock:
+            if self._handle is None or self._handle.closed:
+                self._handle = open(self.path, "r", encoding="utf-8")
+            self._handle.seek(self.offsets[idx])
+            line = self._handle.readline()
+
+        return json.loads(line)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._handle is not None and not self._handle.closed:
+                self._handle.close()
+            self._handle = None
 
 
 def resolve_text_source(text_source: Optional[str]) -> str:
@@ -439,7 +468,17 @@ def _get_cached_index(index_path: str) -> faiss.Index:
     return index
 
 
-def _get_cached_metadata(metadata_path: str) -> List[dict]:
+def _build_metadata_offsets(metadata_path: str) -> List[int]:
+    offsets: List[int] = []
+    offset = 0
+    with open(metadata_path, "rb") as handle:
+        for line in handle:
+            offsets.append(offset)
+            offset += len(line)
+    return offsets
+
+
+def _get_cached_metadata(metadata_path: str) -> MetadataStore:
     normalized_path = os.path.abspath(metadata_path)
 
     with _CACHE_LOCK:
@@ -447,21 +486,22 @@ def _get_cached_metadata(metadata_path: str) -> List[dict]:
     if cached is not None:
         return cached
 
-    LOG.info("Loading metadata JSONL: %s", normalized_path)
-    loaded_metadata: List[dict] = []
-    with open(normalized_path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            loaded_metadata.append(json.loads(line))
+    LOG.info("Indexing metadata offsets: %s", normalized_path)
+    metadata_store = MetadataStore(
+        path=normalized_path,
+        offsets=_build_metadata_offsets(normalized_path),
+    )
 
     with _CACHE_LOCK:
-        _METADATA_CACHE[normalized_path] = loaded_metadata
-    return loaded_metadata
+        _METADATA_CACHE[normalized_path] = metadata_store
+    return metadata_store
 
 
 def clear_runtime_caches() -> None:
     """Release cached models, indexes, and metadata between long-running batches."""
     with _CACHE_LOCK:
         cached_models = list(_MODEL_CACHE.values())
+        cached_metadata = list(_METADATA_CACHE.values())
         _MODEL_CACHE.clear()
         _INDEX_CACHE.clear()
         _METADATA_CACHE.clear()
@@ -471,6 +511,9 @@ def clear_runtime_caches() -> None:
             model.to("cpu")
         except Exception:
             continue
+
+    for metadata_store in cached_metadata:
+        metadata_store.close()
 
     if torch is not None and torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -499,6 +542,20 @@ def _append_chunk(
     )
     state.texts.append(_with_passage_prefix(text) if use_e5_prefixes else text)
     state.next_chunk_id += 1
+
+
+def _serialize_record(record: ChunkRecord) -> dict:
+    metadata = dict(record.metadata)
+    section_text = metadata.pop("section_text", None)
+    return {
+        "chunk_id": record.chunk_id,
+        "source_path": record.source_path,
+        "text": record.text,
+        "metadata": metadata,
+        "chunk_type": record.chunk_type,
+        "preview_text": record.preview_text,
+        "section_text": section_text,
+    }
 
 
 def build_index(
@@ -618,21 +675,7 @@ def build_index(
     metadata_path = os.path.join(output_dir, "docplus_metadata.jsonl")
     with open(metadata_path, "w", encoding="utf-8") as handle:
         for record in state.records:
-            handle.write(
-                json.dumps(
-                    {
-                        "chunk_id": record.chunk_id,
-                        "source_path": record.source_path,
-                        "text": record.text,
-                        "metadata": record.metadata,
-                        "chunk_type": record.chunk_type,
-                        "preview_text": record.preview_text,
-                        "section_text": record.metadata.get("section_text"),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
+            handle.write(json.dumps(_serialize_record(record), ensure_ascii=False) + "\n")
 
 
 def build_index_with_titles(
@@ -696,21 +739,7 @@ def build_index_with_titles(
     metadata_path = os.path.join(output_dir, "docplus_titles_metadata.jsonl")
     with open(metadata_path, "w", encoding="utf-8") as handle:
         for record in state.records:
-            handle.write(
-                json.dumps(
-                    {
-                        "chunk_id": record.chunk_id,
-                        "source_path": record.source_path,
-                        "text": record.text,
-                        "metadata": record.metadata,
-                        "chunk_type": record.chunk_type,
-                        "preview_text": record.preview_text,
-                        "section_text": record.metadata.get("section_text"),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
+            handle.write(json.dumps(_serialize_record(record), ensure_ascii=False) + "\n")
 
 
 def query_index(
@@ -736,7 +765,7 @@ def query_index(
     for score, idx in zip(scores[0].tolist(), indices[0].tolist()):
         if idx < 0 or idx >= len(metadata):
             continue
-        entry = metadata[idx]
+        entry = metadata.get(idx)
         result = {
             "score": float(score),
             "chunk_id": entry["chunk_id"],

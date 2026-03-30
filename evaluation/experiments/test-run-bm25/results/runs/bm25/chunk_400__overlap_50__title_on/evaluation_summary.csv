@@ -1,2 +1,0 @@
-average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,method,model_name,experiment,config_slug,chunk_size,chunk_overlap,include_title_chunk,index_dir
-4.141666666666667,0.4546525234025234,2026-03-25T10:16:10+01:00,20,80,7,google_sheet,google_sheet,bm25,bm25,test-run-bm25,chunk_400__overlap_50__title_on,400,50,True,/home/isak/Repos/ActSearchDemo/evaluation/experiments/test-run-bm25/indexes/bm25/chunk_400__overlap_50__title_on

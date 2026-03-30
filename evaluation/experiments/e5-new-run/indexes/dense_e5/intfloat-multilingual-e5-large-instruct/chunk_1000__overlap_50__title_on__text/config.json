@@ -1,0 +1,11 @@
+{
+  "method": "dense_e5",
+  "model_name": "intfloat/multilingual-e5-large-instruct",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "text_source": "text",
+  "chunk_size": 1000,
+  "chunk_overlap": 50,
+  "include_title_chunk": true,
+  "index_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/e5-new-run/indexes/dense_e5/intfloat-multilingual-e5-large-instruct/chunk_1000__overlap_50__title_on__text/docplus.faiss",
+  "metadata_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/e5-new-run/indexes/dense_e5/intfloat-multilingual-e5-large-instruct/chunk_1000__overlap_50__title_on__text/docplus_metadata.jsonl"
+}

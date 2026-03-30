@@ -258,7 +258,6 @@ python evaluation/evaluation_sweep.py \
   --chunk-sizes 150,250,400 \
   --overlaps 25,50 \
   --include-title-chunk true,false \
-  --text-source cleaned_text \
   --top-k 20
 ```
 

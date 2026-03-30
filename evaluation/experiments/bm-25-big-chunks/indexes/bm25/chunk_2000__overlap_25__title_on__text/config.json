@@ -1,0 +1,9 @@
+{
+  "method": "bm25",
+  "model_name": null,
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "text_source": "text",
+  "chunk_size": 2000,
+  "chunk_overlap": 25,
+  "include_title_chunk": true
+}

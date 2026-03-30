@@ -17,7 +17,7 @@ from document_structure import get_document_sections
 
 
 TOKEN_RE = re.compile(r"[0-9A-Za-zÅÄÖåäö]+")
-E5_CHUNK_SIZE = 250
+E5_CHUNK_SIZE = 500
 E5_CHUNK_OVERLAP = 50
 
 

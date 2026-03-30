@@ -1,2 +1,0 @@
-average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,method,model_name,experiment,config_slug,text_source,chunk_size,chunk_overlap,include_title_chunk,index_dir
-2.357142857142857,0.361811391223156,2026-03-25T09:51:46+01:00,20,80,7,google_sheet,google_sheet,dense,KBLab/bert-base-swedish-cased,dense-debug-run,chunk_150__overlap_25__title_on__text,text,150,25,True,/home/isak/Repos/ActSearchDemo/evaluation/experiments/dense-debug-run/indexes/dense/kblab-bert-base-swedish-cased/chunk_150__overlap_25__title_on__text

@@ -9,7 +9,14 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from search import vector_index
-from search.vector_index import build_index, get_document_text, l2_normalize_rows, resolve_text_source
+from search.vector_index import (
+    MetadataStore,
+    build_index,
+    clear_runtime_caches,
+    get_document_text,
+    l2_normalize_rows,
+    resolve_text_source,
+)
 
 
 def test_l2_normalize_rows_returns_unit_vectors():
@@ -148,3 +155,45 @@ def test_build_index_streams_embedding_batches(tmp_path, monkeypatch):
     assert first_record["preview_text"] == "Doc 1"
     assert first_record["metadata"]["section_heading"] == "Doc 1"
     assert first_record["section_text"] == "ignored"
+    assert "section_text" not in first_record["metadata"]
+
+
+def test_metadata_store_reads_only_requested_entries(tmp_path):
+    metadata_path = tmp_path / "metadata.jsonl"
+    lines = [
+        {"chunk_id": 0, "text": "first"},
+        {"chunk_id": 1, "text": "second"},
+        {"chunk_id": 2, "text": "third"},
+    ]
+    metadata_path.write_text(
+        "".join(json.dumps(line) + "\n" for line in lines),
+        encoding="utf-8",
+    )
+
+    store = MetadataStore(
+        path=str(metadata_path),
+        offsets=vector_index._build_metadata_offsets(str(metadata_path)),
+    )
+
+    try:
+        assert len(store) == 3
+        assert store.get(1) == lines[1]
+        assert store.get(2) == lines[2]
+    finally:
+        store.close()
+
+
+def test_clear_runtime_caches_closes_metadata_store(tmp_path):
+    metadata_path = tmp_path / "metadata.jsonl"
+    metadata_path.write_text(json.dumps({"chunk_id": 0}) + "\n", encoding="utf-8")
+    store = MetadataStore(
+        path=str(metadata_path),
+        offsets=vector_index._build_metadata_offsets(str(metadata_path)),
+    )
+    store.get(0)
+
+    vector_index._METADATA_CACHE[str(metadata_path)] = store
+
+    clear_runtime_caches()
+
+    assert store._handle is None

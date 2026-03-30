@@ -1,0 +1,37 @@
+{
+  "search_config": {
+    "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+    "index_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus.faiss",
+    "metadata_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus_metadata.jsonl",
+    "model_name": "KBLab/bert-base-swedish-cased",
+    "e5_index_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index_e5/docplus.faiss",
+    "e5_metadata_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index_e5/docplus_metadata.jsonl",
+    "e5_model_name": "intfloat/multilingual-e5-large-instruct",
+    "device": "auto",
+    "live_base_url": "https://publikdocplus.regionuppsala.se/",
+    "live_search_path": "/Home/Search",
+    "live_timeout_seconds": 20,
+    "live_max_pages": 1,
+    "live_user_agent": "ActSearchEvaluation/1.0",
+    "sts_live_base_url": "https://sts.search.datatovalue.se/",
+    "sts_live_search_path": "/",
+    "sts_live_timeout_seconds": 20,
+    "sts_live_max_pages": 1,
+    "sts_live_user_agent": "ActSearchEvaluation/1.0",
+    "bm25_max_chars": 500,
+    "bm25_overlap": 25,
+    "bm25_include_title_chunk": true,
+    "bm25_use_chunking": true
+  },
+  "run_metadata": {
+    "method": "bm25",
+    "model_name": "bm25",
+    "experiment": "bm25-test-size",
+    "config_slug": "chunk_500__overlap_25__title_on__text",
+    "text_source": "text",
+    "chunk_size": 500,
+    "chunk_overlap": 25,
+    "include_title_chunk": true,
+    "index_dir": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/bm25-test-size/indexes/bm25/chunk_500__overlap_25__title_on__text"
+  }
+}
