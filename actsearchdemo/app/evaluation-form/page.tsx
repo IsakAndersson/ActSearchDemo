@@ -76,6 +76,35 @@ const getResultUrl = (result: SearchResult): string => {
   return typeof sourceUrl === "string" ? sourceUrl : "#";
 };
 
+const getNormalizedSourcePath = (sourcePath: string | undefined): string | undefined => {
+  if (typeof sourcePath !== "string") {
+    return undefined;
+  }
+  const trimmed = sourcePath.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const normalized = trimmed.replace(/\\/g, "/");
+  const segments = normalized.split("/").filter(Boolean);
+  const filename = segments.at(-1);
+  return filename && filename.length > 0 ? filename : normalized;
+};
+
+const getResultDocumentKey = (result: SearchResult): string => {
+  const sourceUrl = getResultUrl(result);
+  if (sourceUrl !== "#") {
+    return `url:${sourceUrl}`;
+  }
+
+  const normalizedSourcePath = getNormalizedSourcePath(result.source_path);
+  if (normalizedSourcePath) {
+    return `path:${normalizedSourcePath}`;
+  }
+
+  return `title:${getResultTitle(result)}`;
+};
+
 const getStringValue = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
     return undefined;
@@ -348,10 +377,7 @@ const dedupeResults = (results: SearchResult[]): SearchResult[] => {
   const seen = new Map<string, SearchResult>();
 
   for (const result of results) {
-    const key =
-      typeof result.source_path === "string" && result.source_path.length > 0
-        ? result.source_path
-        : getResultTitle(result);
+    const key = getResultDocumentKey(result);
 
     const existing = seen.get(key);
     if (!existing) {
@@ -1143,7 +1169,7 @@ export default function DemoSearchPage() {
                 : [];
               const scoreByMethod = getScoreByMethod(result);
               const rankByMethod = getRankByMethod(result);
-              const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
+              const resultKey = getResultDocumentKey(result);
               const selectedRating = ratings[resultKey];
               const isRelevantLike = isRelevantLikeRating(selectedRating);
               const selectedScope = relevantScopes[resultKey];
