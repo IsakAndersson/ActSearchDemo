@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urljoin, urldefrag, urlpa
 import requests
 from bs4 import BeautifulSoup
 
-from scraper.parsers import extract_text
+from scraper.parsers import extract_page_count, extract_text
 from scraper.storage import DocumentStore, DownloadResult
 
 
@@ -118,6 +118,7 @@ class DocplusScraper:
 
         filename = self.store.write_binary(url, response.content)
         extracted_text = extract_text(filename)
+        page_count = extract_page_count(filename)
         document_name = extract_document_name_from_url(url)
         metadata = {
             "source_url": url,
@@ -126,6 +127,7 @@ class DocplusScraper:
             "document_name": document_name,
             "title": extract_title_from_document_name(document_name),
             "title_source": "url_filename",
+            "page_count": page_count,
         }
         self.store.write_text(filename, extracted_text, metadata)
         return DownloadResult(
