@@ -44,6 +44,18 @@ The scraper writes:
 - `output/parsed/` for JSON payloads with `raw_text`, cleaned `text`, derived section chunks, and metadata
 - `output/summary.json` for a crawl summary
 
+Parsed document metadata now includes `page_count` for PDF files.
+
+If you already have downloaded files in `output/documents/` and parsed JSON files in
+`output/parsed/`, you can backfill `metadata.page_count` without re-running the full scraper:
+
+```bash
+python -m scraper.backfill_page_count --parsed-dir output/parsed --only-missing
+```
+
+This reads each parsed JSON file, looks up its `binary_path`, counts PDF pages, and writes
+the result back to `metadata.page_count`.
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
