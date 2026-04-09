@@ -56,6 +56,19 @@ python -m scraper.backfill_page_count --parsed-dir output/parsed --only-missing
 This reads each parsed JSON file, looks up its `binary_path`, counts PDF pages, and writes
 the result back to `metadata.page_count`.
 
+To print summary statistics for the parsed dataset without writing any new files:
+
+```bash
+python -m scraper.parsed_stats --parsed-dir output/parsed
+```
+
+This prints:
+
+- total number of parsed documents
+- how many documents have `metadata.page_count`
+- average, median, and max page count
+- counts per `content_type`
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
