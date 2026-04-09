@@ -22,8 +22,10 @@ class DocumentStore:
         self.output_dir = output_dir
         self.binary_dir = os.path.join(output_dir, "documents")
         self.text_dir = os.path.join(output_dir, "parsed")
+        self.metadata_dir = os.path.join(output_dir, "metadata")
         os.makedirs(self.binary_dir, exist_ok=True)
         os.makedirs(self.text_dir, exist_ok=True)
+        os.makedirs(self.metadata_dir, exist_ok=True)
 
     def write_binary(self, url: str, content: bytes) -> str:
         filename = self._filename_from_url(url)
@@ -46,6 +48,17 @@ class DocumentStore:
         with open(text_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
         return text_path
+
+    def write_metadata(self, url: str, metadata: dict) -> str:
+        filename = os.path.splitext(self._filename_from_url(url))[0] + ".json"
+        path = os.path.join(self.metadata_dir, filename)
+        payload = {
+            "source_url": url,
+            "metadata": metadata,
+        }
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        return path
 
     def _filename_from_url(self, url: str) -> str:
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]

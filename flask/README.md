@@ -36,15 +36,48 @@ To change how many pages are scraped, override `--page-end`:
 python -m scraper.docplus_scraper --page-end 650
 ```
 
+To scrape only search-result metadata and skip document downloads/parsing:
+
+```bash
+python -m scraper.docplus_scraper --metadata-only
+```
+
 Change the --page-end flag to match the number of pages available at "https://publikdocplus.regionuppsala.se/Home/Search?searchValue=&oldFilter=&facet=&facetVal=&page=1"
 
 The scraper writes:
 
 - `output/documents/` for downloaded binaries
+- `output/metadata/` for metadata-only JSON payloads when `--metadata-only` is used
 - `output/parsed/` for JSON payloads with `raw_text`, cleaned `text`, derived section chunks, and metadata
 - `output/summary.json` for a crawl summary
 
-Parsed document metadata now includes `page_count` for PDF files.
+For full scraping, parsed document metadata can include:
+
+- `source_url`
+- `downloaded_at`
+- `content_type`
+- `document_name`
+- `title`
+- `title_source`
+- `page_count` for PDF files
+
+When available on the Docplus search-results page, the scraper also captures metadata from
+the information button (`file-metadata`) and stores fields such as:
+
+- `document_collection`
+- `process`
+- `publish_date`
+- `subject_area`
+- `type_of_action`
+- `valid_for_area`
+- `version`
+- `comment`
+- `document_type`
+- `metadata_url`
+- `tax_keyword`
+
+With `--metadata-only`, the scraper stores the search-result metadata without downloading
+or parsing the underlying document files.
 
 If you already have downloaded files in `output/documents/` and parsed JSON files in
 `output/parsed/`, you can backfill `metadata.page_count` without re-running the full scraper:
