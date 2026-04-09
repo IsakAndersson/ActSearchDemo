@@ -28,6 +28,23 @@ def _normalize_content_type(value: object) -> str:
     return trimmed if trimmed else "(missing)"
 
 
+def _percentile(values: list[int], percentile: float) -> float | None:
+    if not values:
+        return None
+    if len(values) == 1:
+        return float(values[0])
+
+    sorted_values = sorted(values)
+    position = (len(sorted_values) - 1) * percentile
+    lower_index = int(position)
+    upper_index = min(lower_index + 1, len(sorted_values) - 1)
+    fraction = position - lower_index
+
+    lower_value = sorted_values[lower_index]
+    upper_value = sorted_values[upper_index]
+    return lower_value + (upper_value - lower_value) * fraction
+
+
 def collect_stats(parsed_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
     document_count = 0
@@ -51,6 +68,13 @@ def collect_stats(parsed_dir: str) -> dict:
     average_pages = statistics.mean(page_counts) if page_counts else None
     median_pages = statistics.median(page_counts) if page_counts else None
     max_pages = max(page_counts) if page_counts else None
+    percentiles = {
+        "p10": _percentile(page_counts, 0.10),
+        "p25": _percentile(page_counts, 0.25),
+        "p75": _percentile(page_counts, 0.75),
+        "p90": _percentile(page_counts, 0.90),
+        "p95": _percentile(page_counts, 0.95),
+    }
 
     return {
         "document_count": document_count,
@@ -58,6 +82,7 @@ def collect_stats(parsed_dir: str) -> dict:
         "average_pages": average_pages,
         "median_pages": median_pages,
         "max_pages": max_pages,
+        "percentiles": percentiles,
         "content_types": content_types,
     }
 
@@ -73,10 +98,16 @@ def print_stats(stats: dict) -> None:
         average_pages = stats["average_pages"]
         median_pages = stats["median_pages"]
         max_pages = stats["max_pages"]
+        percentiles = stats["percentiles"]
         print(f"Documents with page_count: {page_count_documents}")
         print(f"Average pages: {average_pages:.2f}")
         print(f"Median pages: {median_pages}")
         print(f"Max pages: {max_pages}")
+        print("Page-count percentiles:")
+        for label in ("p10", "p25", "p75", "p90", "p95"):
+            value = percentiles.get(label)
+            if value is not None:
+                print(f"  {label}: {value:.2f}")
 
     print("Content types:")
     for content_type, count in stats["content_types"].most_common():

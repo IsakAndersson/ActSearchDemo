@@ -66,7 +66,7 @@ This prints:
 
 - total number of parsed documents
 - how many documents have `metadata.page_count`
-- average, median, and max page count
+- average, median, max, and percentiles for page count
 - counts per `content_type`
 
 ## Vector indexing (BERT Swedish)
