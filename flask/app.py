@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import ipaddress
 import json
 import os
 import sqlite3
@@ -78,6 +79,21 @@ def _to_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _is_loopback_address(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value).is_loopback
+    except ValueError:
+        return False
+
+
+def _request_client_ip() -> str:
+    forwarded_for = _to_text(request.headers.get("X-Forwarded-For"))
+    if forwarded_for:
+        # Proxies append a comma-separated chain. Log the original client when present.
+        return forwarded_for.split(",", 1)[0].strip()
+    return _to_text(request.remote_addr)
 
 
 def _metadata_value(metadata: Dict[str, Any], keys: List[str]) -> str:
@@ -487,7 +503,7 @@ def _log_search(
         "user_name": user_name,
         "had_errors": "1" if errors else "0",
         "errors": " | ".join(errors),
-        "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
+        "client_ip": _request_client_ip(),
         "user_agent": request.headers.get("User-Agent", ""),
     }
 
@@ -605,6 +621,25 @@ def add_cors_headers(response):  # type: ignore[no-untyped-def]
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return response
+
+
+@app.before_request
+def restrict_to_loopback_proxy():  # type: ignore[no-untyped-def]
+    if request.method == "OPTIONS":
+        return None
+
+    enforce_loopback_only = _safe_bool(
+        os.getenv("DOCPLUS_ONLY_ALLOW_LOOPBACK", "false"),
+        False,
+    )
+    if not enforce_loopback_only:
+        return None
+
+    remote_addr = _to_text(request.remote_addr)
+    if remote_addr and _is_loopback_address(remote_addr):
+        return None
+
+    return jsonify({"ok": False, "errors": ["Direct access is not allowed. Use the configured tunnel."]}), 403
 
 
 def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
@@ -900,7 +935,7 @@ def search_click() -> Any:
             "url": _to_text(payload.get("url")),
             "chunk_type": _to_text(payload.get("chunk_type")),
             "source_path": _to_text(payload.get("source_path")),
-            "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
+            "client_ip": _request_client_ip(),
             "user_agent": request.headers.get("User-Agent", ""),
         },
     )
@@ -945,7 +980,7 @@ def search_rating() -> Any:
             "url": url,
             "source_path": source_path,
             "user_score": str(user_score),
-            "client_ip": request.headers.get("X-Forwarded-For", request.remote_addr or ""),
+            "client_ip": _request_client_ip(),
             "user_agent": request.headers.get("User-Agent", ""),
         },
     )

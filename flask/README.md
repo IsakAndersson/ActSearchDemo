@@ -268,6 +268,7 @@ export DOCPLUS_TOP_K=5
 export DOCPLUS_ALLOWED_ORIGIN=https://your-vercel-app.vercel.app
 export DOCPLUS_HOST=127.0.0.1
 export DOCPLUS_PORT=5000
+export DOCPLUS_ONLY_ALLOW_LOOPBACK=true
 export DOCPLUS_SEARCH_LOG_PATH=output/logs/search_events.csv
 export DOCPLUS_CLICK_LOG_PATH=output/logs/click_events.csv
 export DOCPLUS_RATING_LOG_PATH=output/logs/rating_events.csv
@@ -284,10 +285,11 @@ HTTPS. The simplest temporary setup is to keep Flask local and expose it with ng
 ngrok config add-authtoken <YOUR_NGROK_TOKEN>
 ```
 
-2. Start Flask so it listens on all interfaces and your chosen demo port:
+2. Start Flask on loopback only so the server is reachable through ngrok on the same machine,
+   but not directly from other hosts:
 
 ```bash
-DOCPLUS_HOST=0.0.0.0 DOCPLUS_PORT=2200 \
+DOCPLUS_HOST=127.0.0.1 DOCPLUS_PORT=2200 DOCPLUS_ONLY_ALLOW_LOOPBACK=true \
 DOCPLUS_ALLOWED_ORIGIN=https://act-search-demo-qjau.vercel.app \
 python app.py
 ```
@@ -308,6 +310,15 @@ Useful checks:
 
 - ngrok request inspector: `http://127.0.0.1:4040`
 - Flask health endpoint through tunnel: `https://<your-ngrok-domain>/`
+
+Security note:
+
+- When requests come through ngrok, Flask typically sees the immediate peer as `127.0.0.1`
+  because the local ngrok agent forwards them into your app.
+- `DOCPLUS_ONLY_ALLOW_LOOPBACK=true` rejects requests whose `REMOTE_ADDR` is not loopback.
+  That allows ngrok-forwarded traffic while blocking direct connections to the Flask port.
+- Treat `X-Forwarded-For` as logging data only. It is useful for recording the original client IP,
+  but it should not be used by itself to authorize access.
 
 ### Notes
 

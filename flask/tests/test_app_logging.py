@@ -89,3 +89,36 @@ def test_click_and_rating_logs_include_participant_name_fallback(client, tmp_pat
     rating_rows = _read_rows(tmp_path / "rating_events.csv")
     assert click_rows[0]["user_name"] == "Grace Hopper"
     assert rating_rows[0]["user_name"] == "Grace Hopper"
+
+
+def test_search_log_prefers_original_forwarded_ip(client, tmp_path):
+    response = client.post(
+        "/search",
+        json={
+            "query": "tax rules",
+            "method": "bm25",
+            "user_name": "Ada Lovelace",
+        },
+        headers={"X-Forwarded-For": "203.0.113.10, 127.0.0.1"},
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+    )
+
+    assert response.status_code == 200
+    rows = _read_rows(tmp_path / "search_events.csv")
+    assert rows[0]["client_ip"] == "203.0.113.10"
+
+
+def test_loopback_only_mode_rejects_non_local_requests(client, monkeypatch):
+    monkeypatch.setenv("DOCPLUS_ONLY_ALLOW_LOOPBACK", "true")
+
+    response = client.post(
+        "/search",
+        json={
+            "query": "tax rules",
+            "method": "bm25",
+            "user_name": "Ada Lovelace",
+        },
+        environ_overrides={"REMOTE_ADDR": "198.51.100.25"},
+    )
+
+    assert response.status_code == 403
