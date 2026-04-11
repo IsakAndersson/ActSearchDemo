@@ -45,11 +45,18 @@ def _percentile(values: list[int], percentile: float) -> float | None:
     return lower_value + (upper_value - lower_value) * fraction
 
 
+def _has_value(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip() != ""
+    return value is not None
+
+
 def collect_stats(parsed_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
     document_count = 0
     page_counts: list[int] = []
     content_types: Counter[str] = Counter()
+    metadata_coverage: dict[str, dict[str, object]] = {}
 
     for path in sorted(parsed_path.glob("*.json")):
         document_count += 1
@@ -64,6 +71,18 @@ def collect_stats(parsed_dir: str) -> dict:
             page_counts.append(page_count)
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
+
+        for field_name, field_value in metadata_dict.items():
+            field_stats = metadata_coverage.setdefault(
+                field_name,
+                {
+                    "documents_with_value": 0,
+                    "unique_values": set(),
+                },
+            )
+            if _has_value(field_value):
+                field_stats["documents_with_value"] = int(field_stats["documents_with_value"]) + 1
+                field_stats["unique_values"].add(json.dumps(field_value, ensure_ascii=False, sort_keys=True))
 
     average_pages = statistics.mean(page_counts) if page_counts else None
     median_pages = statistics.median(page_counts) if page_counts else None
@@ -84,6 +103,18 @@ def collect_stats(parsed_dir: str) -> dict:
         "max_pages": max_pages,
         "percentiles": percentiles,
         "content_types": content_types,
+        "metadata_coverage": {
+            field_name: {
+                "documents_with_value": int(field_stats["documents_with_value"]),
+                "coverage_percent": (
+                    (int(field_stats["documents_with_value"]) / document_count) * 100
+                    if document_count > 0
+                    else 0.0
+                ),
+                "unique_value_count": len(field_stats["unique_values"]),
+            }
+            for field_name, field_stats in sorted(metadata_coverage.items())
+        },
     }
 
 
@@ -112,6 +143,16 @@ def print_stats(stats: dict) -> None:
     print("Content types:")
     for content_type, count in stats["content_types"].most_common():
         print(f"  {content_type}: {count}")
+
+    print("Metadata field coverage:")
+    for field_name, field_stats in stats["metadata_coverage"].items():
+        print(
+            "  "
+            f"{field_name}: "
+            f"{field_stats['documents_with_value']} documents "
+            f"({field_stats['coverage_percent']:.2f}%), "
+            f"{field_stats['unique_value_count']} unique values"
+        )
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
