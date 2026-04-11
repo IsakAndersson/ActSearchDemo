@@ -113,6 +113,8 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     metadata_document_count = 0
     publish_date_documents = 0
     older_than_two_years_documents = 0
+    publish_dates: list[date] = []
+    document_ages_days: list[int] = []
     today = date.today()
     for path in sorted(metadata_path.glob("*.json")):
         metadata_document_count += 1
@@ -125,7 +127,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         publish_date = _parse_publish_date(metadata_dict.get("publish_date"))
         if publish_date is not None:
             publish_date_documents += 1
+            publish_dates.append(publish_date)
             age_in_days = (today - publish_date).days
+            document_ages_days.append(age_in_days)
             if age_in_days > 365 * 2:
                 older_than_two_years_documents += 1
 
@@ -146,6 +150,15 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "p90": _percentile(page_counts, 0.90),
         "p95": _percentile(page_counts, 0.95),
     }
+    age_percentiles_days = {
+        "p10": _percentile(document_ages_days, 0.10),
+        "p25": _percentile(document_ages_days, 0.25),
+        "p75": _percentile(document_ages_days, 0.75),
+        "p90": _percentile(document_ages_days, 0.90),
+        "p95": _percentile(document_ages_days, 0.95),
+    }
+    newest_publish_date = max(publish_dates) if publish_dates else None
+    oldest_publish_date = min(publish_dates) if publish_dates else None
 
     return {
         "document_count": document_count,
@@ -157,7 +170,12 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             if publish_date_documents > 0
             else 0.0
         ),
+        "newest_publish_date": newest_publish_date.isoformat() if newest_publish_date else None,
+        "oldest_publish_date": oldest_publish_date.isoformat() if oldest_publish_date else None,
+        "age_percentiles_days": age_percentiles_days,
         "page_count_documents": len(page_counts),
+        "documents_over_50_pages": sum(1 for value in page_counts if value > 50),
+        "documents_over_100_pages": sum(1 for value in page_counts if value > 100),
         "average_pages": average_pages,
         "median_pages": median_pages,
         "max_pages": max_pages,
@@ -190,10 +208,22 @@ def print_stats(stats: dict) -> None:
         median_pages = stats["median_pages"]
         max_pages = stats["max_pages"]
         percentiles = stats["percentiles"]
+        documents_over_50_pages = stats["documents_over_50_pages"]
+        documents_over_100_pages = stats["documents_over_100_pages"]
         print(f"Documents with page_count: {page_count_documents}")
         print(f"Average pages: {average_pages:.2f}")
         print(f"Median pages: {median_pages}")
         print(f"Max pages: {max_pages}")
+        print(
+            "Documents over 50 pages: "
+            f"{documents_over_50_pages} "
+            f"({(documents_over_50_pages / page_count_documents) * 100:.2f}%)"
+        )
+        print(
+            "Documents over 100 pages: "
+            f"{documents_over_100_pages} "
+            f"({(documents_over_100_pages / page_count_documents) * 100:.2f}%)"
+        )
         print("Page-count percentiles:")
         for label in ("p10", "p25", "p75", "p90", "p95"):
             value = percentiles.get(label)
@@ -222,6 +252,13 @@ def print_stats(stats: dict) -> None:
         f"{stats['older_than_two_years_documents']} documents "
         f"({stats['older_than_two_years_percent']:.2f}%)"
     )
+    print(f"Newest publish_date: {stats['newest_publish_date'] or '(missing)'}")
+    print(f"Oldest publish_date: {stats['oldest_publish_date'] or '(missing)'}")
+    print("Document-age percentiles (years):")
+    for label in ("p10", "p25", "p75", "p90", "p95"):
+        value = stats["age_percentiles_days"].get(label)
+        if value is not None:
+            print(f"  {label}: {value / 365.25:.2f}")
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
