@@ -101,7 +101,7 @@ This prints:
 - how many documents have `metadata.page_count`
 - average, median, max, and percentiles for page count
 - counts per `content_type`
-- metadata-field coverage: for each field, number and percent of documents with a non-empty value, plus number of unique values
+- Docplus metadata-field coverage: for fields such as `process`, `subject_area`, `version`, and `tax_keyword`, number and percent of documents with a non-empty value, plus number of unique values
 
 ## Vector indexing (BERT Swedish)
 

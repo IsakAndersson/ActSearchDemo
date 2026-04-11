@@ -8,6 +8,20 @@ from collections import Counter
 from pathlib import Path
 from typing import Iterable, Optional
 
+DOCPLUS_METADATA_FIELDS = (
+    "document_collection",
+    "process",
+    "publish_date",
+    "subject_area",
+    "type_of_action",
+    "valid_for_area",
+    "version",
+    "comment",
+    "document_type",
+    "metadata_url",
+    "tax_keyword",
+)
+
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -56,7 +70,13 @@ def collect_stats(parsed_dir: str) -> dict:
     document_count = 0
     page_counts: list[int] = []
     content_types: Counter[str] = Counter()
-    metadata_coverage: dict[str, dict[str, object]] = {}
+    metadata_coverage: dict[str, dict[str, object]] = {
+        field_name: {
+            "documents_with_value": 0,
+            "unique_values": set(),
+        }
+        for field_name in DOCPLUS_METADATA_FIELDS
+    }
 
     for path in sorted(parsed_path.glob("*.json")):
         document_count += 1
@@ -72,14 +92,9 @@ def collect_stats(parsed_dir: str) -> dict:
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
 
-        for field_name, field_value in metadata_dict.items():
-            field_stats = metadata_coverage.setdefault(
-                field_name,
-                {
-                    "documents_with_value": 0,
-                    "unique_values": set(),
-                },
-            )
+        for field_name in DOCPLUS_METADATA_FIELDS:
+            field_value = metadata_dict.get(field_name)
+            field_stats = metadata_coverage[field_name]
             if _has_value(field_value):
                 field_stats["documents_with_value"] = int(field_stats["documents_with_value"]) + 1
                 field_stats["unique_values"].add(json.dumps(field_value, ensure_ascii=False, sort_keys=True))
@@ -113,7 +128,7 @@ def collect_stats(parsed_dir: str) -> dict:
                 ),
                 "unique_value_count": len(field_stats["unique_values"]),
             }
-            for field_name, field_stats in sorted(metadata_coverage.items())
+            for field_name, field_stats in metadata_coverage.items()
         },
     }
 
@@ -144,7 +159,7 @@ def print_stats(stats: dict) -> None:
     for content_type, count in stats["content_types"].most_common():
         print(f"  {content_type}: {count}")
 
-    print("Metadata field coverage:")
+    print("Docplus metadata field coverage:")
     for field_name, field_stats in stats["metadata_coverage"].items():
         print(
             "  "
