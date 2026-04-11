@@ -102,7 +102,7 @@ This prints:
 - average, median, max, percentiles, and counts over 50/100 pages for page count
 - counts per `content_type`
 - Docplus metadata-field coverage from `output/metadata`: for fields such as `process`, `subject_area`, `version`, and `tax_keyword`, number and percent of documents with a non-empty value, plus number of unique values
-- from `publish_date`, how many documents are older than 2 years at the time the script is run, plus age percentiles and the newest/oldest publish dates
+- from `publish_date`, how many documents are older than 2 years at the time the script is run, plus average/median age, age percentiles, and the newest/oldest publish dates
 
 ## Vector indexing (BERT Swedish)
 

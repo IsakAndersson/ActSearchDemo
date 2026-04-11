@@ -157,6 +157,8 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "p90": _percentile(document_ages_days, 0.90),
         "p95": _percentile(document_ages_days, 0.95),
     }
+    average_age_days = statistics.mean(document_ages_days) if document_ages_days else None
+    median_age_days = statistics.median(document_ages_days) if document_ages_days else None
     newest_publish_date = max(publish_dates) if publish_dates else None
     oldest_publish_date = min(publish_dates) if publish_dates else None
 
@@ -170,6 +172,8 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             if publish_date_documents > 0
             else 0.0
         ),
+        "average_age_days": average_age_days,
+        "median_age_days": median_age_days,
         "newest_publish_date": newest_publish_date.isoformat() if newest_publish_date else None,
         "oldest_publish_date": oldest_publish_date.isoformat() if oldest_publish_date else None,
         "age_percentiles_days": age_percentiles_days,
@@ -252,6 +256,12 @@ def print_stats(stats: dict) -> None:
         f"{stats['older_than_two_years_documents']} documents "
         f"({stats['older_than_two_years_percent']:.2f}%)"
     )
+    average_age_days = stats["average_age_days"]
+    median_age_days = stats["median_age_days"]
+    if average_age_days is not None:
+        print(f"Average document age (years): {average_age_days / 365.25:.2f}")
+    if median_age_days is not None:
+        print(f"Median document age (years): {median_age_days / 365.25:.2f}")
     print(f"Newest publish_date: {stats['newest_publish_date'] or '(missing)'}")
     print(f"Oldest publish_date: {stats['oldest_publish_date'] or '(missing)'}")
     print("Document-age percentiles (years):")
