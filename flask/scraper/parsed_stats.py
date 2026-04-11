@@ -76,6 +76,16 @@ def _has_value(value: object) -> bool:
     return value is not None
 
 
+def _split_metadata_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        parts = [part.strip() for part in value.split(",")]
+        return [part for part in parts if part]
+    if value is None:
+        return []
+    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return [serialized]
+
+
 def _parse_publish_date(value: object) -> date | None:
     if not isinstance(value, str):
         return None
@@ -146,11 +156,10 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             field_stats = metadata_coverage[field_name]
             if _has_value(field_value):
                 field_stats["documents_with_value"] = int(field_stats["documents_with_value"]) + 1
-                normalized_value = (
-                    field_value.strip() if isinstance(field_value, str) else json.dumps(field_value, ensure_ascii=False, sort_keys=True)
-                )
-                field_stats["unique_values"].add(normalized_value)
-                metadata_value_counts[field_name][normalized_value] += 1
+                split_values = _split_metadata_values(field_value)
+                for normalized_value in split_values:
+                    field_stats["unique_values"].add(normalized_value)
+                    metadata_value_counts[field_name][normalized_value] += 1
 
     average_pages = statistics.mean(page_counts) if page_counts else None
     median_pages = statistics.median(page_counts) if page_counts else None
