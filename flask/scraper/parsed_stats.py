@@ -5,6 +5,7 @@ import argparse
 import json
 import statistics
 from collections import Counter
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -70,6 +71,18 @@ def _has_value(value: object) -> bool:
     return value is not None
 
 
+def _parse_publish_date(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    try:
+        return datetime.strptime(trimmed, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
     metadata_path = Path(metadata_dir)
@@ -98,6 +111,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
     metadata_document_count = 0
+    publish_date_documents = 0
+    older_than_two_years_documents = 0
+    today = date.today()
     for path in sorted(metadata_path.glob("*.json")):
         metadata_document_count += 1
         with path.open("r", encoding="utf-8") as handle:
@@ -105,6 +121,13 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
 
         metadata = payload.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+        publish_date = _parse_publish_date(metadata_dict.get("publish_date"))
+        if publish_date is not None:
+            publish_date_documents += 1
+            age_in_days = (today - publish_date).days
+            if age_in_days > 365 * 2:
+                older_than_two_years_documents += 1
 
         for field_name in DOCPLUS_METADATA_FIELDS:
             field_value = metadata_dict.get(field_name)
@@ -127,6 +150,13 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     return {
         "document_count": document_count,
         "metadata_document_count": metadata_document_count,
+        "publish_date_documents": publish_date_documents,
+        "older_than_two_years_documents": older_than_two_years_documents,
+        "older_than_two_years_percent": (
+            (older_than_two_years_documents / publish_date_documents) * 100
+            if publish_date_documents > 0
+            else 0.0
+        ),
         "page_count_documents": len(page_counts),
         "average_pages": average_pages,
         "median_pages": median_pages,
@@ -184,6 +214,14 @@ def print_stats(stats: dict) -> None:
             f"({field_stats['coverage_percent']:.2f}%), "
             f"{field_stats['unique_value_count']} unique values"
         )
+
+    print("Publish-date age summary:")
+    print(f"Documents with publish_date: {stats['publish_date_documents']}")
+    print(
+        "Older than 2 years: "
+        f"{stats['older_than_two_years_documents']} documents "
+        f"({stats['older_than_two_years_percent']:.2f}%)"
+    )
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
