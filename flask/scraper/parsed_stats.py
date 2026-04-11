@@ -38,6 +38,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         default="output/metadata",
         help="Directory containing metadata-only JSON files for Docplus metadata coverage.",
     )
+    parser.add_argument(
+        "--metadata-values-output-dir",
+        default="output/metadata_field_values",
+        help="Directory where one .txt file per Docplus metadata field will be written.",
+    )
     return parser.parse_args(argv)
 
 
@@ -96,6 +101,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         }
         for field_name in DOCPLUS_METADATA_FIELDS
     }
+    metadata_value_counts: dict[str, Counter[str]] = {
+        field_name: Counter() for field_name in DOCPLUS_METADATA_FIELDS
+    }
 
     for path in sorted(parsed_path.glob("*.json")):
         document_count += 1
@@ -138,7 +146,11 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             field_stats = metadata_coverage[field_name]
             if _has_value(field_value):
                 field_stats["documents_with_value"] = int(field_stats["documents_with_value"]) + 1
-                field_stats["unique_values"].add(json.dumps(field_value, ensure_ascii=False, sort_keys=True))
+                normalized_value = (
+                    field_value.strip() if isinstance(field_value, str) else json.dumps(field_value, ensure_ascii=False, sort_keys=True)
+                )
+                field_stats["unique_values"].add(normalized_value)
+                metadata_value_counts[field_name][normalized_value] += 1
 
     average_pages = statistics.mean(page_counts) if page_counts else None
     median_pages = statistics.median(page_counts) if page_counts else None
@@ -197,6 +209,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             }
             for field_name, field_stats in metadata_coverage.items()
         },
+        "metadata_value_counts": metadata_value_counts,
     }
 
 
@@ -271,10 +284,28 @@ def print_stats(stats: dict) -> None:
             print(f"  {label}: {value / 365.25:.2f}")
 
 
+def write_metadata_value_files(stats: dict, output_dir: str) -> None:
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    metadata_value_counts = stats["metadata_value_counts"]
+    for field_name, counts in metadata_value_counts.items():
+        file_path = output_path / f"{field_name}.txt"
+        with file_path.open("w", encoding="utf-8") as handle:
+            handle.write(f"{field_name}\n")
+            handle.write(f"unique_values={len(counts)}\n")
+            if not counts:
+                handle.write("(none)\n")
+                continue
+            for value in sorted(counts):
+                handle.write(f"{value}: {counts[value]}\n")
+
+
 def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parse_args(argv)
     stats = collect_stats(args.parsed_dir, args.metadata_dir)
     print_stats(stats)
+    write_metadata_value_files(stats, args.metadata_values_output_dir)
     return 0
 
 
