@@ -104,6 +104,13 @@ This prints:
 - Docplus metadata-field coverage from `output/metadata`: for fields such as `process`, `subject_area`, `version`, and `tax_keyword`, number and percent of documents with a non-empty value, plus number of unique values
 - from `publish_date`, how many documents are older than 2 years at the time the script is run, plus average/median age, age percentiles, and the newest/oldest publish dates
 
+To list all unique non-empty Docplus metadata values per field from `output/metadata`
+with document counts per value:
+
+```bash
+python -m scraper.metadata_unique_values --metadata-dir output/metadata
+```
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
