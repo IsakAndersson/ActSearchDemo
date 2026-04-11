@@ -92,7 +92,7 @@ the result back to `metadata.page_count`.
 To print summary statistics for the parsed dataset without writing any new files:
 
 ```bash
-python -m scraper.parsed_stats --parsed-dir output/parsed
+python -m scraper.parsed_stats --parsed-dir output/parsed --metadata-dir output/metadata
 ```
 
 This prints:
@@ -101,7 +101,7 @@ This prints:
 - how many documents have `metadata.page_count`
 - average, median, max, and percentiles for page count
 - counts per `content_type`
-- Docplus metadata-field coverage: for fields such as `process`, `subject_area`, `version`, and `tax_keyword`, number and percent of documents with a non-empty value, plus number of unique values
+- Docplus metadata-field coverage from `output/metadata`: for fields such as `process`, `subject_area`, `version`, and `tax_keyword`, number and percent of documents with a non-empty value, plus number of unique values
 
 ## Vector indexing (BERT Swedish)
 

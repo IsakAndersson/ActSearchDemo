@@ -32,6 +32,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         default="output/parsed",
         help="Directory containing parsed JSON files.",
     )
+    parser.add_argument(
+        "--metadata-dir",
+        default="output/metadata",
+        help="Directory containing metadata-only JSON files for Docplus metadata coverage.",
+    )
     return parser.parse_args(argv)
 
 
@@ -65,8 +70,9 @@ def _has_value(value: object) -> bool:
     return value is not None
 
 
-def collect_stats(parsed_dir: str) -> dict:
+def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
+    metadata_path = Path(metadata_dir)
     document_count = 0
     page_counts: list[int] = []
     content_types: Counter[str] = Counter()
@@ -91,6 +97,14 @@ def collect_stats(parsed_dir: str) -> dict:
             page_counts.append(page_count)
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
+    metadata_document_count = 0
+    for path in sorted(metadata_path.glob("*.json")):
+        metadata_document_count += 1
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        metadata = payload.get("metadata")
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
 
         for field_name in DOCPLUS_METADATA_FIELDS:
             field_value = metadata_dict.get(field_name)
@@ -112,6 +126,7 @@ def collect_stats(parsed_dir: str) -> dict:
 
     return {
         "document_count": document_count,
+        "metadata_document_count": metadata_document_count,
         "page_count_documents": len(page_counts),
         "average_pages": average_pages,
         "median_pages": median_pages,
@@ -122,8 +137,8 @@ def collect_stats(parsed_dir: str) -> dict:
             field_name: {
                 "documents_with_value": int(field_stats["documents_with_value"]),
                 "coverage_percent": (
-                    (int(field_stats["documents_with_value"]) / document_count) * 100
-                    if document_count > 0
+                    (int(field_stats["documents_with_value"]) / metadata_document_count) * 100
+                    if metadata_document_count > 0
                     else 0.0
                 ),
                 "unique_value_count": len(field_stats["unique_values"]),
@@ -160,6 +175,7 @@ def print_stats(stats: dict) -> None:
         print(f"  {content_type}: {count}")
 
     print("Docplus metadata field coverage:")
+    print(f"Metadata documents: {stats['metadata_document_count']}")
     for field_name, field_stats in stats["metadata_coverage"].items():
         print(
             "  "
@@ -172,7 +188,7 @@ def print_stats(stats: dict) -> None:
 
 def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parse_args(argv)
-    stats = collect_stats(args.parsed_dir)
+    stats = collect_stats(args.parsed_dir, args.metadata_dir)
     print_stats(stats)
     return 0
 
