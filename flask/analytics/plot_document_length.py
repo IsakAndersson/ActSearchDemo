@@ -118,7 +118,7 @@ def plot_document_length_distribution(page_counts: list[int], output_path: str, 
     y = [counts.get(i, 0) for i in x]
 
     median_int = int(round(median_pages))
-    colors = ["#2e5d8a" if i == median_int else "#a8c686" for i in x]
+    colors = ["#788d60" if i == median_int else "#a8c686" for i in x]
 
     ax_short.bar(
         x,
@@ -136,7 +136,7 @@ def plot_document_length_distribution(page_counts: list[int], output_path: str, 
     ax_short.grid(axis="y", alpha=0.25)
 
     median_patch = mpatches.Patch(
-        color="#2e5d8a",
+        color="#788d60",
         label=f"Median ({median_int} pages)",
     )
     ax_short.legend(handles=[median_patch])

@@ -139,8 +139,7 @@ python -m analytics.plot_approved_date_distribution \
   --output-path output/plots/approved_date_distribution.png
 ```
 
-To create a histogram, broken/split/fine histogram variants, box plot, violin plot, and
-ECDF for document length:
+To create a histogram for document length:
 
 ```bash
 python -m analytics.plot_document_length \
