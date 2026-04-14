@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import numpy as np
 from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
@@ -82,7 +83,15 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
     output.parent.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.hist(ages_years, bins=bins, color="#7aa6c2", edgecolor="white", alpha=0.9)
+
+    max_age = max(ages_years)
+    bins = np.arange(0, (int(max_age) + 2)*2, 1)
+
+    ax.hist(ages_years, bins=bins, edgecolor="white", alpha=0.9)
+
+    ax.set_xticks(np.arange(0, int(max_age) + 1, 1))
+    ax.set_xlim(0, int(max_age) + 1)
+   
     ax.axvline(2.0, color="#c23b22", linestyle="--", linewidth=2, label="Outdated threshold (2 years)")
     ax.axvline(median_age, color="#1f5f3f", linestyle="-", linewidth=2, label=f"Median ({median_age:.2f} years)")
 
