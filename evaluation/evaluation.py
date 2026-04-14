@@ -456,6 +456,7 @@ def _resolve_search_function(method: str):
             dense_search,
             hybrid_e5_search,
             hybrid_search,
+            sqlite_fts_search,
             sts_live_search,
         )
     except ImportError:
@@ -466,11 +467,13 @@ def _resolve_search_function(method: str):
             dense_search,
             hybrid_e5_search,
             hybrid_search,
+            sqlite_fts_search,
             sts_live_search,
         )
 
     search_functions = {
         "bm25": bm25_search,
+        "sqlite_fts": sqlite_fts_search,
         "dense": dense_search,
         "dense_e5": dense_e5_search,
         "hybrid": hybrid_search,
@@ -484,7 +487,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run retrieval evaluation.")
     parser.add_argument(
         "--method",
-        choices=["bm25", "dense", "dense_e5", "hybrid", "hybrid_e5", "docplus_live", "sts_live"],
+        choices=["bm25", "sqlite_fts", "dense", "dense_e5", "hybrid", "hybrid_e5", "docplus_live", "sts_live"],
         default="hybrid",
         help="Search method to evaluate.",
     )

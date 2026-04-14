@@ -17,6 +17,7 @@ from uuid import uuid4
 from flask import Flask, jsonify, request
 
 from search.bm25_search import bm25_search
+from search.sqlite_fts_search import sqlite_fts_search as sqlite_fts_search_impl
 from search.vector_index import DEFAULT_MODEL, VECTOR_MODEL_PROFILES, query_index
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -510,7 +511,7 @@ def _log_search(
     methods_to_log: Dict[str, List[Dict[str, Any]]] = {}
     if results_by_method:
         methods_to_log = results_by_method
-    elif requested_method in {"bm25", "vector", "vector_e5", "hybrid_e5", "docplus_live"}:
+    elif requested_method in {"bm25", "sqlite_fts", "vector", "vector_e5", "hybrid_e5", "docplus_live"}:
         methods_to_log = {requested_method: results}
 
     if not methods_to_log:
@@ -648,6 +649,10 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
             payload.get("parsed_dir")
             or _get_env_default("DOCPLUS_PARSED_DIR", "output/parsed")
         ),
+        "sqlite_fts_path": str(
+            payload.get("sqlite_fts_path")
+            or _get_env_default("DOCPLUS_SQLITE_FTS_PATH", "output/sqlite_fts/docplus_fts.sqlite3")
+        ),
         "index_path": str(
             payload.get("index_path")
             or _get_env_default("DOCPLUS_INDEX_PATH", "output/vector_index/docplus.faiss")
@@ -745,6 +750,18 @@ def search() -> Any:
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
+        elif method == "sqlite_fts":
+            try:
+                results = sqlite_fts_search_impl(
+                    parsed_dir=defaults["parsed_dir"],
+                    query=query,
+                    top_k=top_k,
+                    db_path=defaults["sqlite_fts_path"],
+                    use_chunking=bm25_use_chunking,
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"SQLite FTS search failed: {exc}")
         elif method == "vector":
             try:
                 results = query_index(
@@ -850,6 +867,18 @@ def search() -> Any:
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
+            try:
+                results_by_method["sqlite_fts"] = sqlite_fts_search_impl(
+                    parsed_dir=defaults["parsed_dir"],
+                    query=query,
+                    top_k=top_k,
+                    db_path=defaults["sqlite_fts_path"],
+                    use_chunking=bm25_use_chunking,
+                )
+                successful_methods += 1
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"SQLite FTS search failed: {exc}")
+                results_by_method["sqlite_fts"] = []
             try:
                 results_by_method["vector"] = query_index(
                     index_path=defaults["index_path"],

@@ -11,6 +11,7 @@ This document describes the supported `/search` API for external use.
 Only these `method` values should be used:
 
 - `bm25`
+- `sqlite_fts`
 - `vector_e5`
 - `hybrid_e5`
 - `docplus_live`
@@ -176,9 +177,22 @@ curl -X POST https://unclimbing-madelaine-unsavorily.ngrok-free.dev/search \
   }'
 ```
 
+### 6. Test `sqlite_fts`
+
+```bash
+curl -X POST https://unclimbing-madelaine-unsavorily.ngrok-free.dev/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "I vilka fall behöver patienter adrenalin",
+    "method": "sqlite_fts",
+    "user_name": "kandGrupp",
+    "top_k": 5
+  }'
+```
+
 ## Notes
 
 - Only use the `/search` endpoint described here.
 - Always send `user_name` as `kandGrupp`.
-- Only use these methods: `bm25`, `vector_e5`, `hybrid_e5`, `docplus_live`.
+- Only use these methods: `bm25`, `sqlite_fts`, `vector_e5`, `hybrid_e5`, `docplus_live`.
 - If `results` is empty, also inspect the `errors` field in the response.

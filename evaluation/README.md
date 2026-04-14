@@ -94,6 +94,7 @@ from evaluation.search_adapter import (
     dense_e5_search,
     hybrid_search,
     hybrid_e5_search,
+    sqlite_fts_search,
 )
 
 # BM25
@@ -108,6 +109,13 @@ evaluate_system(
     search_function=dense_search,
     k=20,
     metadata={"method": "dense", "experiment": "baseline"}
+)
+
+# SQLite FTS5
+evaluate_system(
+    search_function=sqlite_fts_search,
+    k=20,
+    metadata={"method": "sqlite_fts", "experiment": "baseline"}
 )
 
 # Hybrid
@@ -151,6 +159,7 @@ Run from terminal with flags:
 
 ```bash
 ./.venv/bin/python evaluation/evaluation.py --method bm25 --top-k 20 --meta experiment=bm25_baseline
+./.venv/bin/python evaluation/evaluation.py --method sqlite_fts --top-k 20 --meta experiment=sqlite_fts_baseline
 ./.venv/bin/python evaluation/evaluation.py --method dense --top-k 20 --meta experiment=dense_baseline
 ./.venv/bin/python evaluation/evaluation.py --method dense_e5 --top-k 20 --meta experiment=dense_e5_baseline
 ./.venv/bin/python evaluation/evaluation.py --method hybrid --top-k 20 --meta experiment=hybrid_baseline
@@ -162,7 +171,7 @@ Run from terminal with flags:
 
 CLI flags:
 
-- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid`)
+- `--method`: `bm25`, `sqlite_fts`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid`)
 - `--top-k`: integer > 0 (default: `20`)
 - `--meta KEY=VALUE`: optional metadata entry, repeat for multiple fields
 - `--qrels-source`: `google_sheet` or `form_submissions` (default: `google_sheet`)

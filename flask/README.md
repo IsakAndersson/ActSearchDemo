@@ -232,13 +232,14 @@ python -m search.bm25_search \
 
 ## Offline evaluation
 
-Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `dense`,
-`dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, and `sts_live` methods with `RR@20` reporting.
+Offline retrieval evaluation lives in `evaluation/` and supports `bm25`, `sqlite_fts`,
+`dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, and `sts_live` methods with `RR@20` reporting.
 
 From repository root:
 
 ```bash
 python evaluation/evaluation.py --method hybrid --top-k 20
+python evaluation/evaluation.py --method sqlite_fts --top-k 20
 python evaluation/evaluation.py --method docplus_live --top-k 20
 python evaluation/evaluation.py --method sts_live --top-k 20
 ```
@@ -257,9 +258,10 @@ API endpoints:
 
 - `GET /` health/info endpoint
 - `POST /search` search endpoint (JSON body or form body). `method` supports `bm25`,
-  `vector`, `vector_e5`, `hybrid_e5`, and `all` (returns `results_by_method`). The
-  default method is `bm25`. Include `user_name` to attach a user identifier to the
-  search logs; `participant_name` is also accepted as a fallback.
+  `sqlite_fts`, `vector`, `vector_e5`, `hybrid_e5`, `docplus_live`, and `all`
+  (returns `results_by_method`). The default method is `bm25`. Include `user_name`
+  to attach a user identifier to the search logs; `participant_name` is also
+  accepted as a fallback.
 - `POST /search/click` click-tracking endpoint. Expects `search_id` and result metadata
   from the frontend when a user clicks a result link. Include `user_name` if you want it
   recorded in the click log.

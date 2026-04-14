@@ -7,7 +7,14 @@ const SESSION_KEY = "actsearch-authenticated";
 const DEFAULT_API_BASE_URL =
   process.env.NEXT_PUBLIC_DOCPLUS_API_BASE_URL ?? "http://127.0.0.1:5000";
 
-type SearchMethod = "bm25" | "vector" | "vector_e5" | "hybrid_e5" | "docplus_live" | "all";
+type SearchMethod =
+  | "bm25"
+  | "sqlite_fts"
+  | "vector"
+  | "vector_e5"
+  | "hybrid_e5"
+  | "docplus_live"
+  | "all";
 
 type SearchResult = {
   score?: number;
@@ -201,6 +208,7 @@ export default function SearchPage() {
   const [method, setMethod] = useState<SearchMethod>("hybrid_e5");
   const [query, setQuery] = useState("");
   const [parsedDir, setParsedDir] = useState("output/parsed");
+  const [sqliteFtsPath, setSqliteFtsPath] = useState("output/sqlite_fts/docplus_fts.sqlite3");
   const [indexPath, setIndexPath] = useState("output/vector_index/docplus.faiss");
   const [metadataPath, setMetadataPath] = useState(
     "output/vector_index/docplus_metadata.jsonl",
@@ -333,6 +341,7 @@ export default function SearchPage() {
           method,
           query,
           parsed_dir: parsedDir,
+          sqlite_fts_path: sqliteFtsPath,
           index_path: indexPath,
           metadata_path: metadataPath,
           e5_index_path: e5IndexPath,
@@ -425,6 +434,7 @@ export default function SearchPage() {
                   onChange={(event) => setMethod(event.target.value as SearchMethod)}
                 >
                   <option value="bm25">BM25</option>
+                  <option value="sqlite_fts">SQLite FTS</option>
                   <option value="vector">Vector (FAISS)</option>
                   <option value="vector_e5">Vector (E5 large instruct)</option>
                   <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
@@ -458,6 +468,18 @@ export default function SearchPage() {
                         type="text"
                         value={parsedDir}
                         onChange={(event) => setParsedDir(event.target.value)}
+                      />
+                    </label>
+
+                    <label className="form-control">
+                      <div className="label">
+                        <span className="label-text">SQLite FTS path</span>
+                      </div>
+                      <input
+                        className="input input-bordered"
+                        type="text"
+                        value={sqliteFtsPath}
+                        onChange={(event) => setSqliteFtsPath(event.target.value)}
                       />
                     </label>
 
@@ -569,6 +591,7 @@ export default function SearchPage() {
             <div className="grid gap-4 lg:grid-cols-3">
               {[
                 { key: "bm25", label: "BM25" },
+                { key: "sqlite_fts", label: "SQLite FTS" },
                 { key: "vector", label: "Vector (FAISS)" },
                 { key: "vector_e5", label: "Vector (E5 large instruct)" },
                 { key: "hybrid_e5", label: "Hybrid (BM25 + E5)" },

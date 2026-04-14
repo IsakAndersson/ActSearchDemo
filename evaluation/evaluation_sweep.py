@@ -17,6 +17,7 @@ from search_adapter import (
     dense_search,
     hybrid_e5_search,
     hybrid_search,
+    sqlite_fts_search,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ try:
         resolve_model_name,
         resolve_text_source,
     )
+    from search.sqlite_fts_search import build_sqlite_fts_index
 except ModuleNotFoundError:
     DEFAULT_MODEL = "KBLab/bert-base-swedish-cased"
 
@@ -39,6 +41,9 @@ except ModuleNotFoundError:
     def resolve_text_source(text_source):
         return text_source or "text"
 
+    def build_sqlite_fts_index(**kwargs):
+        raise RuntimeError("SQLite FTS search module is unavailable.")
+
 
 DEFAULT_TOP_K = 20
 DEFAULT_CHUNK_SIZE = 500
@@ -46,6 +51,7 @@ DEFAULT_OVERLAP = 50
 
 
 METHODS_WITH_VECTOR = {"dense", "dense_e5", "hybrid", "hybrid_e5"}
+METHODS_WITH_SQLITE_FTS = {"sqlite_fts"}
 
 
 def _slugify(value: str) -> str:
@@ -106,6 +112,10 @@ def _resolve_vector_model(method: str, profile: str | None, model_name: str | No
 
 def _vector_paths(index_dir: Path) -> tuple[str, str]:
     return (str(index_dir / "docplus.faiss"), str(index_dir / "docplus_metadata.jsonl"))
+
+
+def _sqlite_fts_path(index_dir: Path) -> str:
+    return str(index_dir / "docplus_fts.sqlite3")
 
 
 def _text_source_label(text_source: str) -> str:
@@ -174,6 +184,8 @@ def _iter_grid(chunk_sizes: Sequence[int], overlaps: Sequence[int], include_titl
 def _search_fn_for_method(method: str, config: SearchConfig) -> Callable[[str, int], List[tuple[str, float]]]:
     if method == "bm25":
         return lambda query, top_k: bm25_search(query=query, top_k=top_k, config=config)
+    if method == "sqlite_fts":
+        return lambda query, top_k: sqlite_fts_search(query=query, top_k=top_k, config=config)
     if method == "dense":
         return lambda query, top_k: dense_search(query=query, top_k=top_k, config=config)
     if method == "dense_e5":
@@ -250,6 +262,16 @@ def run_sweep(
                 device=device,
                 text_source=resolved_text_source,
             )
+        elif method in METHODS_WITH_SQLITE_FTS:
+            index_dir.mkdir(parents=True, exist_ok=True)
+            build_sqlite_fts_index(
+                parsed_dir=parsed_dir,
+                db_path=_sqlite_fts_path(index_dir),
+                max_chars=chunk_size,
+                overlap=overlap,
+                include_title_chunk=include_title_chunk,
+                use_chunking=True,
+            )
 
         index_manifest = {
             "method": method,
@@ -266,6 +288,8 @@ def run_sweep(
                     "metadata_path": metadata_path,
                 }
             )
+        elif method in METHODS_WITH_SQLITE_FTS:
+            index_manifest["sqlite_fts_path"] = _sqlite_fts_path(index_dir)
         _write_json(index_dir / "config.json", index_manifest)
 
         if method in METHODS_WITH_VECTOR:
@@ -292,6 +316,16 @@ def run_sweep(
                     bm25_overlap=overlap,
                     bm25_include_title_chunk=include_title_chunk,
                 )
+        elif method in METHODS_WITH_SQLITE_FTS:
+            config = SearchConfig(
+                parsed_dir=parsed_dir,
+                sqlite_fts_path=_sqlite_fts_path(index_dir),
+                device=device,
+                bm25_max_chars=chunk_size,
+                bm25_overlap=overlap,
+                bm25_include_title_chunk=include_title_chunk,
+                bm25_use_chunking=True,
+            )
         else:
             config = SearchConfig(
                 parsed_dir=parsed_dir,
@@ -305,7 +339,7 @@ def run_sweep(
         search_function = _search_fn_for_method(method=method, config=config)
         run_metadata = {
             "method": method,
-            "model_name": model if method in METHODS_WITH_VECTOR else "bm25",
+            "model_name": model if method in METHODS_WITH_VECTOR else method,
             "experiment": experiment_dir.name,
             "config_slug": config_slug,
             "text_source": resolved_text_source,
@@ -333,7 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run chunking/preprocessing evaluation sweeps.")
     parser.add_argument(
         "--method",
-        choices=["bm25", "dense", "dense_e5", "hybrid", "hybrid_e5"],
+        choices=["bm25", "sqlite_fts", "dense", "dense_e5", "hybrid", "hybrid_e5"],
         required=True,
         help="Search method to evaluate in a parameter sweep.",
     )

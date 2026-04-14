@@ -34,3 +34,11 @@ Titel utan stor bokstav,1.0,1.0,2026-03-26T14:01:44+01:00,20,80,7,google_sheet,g
 2 nyckelord med stavfel,0.11601307189542483,6.166666666666667,2026-03-26T14:01:44+01:00,20,80,7,google_sheet,google_sheet,hybrid_e5_smaller_metadata,hybrid_e5
 2 nyckelord med synonymer,0.4375,2.375,2026-03-26T14:01:44+01:00,20,80,7,google_sheet,google_sheet,hybrid_e5_smaller_metadata,hybrid_e5
 Längre sökterm,0.6800213675213675,2.6363636363636362,2026-03-26T14:01:44+01:00,20,80,7,google_sheet,google_sheet,hybrid_e5_smaller_metadata,hybrid_e5
+query_type,RR@20,average_rank,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,method
+Case-beskrivning,0.07222222222222223,4.333333333333333,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+Titel på rätt dokument,1.0,1.0,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+Titel utan stor bokstav,1.0,1.0,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+2 nyckelord,0.4703703703703703,2.7777777777777777,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+2 nyckelord med stavfel,0.07291666666666667,4.666666666666667,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+2 nyckelord med synonymer,0.12083333333333333,3.3333333333333335,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts
+Längre sökterm,0.4444444444444444,2.25,2026-04-14T10:04:37+01:00,20,80,7,google_sheet,google_sheet,sqlite_fts

@@ -26,6 +26,7 @@ if str(FLASK_DIR) not in sys.path:
     sys.path.insert(0, str(FLASK_DIR))
 
 from search.bm25_search import bm25_search as _bm25_impl  # noqa: E402
+from search.sqlite_fts_search import sqlite_fts_search as _sqlite_fts_impl  # noqa: E402
 try:
     from .doc_id import normalize_doc_id  # type: ignore[attr-defined] # noqa: E402
 except ImportError:
@@ -46,6 +47,7 @@ def _env_bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class SearchConfig:
     parsed_dir: str = str(FLASK_DIR / "output" / "parsed")
+    sqlite_fts_path: str = str(FLASK_DIR / "output" / "sqlite_fts" / "docplus_fts.sqlite3")
     index_path: str = str(FLASK_DIR / "output" / "vector_index" / "docplus.faiss")
     metadata_path: str = str(FLASK_DIR / "output" / "vector_index" / "docplus_metadata.jsonl")
     model_name: str = "KBLab/bert-base-swedish-cased"
@@ -71,6 +73,7 @@ class SearchConfig:
 
 DEFAULT_CONFIG = SearchConfig(
     parsed_dir=os.getenv("DOCPLUS_PARSED_DIR", SearchConfig.parsed_dir),
+    sqlite_fts_path=os.getenv("DOCPLUS_SQLITE_FTS_PATH", SearchConfig.sqlite_fts_path),
     index_path=os.getenv("DOCPLUS_INDEX_PATH", SearchConfig.index_path),
     metadata_path=os.getenv("DOCPLUS_METADATA_PATH", SearchConfig.metadata_path),
     model_name=os.getenv("DOCPLUS_MODEL_NAME", SearchConfig.model_name),
@@ -320,6 +323,22 @@ def bm25_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CONF
         parsed_dir=config.parsed_dir,
         query=query,
         top_k=top_k,
+        max_chars=config.bm25_max_chars,
+        overlap=config.bm25_overlap,
+        include_title_chunk=config.bm25_include_title_chunk,
+        use_chunking=config.bm25_use_chunking,
+    )
+    return _dedupe_and_sort(raw_results, top_k=top_k)
+
+
+def sqlite_fts_search(query: str, top_k: int = 20, config: SearchConfig = DEFAULT_CONFIG) -> SearchResults:
+    if not query.strip() or top_k <= 0:
+        return []
+    raw_results = _sqlite_fts_impl(
+        parsed_dir=config.parsed_dir,
+        query=query,
+        top_k=top_k,
+        db_path=config.sqlite_fts_path,
         max_chars=config.bm25_max_chars,
         overlap=config.bm25_overlap,
         include_title_chunk=config.bm25_include_title_chunk,
