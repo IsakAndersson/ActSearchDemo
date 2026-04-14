@@ -8,6 +8,8 @@ import numpy as np
 from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
+from collections import Counter
+import matplotlib.patches as mpatches
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(__file__).resolve().parent / ".matplotlib"))
 
@@ -74,32 +76,75 @@ def collect_document_ages_years(metadata_dir: str) -> list[float]:
     return ages_years
 
 
+
 def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) -> None:
     if not ages_years:
         raise ValueError("No valid publish_date values found in metadata.")
+
+    import numpy as np
+    import matplotlib.patches as mpatches
+    import matplotlib.lines as mlines
 
     median_age = statistics.median(ages_years)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    max_age = max(ages_years)
+
+    # Halvårs-bins: 0–0.5, 0.5–1.0, ...
+    bin_edges = np.arange(0, int(max_age) + 2, 0.5)
+
+    counts, edges = np.histogram(ages_years, bins=bin_edges)
+
+    # Mittpunkter för varje bin
+    centers = (edges[:-1] + edges[1:]) / 2
+
+    # Identifiera medianens bin
+    median_bin_idx = np.digitize(median_age, edges) - 1
+
+    # Färger: median-bin blå, resten ljusblå
+    colors = [
+        "#2e5d8a" if i == median_bin_idx else "#7aa6c2"
+        for i in range(len(counts))
+    ]
+
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    max_age = max(ages_years)
-    bins = np.arange(0, (int(max_age) + 2)*2, 1)
+    ax.bar(
+        centers,
+        counts,
+        width=0.45,  # lite mindre än bin-bredd (0.5)
+        color=colors,
+        edgecolor="white",
+        align="center",
+    )
 
-    ax.hist(ages_years, bins=bins, edgecolor="white", alpha=0.9)
-
-    ax.set_xticks(np.arange(0, int(max_age) + 1, 1))
-    ax.set_xlim(0, int(max_age) + 1)
-   
-    ax.axvline(2.0, color="#c23b22", linestyle="--", linewidth=2, label="Outdated threshold (2 years)")
-    ax.axvline(median_age, color="#1f5f3f", linestyle="-", linewidth=2, label=f"Median ({median_age:.2f} years)")
+    # Outdated-linje vid exakt 2 år
+    ax.axvline(
+        2.0,
+        color="#c23b22",
+        linestyle="--",
+        linewidth=2,
+    )
 
     ax.set_title("Document Age Distribution")
     ax.set_xlabel("Document age (years)")
     ax.set_ylabel("Number of documents")
-    ax.legend()
+    ax.set_xlim(0, int(max_age) + 1)
+    ax.set_xticks(np.arange(0, int(max_age) + 1, 1))
     ax.grid(axis="y", alpha=0.25)
+
+    # Legend
+    median_patch = mpatches.Patch(
+        color="#2e5d8a",
+        label=f"Median ({median_age:.2f} years)"
+    )
+    threshold_line = mlines.Line2D(
+        [], [], color="#c23b22", linestyle="--",
+        label="Outdated threshold (2 years)"
+    )
+
+    ax.legend(handles=[median_patch, threshold_line])
 
     fig.tight_layout()
     fig.savefig(output, dpi=160)

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from typing import Iterable, Optional
+from collections import Counter
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(__file__).resolve().parent / ".matplotlib"))
 
@@ -67,7 +68,7 @@ def plot_document_length_distribution(page_counts: list[int], output_path: str, 
     # --- Ursprungligt diagram (oförändrat) ---
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.hist(page_counts, bins=bins, color="#a8c686", edgecolor="white", alpha=0.9)
-    ax.axvline(median_pages, color="#2e5d8a", linestyle="-", linewidth=2, label=f"Median ({median_pages:.1f} pages)")
+    #ax.axvline(median_pages, color="#2e5d8a", linestyle="-", linewidth=2, label=f"Median ({median_pages:.1f} pages)")
     ax.set_title("Document Length Distribution")
     ax.set_xlabel("Document length (pages)")
     ax.set_ylabel("Number of documents")
@@ -105,6 +106,45 @@ def plot_document_length_distribution(page_counts: list[int], output_path: str, 
     subplot_output = output.with_stem(output.stem + "_split")
     fig2.savefig(subplot_output, dpi=160)
     plt.close(fig2)
+    
+    # --- Separat plot: samma som första subplotten, avkortad vid 30 med diskreta staplar ---
+    fig_short, ax_short = plt.subplots(figsize=(10, 6))
+
+    from collections import Counter
+    import matplotlib.patches as mpatches
+
+    counts = Counter(short)
+    x = list(range(0, split + 1))
+    y = [counts.get(i, 0) for i in x]
+
+    median_int = int(round(median_pages))
+    colors = ["#2e5d8a" if i == median_int else "#a8c686" for i in x]
+
+    ax_short.bar(
+        x,
+        y,
+        width=0.8,
+        color=colors,
+        edgecolor="white",
+    )
+
+    ax_short.set_title("Document Length Distribution (0-30 pages)")
+    ax_short.set_xlabel("Document length (pages)")
+    ax_short.set_ylabel("Number of documents")
+    ax_short.set_xlim(-0.5, split + 0.5)
+    ax_short.set_xticks(range(0, split + 1, 5))
+    ax_short.grid(axis="y", alpha=0.25)
+
+    median_patch = mpatches.Patch(
+        color="#2e5d8a",
+        label=f"Median ({median_int} pages)",
+    )
+    ax_short.legend(handles=[median_patch])
+
+    fig_short.tight_layout()
+    short_output = output.with_stem(output.stem + "_0_30")
+    fig_short.savefig(short_output, dpi=160)
+    plt.close(fig_short)
 
     # --- Bruten y-axel ---
     from matplotlib.ticker import MaxNLocator
