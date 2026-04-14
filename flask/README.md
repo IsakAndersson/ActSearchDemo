@@ -115,6 +115,15 @@ with document counts per value:
 python -m scraper.metadata_unique_values --metadata-dir output/metadata
 ```
 
+To plot a histogram of document ages from `publish_date`, with vertical lines for the
+2-year outdated threshold and the median age:
+
+```bash
+python -m scraper.plot_age_distribution \
+  --metadata-dir output/metadata \
+  --output-path output/plots/document_age_distribution.png
+```
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
