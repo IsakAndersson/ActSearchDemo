@@ -124,6 +124,15 @@ python -m scraper.plot_age_distribution \
   --output-path output/plots/document_age_distribution.png
 ```
 
+To plot a histogram of document length from `page_count`, with vertical lines for
+50 pages, 100 pages, and the median:
+
+```bash
+python -m scraper.plot_document_length_distribution \
+  --parsed-dir output/parsed \
+  --output-path output/plots/document_length_distribution.png
+```
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
