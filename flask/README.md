@@ -108,27 +108,42 @@ It also writes one `.txt` file per Docplus metadata field to `output/metadata_fi
 (or the directory passed via `--metadata-values-output-dir`), with values sorted
 alphabetically and document counts per value.
 
+The statistics script also scans the beginning of each parsed document `text` field for
+`Godkänt den:` followed by a date, and writes date counts to `output/approved_dates.txt`
+(or the path passed via `--approved-dates-output-path`). The file also includes counts for
+documents where the prefix was not found at the beginning and where the prefix existed but
+no date was extracted.
+
 To list all unique non-empty Docplus metadata values per field from `output/metadata`
 with document counts per value:
 
 ```bash
-python -m scraper.metadata_unique_values --metadata-dir output/metadata
+python -m analytics.metadata_unique_values --metadata-dir output/metadata
 ```
 
 To plot a histogram of document ages from `publish_date`, with vertical lines for the
 2-year outdated threshold and the median age:
 
 ```bash
-python -m scraper.plot_age_distribution \
+python -m analytics.plot_age_distribution \
   --metadata-dir output/metadata \
   --output-path output/plots/document_age_distribution.png
 ```
 
-To plot a histogram of document length from `page_count`, with vertical lines for
-50 pages, 100 pages, and the median:
+To plot the same type of histogram but using approved dates extracted from `Godkänt den:`
+near the start of parsed document text:
 
 ```bash
-python -m scraper.plot_document_length_distribution \
+python -m analytics.plot_approved_date_distribution \
+  --parsed-dir output/parsed \
+  --output-path output/plots/approved_date_distribution.png
+```
+
+To create a histogram, broken/split/fine histogram variants, box plot, violin plot, and
+ECDF for document length:
+
+```bash
+python -m analytics.plot_document_length \
   --parsed-dir output/parsed \
   --output-path output/plots/document_length_distribution.png
 ```

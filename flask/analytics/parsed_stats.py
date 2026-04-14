@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 from collections import Counter
 from datetime import date, datetime
@@ -22,6 +23,8 @@ DOCPLUS_METADATA_FIELDS = (
     "metadata_url",
     "tax_keyword",
 )
+APPROVED_DATE_PREFIX = "Godkänt den:"
+APPROVED_DATE_REGEX = re.compile(r"Godkänt den:\s*(?:\n\s*)*(\d{4}-\d{2}-\d{2})")
 
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
@@ -42,6 +45,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         "--metadata-values-output-dir",
         default="output/metadata_field_values",
         help="Directory where one .txt file per Docplus metadata field will be written.",
+    )
+    parser.add_argument(
+        "--approved-dates-output-path",
+        default="output/approved_dates.txt",
+        help="Path where approved-date counts from parsed text will be written.",
     )
     return parser.parse_args(argv)
 
@@ -98,12 +106,29 @@ def _parse_publish_date(value: object) -> date | None:
         return None
 
 
+def _extract_approved_date_from_text(text: object, head_chars: int = 500) -> str | None:
+    if not isinstance(text, str):
+        return None
+    text_head = text[:head_chars]
+    match = APPROVED_DATE_REGEX.search(text_head)
+    if not match:
+        return None
+    return match.group(1)
+
+
 def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
     metadata_path = Path(metadata_dir)
+    today = date.today()
     document_count = 0
     page_counts: list[int] = []
     content_types: Counter[str] = Counter()
+    approved_date_counts: Counter[str] = Counter()
+    approved_prefix_missing = 0
+    approved_date_missing_after_prefix = 0
+    approved_dates: list[date] = []
+    approved_age_days: list[int] = []
+    approved_dates_older_than_two_years = 0
     metadata_coverage: dict[str, dict[str, object]] = {
         field_name: {
             "documents_with_value": 0,
@@ -122,18 +147,34 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
 
         metadata = payload.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
+        text = payload.get("text")
 
         page_count = metadata_dict.get("page_count")
         if isinstance(page_count, int):
             page_counts.append(page_count)
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
+
+        text_head = text[:500] if isinstance(text, str) else ""
+        if APPROVED_DATE_PREFIX not in text_head:
+            approved_prefix_missing += 1
+        else:
+            approved_date = _extract_approved_date_from_text(text)
+            if approved_date is None:
+                approved_date_missing_after_prefix += 1
+            else:
+                approved_date_counts[approved_date] += 1
+                approved_date_obj = datetime.strptime(approved_date, "%Y-%m-%d").date()
+                approved_dates.append(approved_date_obj)
+                approved_age = (today - approved_date_obj).days
+                approved_age_days.append(approved_age)
+                if approved_age > 365 * 2:
+                    approved_dates_older_than_two_years += 1
     metadata_document_count = 0
     publish_date_documents = 0
     older_than_two_years_documents = 0
     publish_dates: list[date] = []
     document_ages_days: list[int] = []
-    today = date.today()
     for path in sorted(metadata_path.glob("*.json")):
         metadata_document_count += 1
         with path.open("r", encoding="utf-8") as handle:
@@ -182,6 +223,10 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     median_age_days = statistics.median(document_ages_days) if document_ages_days else None
     newest_publish_date = max(publish_dates) if publish_dates else None
     oldest_publish_date = min(publish_dates) if publish_dates else None
+    average_approved_age_days = statistics.mean(approved_age_days) if approved_age_days else None
+    median_approved_age_days = statistics.median(approved_age_days) if approved_age_days else None
+    newest_approved_date = max(approved_dates) if approved_dates else None
+    oldest_approved_date = min(approved_dates) if approved_dates else None
 
     return {
         "document_count": document_count,
@@ -201,6 +246,21 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "page_count_documents": len(page_counts),
         "documents_over_50_pages": sum(1 for value in page_counts if value > 50),
         "documents_over_100_pages": sum(1 for value in page_counts if value > 100),
+        "approved_date_counts": approved_date_counts,
+        "approved_date_documents": sum(approved_date_counts.values()),
+        "approved_date_missing_total": approved_prefix_missing + approved_date_missing_after_prefix,
+        "approved_prefix_missing": approved_prefix_missing,
+        "approved_date_missing_after_prefix": approved_date_missing_after_prefix,
+        "approved_dates_older_than_two_years": approved_dates_older_than_two_years,
+        "approved_dates_older_than_two_years_percent": (
+            (approved_dates_older_than_two_years / sum(approved_date_counts.values())) * 100
+            if sum(approved_date_counts.values()) > 0
+            else 0.0
+        ),
+        "average_approved_age_days": average_approved_age_days,
+        "median_approved_age_days": median_approved_age_days,
+        "newest_approved_date": newest_approved_date.isoformat() if newest_approved_date else None,
+        "oldest_approved_date": oldest_approved_date.isoformat() if oldest_approved_date else None,
         "average_pages": average_pages,
         "median_pages": median_pages,
         "max_pages": max_pages,
@@ -292,6 +352,46 @@ def print_stats(stats: dict) -> None:
         if value is not None:
             print(f"  {label}: {value / 365.25:.2f}")
 
+    print("Approved-date summary:")
+    total_documents = stats["document_count"]
+    approved_date_documents = stats["approved_date_documents"]
+    approved_date_missing_total = stats["approved_date_missing_total"]
+    approved_prefix_missing = stats["approved_prefix_missing"]
+    approved_date_missing_after_prefix = stats["approved_date_missing_after_prefix"]
+    print(
+        "Documents with approved date: "
+        f"{approved_date_documents} "
+        f"({(approved_date_documents / total_documents) * 100:.2f}%)"
+    )
+    print(
+        "Documents without approved date: "
+        f"{approved_date_missing_total} "
+        f"({(approved_date_missing_total / total_documents) * 100:.2f}%)"
+    )
+    print(
+        "Documents missing 'Godkänt den:' in text head: "
+        f"{approved_prefix_missing} "
+        f"({(approved_prefix_missing / total_documents) * 100:.2f}%)"
+    )
+    print(
+        "Documents with 'Godkänt den:' but no extracted date: "
+        f"{approved_date_missing_after_prefix} "
+        f"({(approved_date_missing_after_prefix / total_documents) * 100:.2f}%)"
+    )
+    print(
+        "Documents older than 2 years by approved date: "
+        f"{stats['approved_dates_older_than_two_years']} "
+        f"({stats['approved_dates_older_than_two_years_percent']:.2f}%)"
+    )
+    average_approved_age_days = stats["average_approved_age_days"]
+    median_approved_age_days = stats["median_approved_age_days"]
+    if average_approved_age_days is not None:
+        print(f"Average approved-date age (years): {average_approved_age_days / 365.25:.2f}")
+    if median_approved_age_days is not None:
+        print(f"Median approved-date age (years): {median_approved_age_days / 365.25:.2f}")
+    print(f"Newest approved date: {stats['newest_approved_date'] or '(missing)'}")
+    print(f"Oldest approved date: {stats['oldest_approved_date'] or '(missing)'}")
+
 
 def write_metadata_value_files(stats: dict, output_dir: str) -> None:
     output_path = Path(output_dir)
@@ -310,11 +410,41 @@ def write_metadata_value_files(stats: dict, output_dir: str) -> None:
                 handle.write(f"{value}: {counts[value]}\n")
 
 
+def write_approved_date_counts(stats: dict, output_path: str) -> None:
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    approved_date_counts = stats["approved_date_counts"]
+    approved_date_documents = stats["approved_date_documents"]
+    with output.open("w", encoding="utf-8") as handle:
+        handle.write("approved_dates\n")
+        handle.write(f"documents_with_approved_date: {stats['approved_date_documents']}\n")
+        if stats["average_approved_age_days"] is not None:
+            handle.write(f"average_approved_date_age_years: {stats['average_approved_age_days'] / 365.25:.2f}\n")
+        if stats["median_approved_age_days"] is not None:
+            handle.write(f"median_approved_date_age_years: {stats['median_approved_age_days'] / 365.25:.2f}\n")
+        handle.write(
+            "older_than_two_years_by_approved_date: "
+            f"{stats['approved_dates_older_than_two_years']} "
+            f"({stats['approved_dates_older_than_two_years_percent']:.2f}%)\n"
+        )
+        for approved_date in sorted(approved_date_counts):
+            count = approved_date_counts[approved_date]
+            percent = (count / approved_date_documents) * 100 if approved_date_documents > 0 else 0.0
+            handle.write(f"{approved_date}: {count} ({percent:.2f}%)\n")
+        handle.write(f"missing_prefix_in_text_head: {stats['approved_prefix_missing']}\n")
+        handle.write(
+            "missing_date_after_prefix_in_text_head: "
+            f"{stats['approved_date_missing_after_prefix']}\n"
+        )
+
+
 def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parse_args(argv)
     stats = collect_stats(args.parsed_dir, args.metadata_dir)
     print_stats(stats)
     write_metadata_value_files(stats, args.metadata_values_output_dir)
+    write_approved_date_counts(stats, args.approved_dates_output_path)
     return 0
 
 

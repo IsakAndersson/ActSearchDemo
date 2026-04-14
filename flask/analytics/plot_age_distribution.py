@@ -119,14 +119,6 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
         align="center",
     )
 
-    # Outdated-linje vid exakt 2 år
-    ax.axvline(
-        2.0,
-        color="#c23b22",
-        linestyle="--",
-        linewidth=2,
-    )
-
     ax.set_title("Document Age Distribution")
     ax.set_xlabel("Document age (years)")
     ax.set_ylabel("Number of documents")
@@ -139,12 +131,8 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
         color="#2e5d8a",
         label=f"Median ({median_age:.2f} years)"
     )
-    threshold_line = mlines.Line2D(
-        [], [], color="#c23b22", linestyle="--",
-        label="Outdated threshold (2 years)"
-    )
 
-    ax.legend(handles=[median_patch, threshold_line])
+    ax.legend(handles=[median_patch])
 
     fig.tight_layout()
     fig.savefig(output, dpi=160)
