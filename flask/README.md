@@ -133,6 +133,14 @@ python -m scraper.plot_document_length_distribution \
   --output-path output/plots/document_length_distribution.png
 ```
 
+To create a histogram, box plot, violin plot, and ECDF for document length:
+
+```bash
+python -m scraper.plot_document_length_summary \
+  --parsed-dir output/parsed \
+  --output-dir output/plots
+```
+
 ## Vector indexing (BERT Swedish)
 
 To build a vector index, first install the optional vector-search dependencies, then run
