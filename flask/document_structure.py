@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 _WHITESPACE_RE = re.compile(r"\s+")
 _PAGE_MARKER_RE = re.compile(r"^\s*(?:page|sidan)\s+\d+(?:\s+(?:of|av)\s+\d+)?\s*$", re.IGNORECASE)
 _NUMBERED_HEADING_RE = re.compile(r"^(?:\d+(?:\.\d+)*|[IVXLCM]+)[\)\.\-:]?\s+\S", re.IGNORECASE)
-_TOC_HEADING_RE = re.compile(r"^(?:innehåll|contents?|table of contents)$", re.IGNORECASE)
+_TOC_HEADING_RE = re.compile(
+    r"^(?:innehåll|innehållsförteckning|contents?|table of contents)$",
+    re.IGNORECASE,
+)
 _TOC_TRAILING_PAGE_RE = re.compile(r"(?:\s*[._·\-…]{2,}\s*|\s{2,})(\d+)\s*$")
 _BODY_NOISE_RE = re.compile(
     r"^(?:docplus-id|version|handlingstyp|godkänt den|ansvarig|gäller för)\s*:",
