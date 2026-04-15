@@ -139,6 +139,15 @@ python -m analytics.metadata_value_counts_to_csv \
   --output-path output/metadata_value_counts.csv
 ```
 
+To export documents without a detected table of contents to CSV:
+
+```bash
+python -m analytics.documents_without_toc_to_csv \
+  --parsed-dir output/parsed \
+  --metadata-dir output/metadata \
+  --output-path output/documents_without_toc.csv
+```
+
 To plot a histogram of document ages from `publish_date`, with vertical lines for the
 2-year outdated threshold and the median age:
 
