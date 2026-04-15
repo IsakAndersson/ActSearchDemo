@@ -121,12 +121,13 @@ with document counts per value:
 python -m analytics.metadata_unique_values --metadata-dir output/metadata
 ```
 
-To export the metadata JSON files to one CSV row per document, with one column per
-discovered metadata field:
+To export one CSV row per document with the selected metadata columns, plus page count
+and approved date extracted from parsed text:
 
 ```bash
 python -m analytics.metadata_to_csv \
   --metadata-dir output/metadata \
+  --parsed-dir output/parsed \
   --output-path output/metadata_documents.csv
 ```
 
