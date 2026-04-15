@@ -83,7 +83,6 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
 
     import numpy as np
     import matplotlib.patches as mpatches
-    import matplotlib.lines as mlines
 
     median_age = statistics.median(ages_years)
     output = Path(output_path)
@@ -126,13 +125,28 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
     ax.set_xticks(np.arange(0, int(max_age) + 1, 1))
     ax.grid(axis="y", alpha=0.25)
 
+    outdated_line = ax.axvline(
+        2.0,
+        color="#c23b22",
+        linestyle="--",
+        linewidth=2,
+        label="Outdated threshold (2 years)",
+    )
+    median_line = ax.axvline(
+        median_age,
+        color="#2e5d8a",
+        linestyle="-",
+        linewidth=2,
+        label=f"Median ({median_age:.2f} years)",
+    )
+
     # Legend
     median_patch = mpatches.Patch(
         color="#2e5d8a",
         label=f"Median ({median_age:.2f} years)"
     )
 
-    ax.legend(handles=[median_patch])
+    ax.legend(handles=[median_patch, median_line, outdated_line])
 
     fig.tight_layout()
     fig.savefig(output, dpi=160)

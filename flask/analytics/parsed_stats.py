@@ -10,6 +10,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
+from document_structure import _extract_toc_entries, _parse_text_lines
+
 DOCPLUS_METADATA_FIELDS = (
     "document_collection",
     "process",
@@ -116,6 +118,13 @@ def _extract_approved_date_from_text(text: object, head_chars: int = 500) -> str
     return match.group(1)
 
 
+def _has_table_of_contents(text: object) -> bool:
+    if not isinstance(text, str):
+        return False
+    toc_entries, _ = _extract_toc_entries(_parse_text_lines(text))
+    return bool(toc_entries)
+
+
 def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     parsed_path = Path(parsed_dir)
     metadata_path = Path(metadata_dir)
@@ -130,6 +139,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     approved_dates: list[date] = []
     approved_age_days: list[int] = []
     approved_dates_older_than_two_years = 0
+    documents_with_toc = 0
+    documents_without_toc = 0
+    documents_without_toc_over_3_pages = 0
     metadata_coverage: dict[str, dict[str, object]] = {
         field_name: {
             "documents_with_value": 0,
@@ -149,10 +161,18 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         metadata = payload.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
         text = payload.get("text")
+        has_toc = _has_table_of_contents(text)
 
         page_count = metadata_dict.get("page_count")
         if isinstance(page_count, int):
             page_counts.append(page_count)
+            if not has_toc and page_count > 3:
+                documents_without_toc_over_3_pages += 1
+
+        if has_toc:
+            documents_with_toc += 1
+        else:
+            documents_without_toc += 1
 
         content_types[_normalize_content_type(metadata_dict.get("content_type"))] += 1
 
@@ -273,6 +293,20 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "median_approved_age_days": median_approved_age_days,
         "newest_approved_date": newest_approved_date.isoformat() if newest_approved_date else None,
         "oldest_approved_date": oldest_approved_date.isoformat() if oldest_approved_date else None,
+        "documents_with_toc": documents_with_toc,
+        "documents_with_toc_percent": (
+            (documents_with_toc / document_count) * 100 if document_count > 0 else 0.0
+        ),
+        "documents_without_toc": documents_without_toc,
+        "documents_without_toc_percent": (
+            (documents_without_toc / document_count) * 100 if document_count > 0 else 0.0
+        ),
+        "documents_without_toc_over_3_pages": documents_without_toc_over_3_pages,
+        "documents_without_toc_over_3_pages_percent": (
+            (documents_without_toc_over_3_pages / documents_without_toc) * 100
+            if documents_without_toc > 0
+            else 0.0
+        ),
         "average_pages": average_pages,
         "median_pages": median_pages,
         "max_pages": max_pages,
@@ -331,6 +365,23 @@ def print_stats(stats: dict) -> None:
     print("Content types:")
     for content_type, count in stats["content_types"].most_common():
         print(f"  {content_type}: {count}")
+
+    print("Table-of-contents summary:")
+    print(
+        "Documents with table of contents: "
+        f"{stats['documents_with_toc']} "
+        f"({stats['documents_with_toc_percent']:.2f}%)"
+    )
+    print(
+        "Documents without table of contents: "
+        f"{stats['documents_without_toc']} "
+        f"({stats['documents_without_toc_percent']:.2f}%)"
+    )
+    print(
+        "Documents without table of contents over 3 pages: "
+        f"{stats['documents_without_toc_over_3_pages']} "
+        f"({stats['documents_without_toc_over_3_pages_percent']:.2f}%)"
+    )
 
     print("Docplus metadata field coverage:")
     print(f"Metadata documents: {stats['metadata_document_count']}")
