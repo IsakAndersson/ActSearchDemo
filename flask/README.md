@@ -131,6 +131,14 @@ python -m analytics.metadata_to_csv \
   --output-path output/metadata_documents.csv
 ```
 
+To export one CSV row per unique metadata value for selected fields, with document counts:
+
+```bash
+python -m analytics.metadata_value_counts_to_csv \
+  --metadata-dir output/metadata \
+  --output-path output/metadata_value_counts.csv
+```
+
 To plot a histogram of document ages from `publish_date`, with vertical lines for the
 2-year outdated threshold and the median age:
 
