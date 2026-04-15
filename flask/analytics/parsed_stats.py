@@ -161,7 +161,8 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         metadata = payload.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
         text = payload.get("text")
-        has_toc = _has_table_of_contents(text)
+        raw_text = payload.get("raw_text")
+        has_toc = _has_table_of_contents(raw_text)
 
         page_count = metadata_dict.get("page_count")
         if isinstance(page_count, int):
