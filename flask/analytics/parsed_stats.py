@@ -271,6 +271,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "oldest_publish_date": oldest_publish_date.isoformat() if oldest_publish_date else None,
         "age_percentiles_days": age_percentiles_days,
         "page_count_documents": len(page_counts),
+        "documents_over_20_pages": sum(1 for value in page_counts if value > 20),
         "documents_over_50_pages": sum(1 for value in page_counts if value > 50),
         "documents_over_100_pages": sum(1 for value in page_counts if value > 100),
         "approved_date_counts": approved_date_counts,
@@ -341,12 +342,18 @@ def print_stats(stats: dict) -> None:
         median_pages = stats["median_pages"]
         max_pages = stats["max_pages"]
         percentiles = stats["percentiles"]
+        documents_over_20_pages = stats["documents_over_20_pages"]
         documents_over_50_pages = stats["documents_over_50_pages"]
         documents_over_100_pages = stats["documents_over_100_pages"]
         print(f"Documents with page_count: {page_count_documents}")
         print(f"Average pages: {average_pages:.2f}")
         print(f"Median pages: {median_pages}")
         print(f"Max pages: {max_pages}")
+        print(
+            "Documents over 20 pages: "
+            f"{documents_over_20_pages} "
+            f"({(documents_over_20_pages / page_count_documents) * 100:.2f}%)"
+        )
         print(
             "Documents over 50 pages: "
             f"{documents_over_50_pages} "
