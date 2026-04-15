@@ -124,6 +124,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     page_counts: list[int] = []
     content_types: Counter[str] = Counter()
     approved_date_counts: Counter[str] = Counter()
+    approved_dates_by_document: dict[str, date] = {}
     approved_prefix_missing = 0
     approved_date_missing_after_prefix = 0
     approved_dates: list[date] = []
@@ -165,6 +166,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             else:
                 approved_date_counts[approved_date] += 1
                 approved_date_obj = datetime.strptime(approved_date, "%Y-%m-%d").date()
+                approved_dates_by_document[path.stem] = approved_date_obj
                 approved_dates.append(approved_date_obj)
                 approved_age = (today - approved_date_obj).days
                 approved_age_days.append(approved_age)
@@ -173,6 +175,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     metadata_document_count = 0
     publish_date_documents = 0
     older_than_two_years_documents = 0
+    approved_dates_differing_from_publish_date = 0
     publish_dates: list[date] = []
     document_ages_days: list[int] = []
     for path in sorted(metadata_path.glob("*.json")):
@@ -191,6 +194,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             document_ages_days.append(age_in_days)
             if age_in_days > 365 * 2:
                 older_than_two_years_documents += 1
+            approved_date = approved_dates_by_document.get(path.stem)
+            if approved_date is not None and approved_date != publish_date:
+                approved_dates_differing_from_publish_date += 1
 
         for field_name in DOCPLUS_METADATA_FIELDS:
             field_value = metadata_dict.get(field_name)
@@ -254,6 +260,12 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
         "approved_dates_older_than_two_years": approved_dates_older_than_two_years,
         "approved_dates_older_than_two_years_percent": (
             (approved_dates_older_than_two_years / sum(approved_date_counts.values())) * 100
+            if sum(approved_date_counts.values()) > 0
+            else 0.0
+        ),
+        "approved_dates_differing_from_publish_date": approved_dates_differing_from_publish_date,
+        "approved_dates_differing_from_publish_date_percent": (
+            (approved_dates_differing_from_publish_date / sum(approved_date_counts.values())) * 100
             if sum(approved_date_counts.values()) > 0
             else 0.0
         ),
@@ -383,6 +395,11 @@ def print_stats(stats: dict) -> None:
         f"{stats['approved_dates_older_than_two_years']} "
         f"({stats['approved_dates_older_than_two_years_percent']:.2f}%)"
     )
+    print(
+        "Documents with approved date differing from publish_date: "
+        f"{stats['approved_dates_differing_from_publish_date']} "
+        f"({stats['approved_dates_differing_from_publish_date_percent']:.2f}%)"
+    )
     average_approved_age_days = stats["average_approved_age_days"]
     median_approved_age_days = stats["median_approved_age_days"]
     if average_approved_age_days is not None:
@@ -427,6 +444,11 @@ def write_approved_date_counts(stats: dict, output_path: str) -> None:
             "older_than_two_years_by_approved_date: "
             f"{stats['approved_dates_older_than_two_years']} "
             f"({stats['approved_dates_older_than_two_years_percent']:.2f}%)\n"
+        )
+        handle.write(
+            "differing_from_publish_date: "
+            f"{stats['approved_dates_differing_from_publish_date']} "
+            f"({stats['approved_dates_differing_from_publish_date_percent']:.2f}%)\n"
         )
         for approved_date in sorted(approved_date_counts):
             count = approved_date_counts[approved_date]
