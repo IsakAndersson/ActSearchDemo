@@ -142,6 +142,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     documents_with_toc = 0
     documents_without_toc = 0
     documents_without_toc_over_3_pages = 0
+    documents_without_toc_over_3_pages_ids: set[str] = set()
     metadata_coverage: dict[str, dict[str, object]] = {
         field_name: {
             "documents_with_value": 0,
@@ -169,6 +170,7 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             page_counts.append(page_count)
             if not has_toc and page_count > 3:
                 documents_without_toc_over_3_pages += 1
+                documents_without_toc_over_3_pages_ids.add(path.stem)
 
         if has_toc:
             documents_with_toc += 1
@@ -199,6 +201,8 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     approved_dates_differing_from_publish_date = 0
     publish_dates: list[date] = []
     document_ages_days: list[int] = []
+    without_toc_over_3_pages_age_days: list[int] = []
+    without_toc_over_3_pages_publish_dates: list[date] = []
     for path in sorted(metadata_path.glob("*.json")):
         metadata_document_count += 1
         with path.open("r", encoding="utf-8") as handle:
@@ -213,6 +217,9 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             publish_dates.append(publish_date)
             age_in_days = (today - publish_date).days
             document_ages_days.append(age_in_days)
+            if path.stem in documents_without_toc_over_3_pages_ids:
+                without_toc_over_3_pages_age_days.append(age_in_days)
+                without_toc_over_3_pages_publish_dates.append(publish_date)
             if age_in_days > 365 * 2:
                 older_than_two_years_documents += 1
             approved_date = approved_dates_by_document.get(path.stem)
@@ -250,6 +257,33 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
     median_age_days = statistics.median(document_ages_days) if document_ages_days else None
     newest_publish_date = max(publish_dates) if publish_dates else None
     oldest_publish_date = min(publish_dates) if publish_dates else None
+    without_toc_over_3_pages_average_age_days = (
+        statistics.mean(without_toc_over_3_pages_age_days)
+        if without_toc_over_3_pages_age_days
+        else None
+    )
+    without_toc_over_3_pages_median_age_days = (
+        statistics.median(without_toc_over_3_pages_age_days)
+        if without_toc_over_3_pages_age_days
+        else None
+    )
+    without_toc_over_3_pages_newest_publish_date = (
+        max(without_toc_over_3_pages_publish_dates).isoformat()
+        if without_toc_over_3_pages_publish_dates
+        else None
+    )
+    without_toc_over_3_pages_oldest_publish_date = (
+        min(without_toc_over_3_pages_publish_dates).isoformat()
+        if without_toc_over_3_pages_publish_dates
+        else None
+    )
+    without_toc_over_3_pages_age_percentiles_days = {
+        "p10": _percentile(without_toc_over_3_pages_age_days, 0.10),
+        "p25": _percentile(without_toc_over_3_pages_age_days, 0.25),
+        "p75": _percentile(without_toc_over_3_pages_age_days, 0.75),
+        "p90": _percentile(without_toc_over_3_pages_age_days, 0.90),
+        "p95": _percentile(without_toc_over_3_pages_age_days, 0.95),
+    }
     average_approved_age_days = statistics.mean(approved_age_days) if approved_age_days else None
     median_approved_age_days = statistics.median(approved_age_days) if approved_age_days else None
     newest_approved_date = max(approved_dates) if approved_dates else None
@@ -309,6 +343,11 @@ def collect_stats(parsed_dir: str, metadata_dir: str) -> dict:
             if documents_without_toc > 0
             else 0.0
         ),
+        "without_toc_over_3_pages_average_age_days": without_toc_over_3_pages_average_age_days,
+        "without_toc_over_3_pages_median_age_days": without_toc_over_3_pages_median_age_days,
+        "without_toc_over_3_pages_newest_publish_date": without_toc_over_3_pages_newest_publish_date,
+        "without_toc_over_3_pages_oldest_publish_date": without_toc_over_3_pages_oldest_publish_date,
+        "without_toc_over_3_pages_age_percentiles_days": without_toc_over_3_pages_age_percentiles_days,
         "average_pages": average_pages,
         "median_pages": median_pages,
         "max_pages": max_pages,
@@ -390,6 +429,29 @@ def print_stats(stats: dict) -> None:
         f"{stats['documents_without_toc_over_3_pages']} "
         f"({stats['documents_without_toc_over_3_pages_percent']:.2f}%)"
     )
+    if stats["without_toc_over_3_pages_average_age_days"] is not None:
+        print("Age summary for documents without table of contents over 3 pages:")
+        print(
+            "  Average age (years): "
+            f"{stats['without_toc_over_3_pages_average_age_days'] / 365.25:.2f}"
+        )
+        print(
+            "  Median age (years): "
+            f"{stats['without_toc_over_3_pages_median_age_days'] / 365.25:.2f}"
+        )
+        print(
+            "  Newest publish_date: "
+            f"{stats['without_toc_over_3_pages_newest_publish_date'] or '(missing)'}"
+        )
+        print(
+            "  Oldest publish_date: "
+            f"{stats['without_toc_over_3_pages_oldest_publish_date'] or '(missing)'}"
+        )
+        print("  Age percentiles (years):")
+        for label in ("p10", "p25", "p75", "p90", "p95"):
+            value = stats["without_toc_over_3_pages_age_percentiles_days"].get(label)
+            if value is not None:
+                print(f"    {label}: {value / 365.25:.2f}")
 
     print("Docplus metadata field coverage:")
     print(f"Metadata documents: {stats['metadata_document_count']}")
