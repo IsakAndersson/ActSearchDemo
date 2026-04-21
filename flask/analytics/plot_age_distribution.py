@@ -132,13 +132,7 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
         linewidth=2,
         label="Outdated threshold (2 years)",
     )
-    median_line = ax.axvline(
-        median_age,
-        color="#2e5d8a",
-        linestyle="-",
-        linewidth=2,
-        label=f"Median ({median_age:.2f} years)",
-    )
+
 
     # Legend
     median_patch = mpatches.Patch(
@@ -146,7 +140,7 @@ def plot_age_distribution(ages_years: list[float], output_path: str, bins: int) 
         label=f"Median ({median_age:.2f} years)"
     )
 
-    ax.legend(handles=[median_patch, median_line, outdated_line])
+    ax.legend(handles=[median_patch, outdated_line])
 
     fig.tight_layout()
     fig.savefig(output, dpi=160)
