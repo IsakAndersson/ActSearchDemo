@@ -29,10 +29,12 @@ try:
     from evaluation.search_adapter import SearchConfig as LiveSearchConfig
     from evaluation.search_adapter import docplus_live_search
     from evaluation.search_adapter import docplus_live_search_with_metadata
+    from evaluation.doc_id import normalize_doc_id
 except Exception as exc:  # noqa: BLE001
     LiveSearchConfig = None  # type: ignore[assignment]
     docplus_live_search = None  # type: ignore[assignment]
     docplus_live_search_with_metadata = None  # type: ignore[assignment]
+    from evaluation.doc_id import normalize_doc_id
     DOCPLUS_LIVE_IMPORT_ERROR = str(exc)
 
 
@@ -310,19 +312,25 @@ def _rrf_hybrid(
 
 
 def _document_result_key(result: Dict[str, Any]) -> str:
-    source_path = _to_text(result.get("source_path"))
-    if source_path:
-        return source_path
-
-    metadata = result.get("metadata")
-    if isinstance(metadata, dict):
-        source_url = _to_text(metadata.get("source_url")) or _to_text(metadata.get("url"))
-        if source_url:
-            return source_url
-
     title = _extract_result_title(result)
     if title:
-        return title
+        normalized = normalize_doc_id(title)
+        if normalized:
+            return normalized
+
+    source_url = _extract_result_url(result)
+    if source_url:
+        filename = _filename_from_url(source_url)
+        if filename:
+            normalized = normalize_doc_id(filename)
+            if normalized:
+                return normalized
+
+    source_path = _to_text(result.get("source_path"))
+    if source_path:
+        normalized = normalize_doc_id(Path(source_path).name)
+        if normalized:
+            return normalized
 
     return ""
 
