@@ -309,7 +309,65 @@ def _rrf_hybrid(
     return merged
 
 
-def _best_chunk_per_document(results: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+def _document_result_key(result: Dict[str, Any]) -> str:
+    source_path = _to_text(result.get("source_path"))
+    if source_path:
+        return source_path
+
+    metadata = result.get("metadata")
+    if isinstance(metadata, dict):
+        source_url = _to_text(metadata.get("source_url")) or _to_text(metadata.get("url"))
+        if source_url:
+            return source_url
+
+    title = _extract_result_title(result)
+    if title:
+        return title
+
+    return ""
+
+
+def _rrf_hybrid_documents(
+    bm25_results: List[Dict[str, Any]],
+    e5_results: List[Dict[str, Any]],
+    top_k: int | None = None,
+    rrf_k: int = 60,
+    bm25_weight: float = 1.0,
+    e5_weight: float = 1.0,
+) -> List[Dict[str, Any]]:
+    fused_scores: Dict[str, float] = {}
+    result_lookup: Dict[str, Dict[str, Any]] = {}
+
+    for rank, result in enumerate(bm25_results, start=1):
+        key = _document_result_key(result)
+        if not key:
+            continue
+        fused_scores[key] = fused_scores.get(key, 0.0) + bm25_weight / (rrf_k + rank)
+        result_lookup.setdefault(key, result)
+
+    for rank, result in enumerate(e5_results, start=1):
+        key = _document_result_key(result)
+        if not key:
+            continue
+        fused_scores[key] = fused_scores.get(key, 0.0) + e5_weight / (rrf_k + rank)
+        result_lookup.setdefault(key, result)
+
+    ranked = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)
+    if top_k is not None:
+        ranked = ranked[:top_k]
+
+    merged: List[Dict[str, Any]] = []
+    for key, fused_score in ranked:
+        item = dict(result_lookup[key])
+        item["score"] = float(fused_score)
+        merged.append(item)
+    return merged
+
+
+def _best_chunk_per_document(
+    results: List[Dict[str, Any]],
+    top_k: int | None = None,
+) -> List[Dict[str, Any]]:
     best_by_source: Dict[str, Dict[str, Any]] = {}
 
     for result in results:
@@ -336,6 +394,8 @@ def _best_chunk_per_document(results: List[Dict[str, Any]], top_k: int) -> List[
         key=lambda item: float(item.get("score")) if isinstance(item.get("score"), (int, float)) else float("-inf"),
         reverse=True,
     )
+    if top_k is None:
+        return ranked
     return ranked[:top_k]
 
 
@@ -733,38 +793,40 @@ def search() -> Any:
         errors.append("Query cannot be empty.")
     else:
         try:
-            top_k = int(defaults["top_k"])
+            top_k = int(str(payload.get("chunk_fetch_k") or defaults["top_k"]))
         except ValueError:
             top_k = 5
-            errors.append("Top-k must be an integer; defaulted to 5.")
+            errors.append("Chunk fetch count must be an integer; defaulted to 5.")
         bm25_use_chunking = _safe_bool(defaults["bm25_use_chunking"], True)
 
         if method == "bm25":
             try:
-                results = bm25_search(
+                raw_results = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
                     use_chunking=bm25_use_chunking,
                 )
+                results = _best_chunk_per_document(raw_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
         elif method == "sqlite_fts":
             try:
-                results = sqlite_fts_search_impl(
+                raw_results = sqlite_fts_search_impl(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
                     db_path=defaults["sqlite_fts_path"],
                     use_chunking=bm25_use_chunking,
                 )
+                results = _best_chunk_per_document(raw_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"SQLite FTS search failed: {exc}")
         elif method == "vector":
             try:
-                results = query_index(
+                raw_results = query_index(
                     index_path=defaults["index_path"],
                     metadata_path=defaults["metadata_path"],
                     query=query,
@@ -772,12 +834,13 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                results = _best_chunk_per_document(raw_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
         elif method == "vector_e5":
             try:
-                results = query_index(
+                raw_results = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
@@ -785,20 +848,21 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                results = _best_chunk_per_document(raw_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
         elif method == "hybrid_e5":
-            candidate_k = max(top_k * 3, top_k)
             bm25_results: List[Dict[str, Any]] = []
             e5_results: List[Dict[str, Any]] = []
             try:
                 bm25_results = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
-                    top_k=candidate_k,
+                    top_k=top_k,
                     use_chunking=bm25_use_chunking,
                 )
+                bm25_results = _best_chunk_per_document(bm25_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
@@ -808,16 +872,17 @@ def search() -> Any:
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
                     model_name=defaults["e5_model_name"],
-                    top_k=candidate_k,
+                    top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                e5_results = _best_chunk_per_document(e5_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
-            results = _rrf_hybrid(
+            results = _rrf_hybrid_documents(
                 bm25_results=bm25_results,
                 e5_results=e5_results,
-                top_k=top_k,
+                top_k=None,
             )
         elif method == "docplus_live":
             try:
@@ -857,30 +922,35 @@ def search() -> Any:
         elif method == "all":
             results_by_method = {}
             try:
-                results_by_method["bm25"] = bm25_search(
+                raw_bm25_results = bm25_search(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
                     use_chunking=bm25_use_chunking,
                 )
+                results_by_method["bm25"] = _best_chunk_per_document(raw_bm25_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
                 results_by_method["bm25"] = []
             try:
-                results_by_method["sqlite_fts"] = sqlite_fts_search_impl(
+                raw_sqlite_fts_results = sqlite_fts_search_impl(
                     parsed_dir=defaults["parsed_dir"],
                     query=query,
                     top_k=top_k,
                     db_path=defaults["sqlite_fts_path"],
                     use_chunking=bm25_use_chunking,
                 )
+                results_by_method["sqlite_fts"] = _best_chunk_per_document(
+                    raw_sqlite_fts_results,
+                    top_k=None,
+                )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"SQLite FTS search failed: {exc}")
                 results_by_method["sqlite_fts"] = []
             try:
-                results_by_method["vector"] = query_index(
+                raw_vector_results = query_index(
                     index_path=defaults["index_path"],
                     metadata_path=defaults["metadata_path"],
                     query=query,
@@ -888,12 +958,13 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                results_by_method["vector"] = _best_chunk_per_document(raw_vector_results, top_k=None)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
                 results_by_method["vector"] = []
             try:
-                results_by_method["vector_e5"] = query_index(
+                raw_vector_e5_results = query_index(
                     index_path=defaults["e5_index_path"],
                     metadata_path=defaults["e5_metadata_path"],
                     query=query,
@@ -901,14 +972,18 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
+                results_by_method["vector_e5"] = _best_chunk_per_document(
+                    raw_vector_e5_results,
+                    top_k=None,
+                )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
-            results_by_method["hybrid_e5"] = _rrf_hybrid(
+            results_by_method["hybrid_e5"] = _rrf_hybrid_documents(
                 bm25_results=results_by_method.get("bm25", []),
                 e5_results=results_by_method.get("vector_e5", []),
-                top_k=top_k,
+                top_k=None,
             )
         else:
             errors.append(f"Unknown method '{method}'.")

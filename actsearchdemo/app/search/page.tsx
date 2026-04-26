@@ -180,7 +180,9 @@ const getResultChunkText = (result: SearchResult): string => {
   if (sectionText) {
     return sectionText;
   }
-  const metadataSectionText = getMetadataValue(result.metadata, ["section_text"]);
+  const metadataSectionText = getMetadataValue(result.metadata, [
+    "section_text",
+  ]);
   if (metadataSectionText) {
     return metadataSectionText;
   }
@@ -201,26 +203,31 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [resultsByMethod, setResultsByMethod] = useState<SearchResultsByMethod>({});
+  const [resultsByMethod, setResultsByMethod] = useState<SearchResultsByMethod>(
+    {},
+  );
   const [searchId, setSearchId] = useState<string>("");
-  const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("hybrid_e5");
+  const [lastRequestedMethod, setLastRequestedMethod] =
+    useState<SearchMethod>("hybrid_e5");
   const [lastSearchQuery, setLastSearchQuery] = useState<string>("");
-  const [resultRatings, setResultRatings] = useState<Record<string, number>>({});
-  const [expandedChunks, setExpandedChunks] = useState<Record<string, boolean>>({});
+  const [resultRatings, setResultRatings] = useState<Record<string, number>>(
+    {},
+  );
+  const [expandedChunks, setExpandedChunks] = useState<Record<string, boolean>>(
+    {},
+  );
   const [method, setMethod] = useState<SearchMethod>("hybrid_e5");
   const [query, setQuery] = useState("");
   const [parsedDir] = useState("output/parsed");
   const [sqliteFtsPath] = useState("output/sqlite_fts/docplus_fts.sqlite3");
   const [indexPath] = useState("output/vector_index/docplus.faiss");
-  const [metadataPath] = useState(
-    "output/vector_index/docplus_metadata.jsonl",
-  );
+  const [metadataPath] = useState("output/vector_index/docplus_metadata.jsonl");
   const [e5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
   const [e5MetadataPath] = useState(
     "output/vector_index_e5/docplus_metadata.jsonl",
   );
   const [device] = useState("auto");
-  const [topK, setTopK] = useState("5");
+  const [topK, setTopK] = useState("10");
   const [apiBaseUrl] = useState(DEFAULT_API_BASE_URL);
 
   useEffect(() => {
@@ -232,7 +239,10 @@ export default function SearchPage() {
     setIsReady(true);
   }, [router]);
 
-  const canSubmit = useMemo(() => query.trim().length > 0 && !isLoading, [isLoading, query]);
+  const canSubmit = useMemo(
+    () => query.trim().length > 0 && !isLoading,
+    [isLoading, query],
+  );
 
   const scoreToText = (value: unknown): string => {
     if (typeof value === "number") {
@@ -245,8 +255,14 @@ export default function SearchPage() {
     const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/search/click`;
     const body = JSON.stringify(payload);
 
-    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-      const queued = navigator.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.sendBeacon === "function"
+    ) {
+      const queued = navigator.sendBeacon(
+        endpoint,
+        new Blob([body], { type: "application/json" }),
+      );
       if (queued) {
         return;
       }
@@ -284,7 +300,9 @@ export default function SearchPage() {
     });
   };
 
-  const trackResultRating = async (payload: RatingTrackPayload): Promise<void> => {
+  const trackResultRating = async (
+    payload: RatingTrackPayload,
+  ): Promise<void> => {
     const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/search/rating`;
     await fetch(endpoint, {
       method: "POST",
@@ -350,6 +368,7 @@ export default function SearchPage() {
         body: JSON.stringify({
           method,
           query,
+          chunk_fetch_k: topK,
           parsed_dir: parsedDir,
           sqlite_fts_path: sqliteFtsPath,
           index_path: indexPath,
@@ -369,7 +388,11 @@ export default function SearchPage() {
       };
 
       if (!response.ok) {
-        setErrors(payload.errors && payload.errors.length ? payload.errors : ["Search failed."]);
+        setErrors(
+          payload.errors && payload.errors.length
+            ? payload.errors
+            : ["Search failed."],
+        );
         return;
       }
 
@@ -397,15 +420,16 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen px-4 py-10 md:px-8">
       <main className="mx-auto w-full max-w-5xl">
-        <div className={`card border border-base-300 bg-base-100 shadow-xl ${RESULT_WIDTH_CLASS}`}>
+        <div
+          className={`card border border-base-300 bg-base-100 shadow-xl ${RESULT_WIDTH_CLASS}`}
+        >
           <div className="card-body gap-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
                   ActSearch Demo
                 </h1>
-                <p className="mt-1 text-sm text-base-content/70">
-                </p>
+                <p className="mt-1 text-sm text-base-content/70"></p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -438,26 +462,36 @@ export default function SearchPage() {
                   <select
                     className="select select-bordered w-full"
                     value={method}
-                    onChange={(event) => setMethod(event.target.value as SearchMethod)}
+                    onChange={(event) =>
+                      setMethod(event.target.value as SearchMethod)
+                    }
                   >
                     <option value="bm25">BM25</option>
-                    <option value="sqlite_fts">SQLite FTS (STS-gruppens version)</option>
+                    <option value="sqlite_fts">
+                      SQLite FTS (STS-gruppens version)
+                    </option>
                     <option value="vector">Vector (FAISS)</option>
-                    <option value="vector_e5">Vector (E5 large instruct)</option>
+                    <option value="vector_e5">
+                      Vector (E5 large instruct)
+                    </option>
                     <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
                     <option value="docplus_live">Docplus Live (web)</option>
                     <option value="all">All (side-by-side)</option>
                   </select>
                 </label>
 
-                <label className="form-control w-full">
-                  <div className="label">
-                    <span className="label-text text-base">Visa antal sökträffar</span>
-                  </div>
-                  <input
-                    className="input input-bordered w-full"
-                    type="number"
-                    min={1}
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text text-base">
+                    {method === "docplus_live"
+                      ? "Visa antal sökträffar"
+                      : "Antal chunks att hämta före aggregering"}
+                  </span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  type="number"
+                  min={1}
                     value={topK}
                     onChange={(event) => setTopK(event.target.value)}
                   />
@@ -465,7 +499,11 @@ export default function SearchPage() {
               </div>
 
               <div className="pt-1">
-                <button className="btn btn-primary btn-wide" type="submit" disabled={!canSubmit}>
+                <button
+                  className="btn btn-primary btn-wide"
+                  type="submit"
+                  disabled={!canSubmit}
+                >
                   {isLoading ? (
                     <>
                       <span className="loading loading-spinner loading-sm" />
@@ -500,7 +538,8 @@ export default function SearchPage() {
                 { key: "vector_e5", label: "Vector (E5 large instruct)" },
                 { key: "hybrid_e5", label: "Hybrid (BM25 + E5)" },
               ].map(({ key, label }) => {
-                const methodResults = resultsByMethod[key as SearchMethod] ?? [];
+                const methodResults =
+                  resultsByMethod[key as SearchMethod] ?? [];
                 return (
                   <div
                     className="card border border-base-300 bg-base-100 shadow-md"
@@ -509,27 +548,36 @@ export default function SearchPage() {
                     <div className="card-body gap-3">
                       <div className="flex items-center justify-between">
                         <h2 className="text-lg font-semibold">{label}</h2>
-                        <span className="badge badge-outline">{methodResults.length}</span>
+                        <span className="badge badge-outline">
+                          {methodResults.length}
+                        </span>
                       </div>
                       {methodResults.length === 0 ? (
-                        <p className="text-sm text-base-content/60">No results.</p>
+                        <p className="text-sm text-base-content/60">
+                          No results.
+                        </p>
                       ) : (
                         <div className="space-y-3">
                           {methodResults.map((result, index) => {
                             const url = getResultUrl(result);
                             const title = getResultTitle(result);
-                            const sectionHeading = getResultSectionHeading(result);
+                            const sectionHeading =
+                              getResultSectionHeading(result);
                             const chunkText = getResultChunkText(result);
                             const resultMethod = key as SearchMethod;
                             const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
-                            const isExpanded = expandedChunks[resultKey] ?? false;
+                            const showMatchedChunk =
+                              resultMethod !== "docplus_live";
+                            const isExpanded =
+                              expandedChunks[resultKey] ?? false;
                             const isChunkLong =
                               chunkText.length > MATCHED_CHUNK_PREVIEW_LIMIT;
                             const visibleChunkText =
                               isChunkLong && !isExpanded
                                 ? `${chunkText.slice(0, MATCHED_CHUNK_PREVIEW_LIMIT)}...`
                                 : chunkText;
-                            const selectedRating = resultRatings[resultKey] ?? 0;
+                            const selectedRating =
+                              resultRatings[resultKey] ?? 0;
                             return (
                               <article
                                 className="rounded-lg border border-base-200 p-3"
@@ -567,36 +615,53 @@ export default function SearchPage() {
                                       {title}
                                     </a>
                                   ) : (
-                                    <p className="text-sm font-semibold">{title}</p>
+                                    <p className="text-sm font-semibold">
+                                      {title}
+                                    </p>
                                   )}
                                 </div>
-                                <div className="mt-3 rounded-lg border border-base-200 bg-base-200/50 p-3">
-                                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-base-content/55">
-                                    Matched chunk
-                                  </p>
-                                  <p className="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/85">
-                                    {visibleChunkText}
-                                  </p>
-                                  {isChunkLong ? (
-                                    <button
-                                      className="btn btn-link btn-xs mt-2 h-auto min-h-0 px-0"
-                                      type="button"
-                                      onClick={() => toggleExpandedChunk(resultKey)}
-                                    >
-                                      {isExpanded ? "Visa mindre" : "Visa hela"}
-                                    </button>
-                                  ) : null}
-                                </div>
+                                {showMatchedChunk ? (
+                                  <div className="mt-3 rounded-lg border border-base-200 bg-base-200/50 p-3">
+                                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-base-content/55">
+                                      Matched chunk
+                                    </p>
+                                    <p className="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/85">
+                                      {visibleChunkText}
+                                    </p>
+                                    {isChunkLong ? (
+                                      <button
+                                        className="btn btn-link btn-xs mt-2 h-auto min-h-0 px-0"
+                                        type="button"
+                                        onClick={() =>
+                                          toggleExpandedChunk(resultKey)
+                                        }
+                                      >
+                                        {isExpanded
+                                          ? "Visa mindre"
+                                          : "Visa hela"}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                                 <div className="mt-2 flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <button
                                       key={`${resultKey}-star-${star}`}
                                       type="button"
                                       className={`btn btn-ghost btn-xs min-h-0 h-7 px-1 ${
-                                        selectedRating >= star ? "text-warning" : "text-base-content/40"
+                                        selectedRating >= star
+                                          ? "text-warning"
+                                          : "text-base-content/40"
                                       }`}
                                       onClick={() =>
-                                        onRateResult(result, index + 1, resultMethod, title, url ?? "", star)
+                                        onRateResult(
+                                          result,
+                                          index + 1,
+                                          resultMethod,
+                                          title,
+                                          url ?? "",
+                                          star,
+                                        )
                                       }
                                       aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                                       title={`Rate ${star} star${star > 1 ? "s" : ""}`}
@@ -605,7 +670,9 @@ export default function SearchPage() {
                                     </button>
                                   ))}
                                   <span className="ml-1 text-xs text-base-content/60">
-                                    {selectedRating > 0 ? `${selectedRating}/5` : "Rate result"}
+                                    {selectedRating > 0
+                                      ? `${selectedRating}/5`
+                                      : "Rate result"}
                                   </span>
                                 </div>
                               </article>
@@ -630,8 +697,10 @@ export default function SearchPage() {
               const chunkText = getResultChunkText(result);
               const resultMethod = lastRequestedMethod;
               const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
+              const showMatchedChunk = resultMethod !== "docplus_live";
               const isExpanded = expandedChunks[resultKey] ?? false;
-              const isChunkLong = chunkText.length > MATCHED_CHUNK_PREVIEW_LIMIT;
+              const isChunkLong =
+                chunkText.length > MATCHED_CHUNK_PREVIEW_LIMIT;
               const visibleChunkText =
                 isChunkLong && !isExpanded
                   ? `${chunkText.slice(0, MATCHED_CHUNK_PREVIEW_LIMIT)}...`
@@ -645,10 +714,14 @@ export default function SearchPage() {
                   <div className="card-body min-w-0 gap-3">
                     <div className="flex items-center gap-2">
                       {result.chunk_type === "title" ? (
-                        <span className="badge badge-secondary badge-outline">Title match</span>
+                        <span className="badge badge-secondary badge-outline">
+                          Title match
+                        </span>
                       ) : null}
                       {sectionHeading ? (
-                        <span className="badge badge-accent badge-outline">{sectionHeading}</span>
+                        <span className="badge badge-accent badge-outline">
+                          {sectionHeading}
+                        </span>
                       ) : null}
                     </div>
                     <div className="space-y-1">
@@ -658,7 +731,15 @@ export default function SearchPage() {
                           href={url}
                           target="_blank"
                           rel="noreferrer"
-                          onClick={() => onResultClick(result, index + 1, lastRequestedMethod, title, url)}
+                          onClick={() =>
+                            onResultClick(
+                              result,
+                              index + 1,
+                              lastRequestedMethod,
+                              title,
+                              url,
+                            )
+                          }
                         >
                           {title}
                         </a>
@@ -666,33 +747,44 @@ export default function SearchPage() {
                         <p className="text-base font-semibold">{title}</p>
                       )}
                     </div>
-                    <div className="rounded-xl border border-base-200 bg-base-200/50 p-4">
-                      <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-base-content/55">
-                        Matched chunk
-                      </p>
-                      <p className="whitespace-pre-wrap break-words text-sm leading-6 text-base-content/85">
-                        {visibleChunkText}
-                      </p>
-                      {isChunkLong ? (
-                        <button
-                          className="btn btn-link btn-sm mt-2 h-auto min-h-0 px-0"
-                          type="button"
-                          onClick={() => toggleExpandedChunk(resultKey)}
-                        >
-                          {isExpanded ? "Visa mindre" : "Visa hela"}
-                        </button>
-                      ) : null}
-                    </div>
+                    {showMatchedChunk ? (
+                      <div className="rounded-xl border border-base-200 bg-base-200/50 p-4">
+                        <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-base-content/55">
+                          Matched chunk
+                        </p>
+                        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-base-content/85">
+                          {visibleChunkText}
+                        </p>
+                        {isChunkLong ? (
+                          <button
+                            className="btn btn-link btn-sm mt-2 h-auto min-h-0 px-0"
+                            type="button"
+                            onClick={() => toggleExpandedChunk(resultKey)}
+                          >
+                            {isExpanded ? "Visa mindre" : "Visa hela"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button
                           key={`${resultKey}-star-${star}`}
                           type="button"
                           className={`btn btn-ghost btn-sm min-h-0 h-8 px-1 ${
-                            selectedRating >= star ? "text-warning" : "text-base-content/40"
+                            selectedRating >= star
+                              ? "text-warning"
+                              : "text-base-content/40"
                           }`}
                           onClick={() =>
-                            onRateResult(result, index + 1, resultMethod, title, url ?? "", star)
+                            onRateResult(
+                              result,
+                              index + 1,
+                              resultMethod,
+                              title,
+                              url ?? "",
+                              star,
+                            )
                           }
                           aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                           title={`Rate ${star} star${star > 1 ? "s" : ""}`}
@@ -701,7 +793,9 @@ export default function SearchPage() {
                         </button>
                       ))}
                       <span className="ml-1 text-sm text-base-content/60">
-                        {selectedRating > 0 ? `${selectedRating}/5` : "Rate result"}
+                        {selectedRating > 0
+                          ? `${selectedRating}/5`
+                          : "Rate result"}
                       </span>
                     </div>
                   </div>
