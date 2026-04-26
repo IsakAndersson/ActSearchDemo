@@ -153,6 +153,7 @@ const getResultTitle = (result: SearchResult): string => {
 };
 
 const RESULT_WIDTH_CLASS = "w-full max-w-4xl mx-auto";
+const MATCHED_CHUNK_PREVIEW_LIMIT = 500;
 
 const getResultSectionHeading = (result: SearchResult): string | undefined => {
   const directHeading = getStringValue(result.section_heading);
@@ -205,6 +206,7 @@ export default function SearchPage() {
   const [lastRequestedMethod, setLastRequestedMethod] = useState<SearchMethod>("hybrid_e5");
   const [lastSearchQuery, setLastSearchQuery] = useState<string>("");
   const [resultRatings, setResultRatings] = useState<Record<string, number>>({});
+  const [expandedChunks, setExpandedChunks] = useState<Record<string, boolean>>({});
   const [method, setMethod] = useState<SearchMethod>("hybrid_e5");
   const [query, setQuery] = useState("");
   const [parsedDir] = useState("output/parsed");
@@ -322,6 +324,13 @@ export default function SearchPage() {
     }
   };
 
+  const toggleExpandedChunk = (chunkKey: string): void => {
+    setExpandedChunks((previous) => ({
+      ...previous,
+      [chunkKey]: !previous[chunkKey],
+    }));
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
@@ -330,6 +339,7 @@ export default function SearchPage() {
     setResultsByMethod({});
     setSearchId("");
     setResultRatings({});
+    setExpandedChunks({});
 
     const submittedMethod = method;
 
@@ -405,7 +415,6 @@ export default function SearchPage() {
                 >
                   Gå till insamling av utvärderingsdata
                 </button>
-                <span className="badge badge-outline badge-primary">Next.js + Flask</span>
               </div>
             </div>
 
@@ -513,6 +522,13 @@ export default function SearchPage() {
                             const chunkText = getResultChunkText(result);
                             const resultMethod = key as SearchMethod;
                             const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
+                            const isExpanded = expandedChunks[resultKey] ?? false;
+                            const isChunkLong =
+                              chunkText.length > MATCHED_CHUNK_PREVIEW_LIMIT;
+                            const visibleChunkText =
+                              isChunkLong && !isExpanded
+                                ? `${chunkText.slice(0, MATCHED_CHUNK_PREVIEW_LIMIT)}...`
+                                : chunkText;
                             const selectedRating = resultRatings[resultKey] ?? 0;
                             return (
                               <article
@@ -559,8 +575,17 @@ export default function SearchPage() {
                                     Matched chunk
                                   </p>
                                   <p className="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/85">
-                                    {chunkText}
+                                    {visibleChunkText}
                                   </p>
+                                  {isChunkLong ? (
+                                    <button
+                                      className="btn btn-link btn-xs mt-2 h-auto min-h-0 px-0"
+                                      type="button"
+                                      onClick={() => toggleExpandedChunk(resultKey)}
+                                    >
+                                      {isExpanded ? "Visa mindre" : "Visa hela"}
+                                    </button>
+                                  ) : null}
                                 </div>
                                 <div className="mt-2 flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
@@ -605,6 +630,12 @@ export default function SearchPage() {
               const chunkText = getResultChunkText(result);
               const resultMethod = lastRequestedMethod;
               const resultKey = `${searchId}:${resultMethod}:${index + 1}`;
+              const isExpanded = expandedChunks[resultKey] ?? false;
+              const isChunkLong = chunkText.length > MATCHED_CHUNK_PREVIEW_LIMIT;
+              const visibleChunkText =
+                isChunkLong && !isExpanded
+                  ? `${chunkText.slice(0, MATCHED_CHUNK_PREVIEW_LIMIT)}...`
+                  : chunkText;
               const selectedRating = resultRatings[resultKey] ?? 0;
               return (
                 <article
@@ -640,8 +671,17 @@ export default function SearchPage() {
                         Matched chunk
                       </p>
                       <p className="whitespace-pre-wrap break-words text-sm leading-6 text-base-content/85">
-                        {chunkText}
+                        {visibleChunkText}
                       </p>
+                      {isChunkLong ? (
+                        <button
+                          className="btn btn-link btn-sm mt-2 h-auto min-h-0 px-0"
+                          type="button"
+                          onClick={() => toggleExpandedChunk(resultKey)}
+                        >
+                          {isExpanded ? "Visa mindre" : "Visa hela"}
+                        </button>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
