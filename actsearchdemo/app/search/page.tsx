@@ -207,19 +207,19 @@ export default function SearchPage() {
   const [resultRatings, setResultRatings] = useState<Record<string, number>>({});
   const [method, setMethod] = useState<SearchMethod>("hybrid_e5");
   const [query, setQuery] = useState("");
-  const [parsedDir, setParsedDir] = useState("output/parsed");
-  const [sqliteFtsPath, setSqliteFtsPath] = useState("output/sqlite_fts/docplus_fts.sqlite3");
-  const [indexPath, setIndexPath] = useState("output/vector_index/docplus.faiss");
-  const [metadataPath, setMetadataPath] = useState(
+  const [parsedDir] = useState("output/parsed");
+  const [sqliteFtsPath] = useState("output/sqlite_fts/docplus_fts.sqlite3");
+  const [indexPath] = useState("output/vector_index/docplus.faiss");
+  const [metadataPath] = useState(
     "output/vector_index/docplus_metadata.jsonl",
   );
-  const [e5IndexPath, setE5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
-  const [e5MetadataPath, setE5MetadataPath] = useState(
+  const [e5IndexPath] = useState("output/vector_index_e5/docplus.faiss");
+  const [e5MetadataPath] = useState(
     "output/vector_index_e5/docplus_metadata.jsonl",
   );
-  const [device, setDevice] = useState("auto");
+  const [device] = useState("auto");
   const [topK, setTopK] = useState("5");
-  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+  const [apiBaseUrl] = useState(DEFAULT_API_BASE_URL);
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem(SESSION_KEY) === "true";
@@ -409,166 +409,61 @@ export default function SearchPage() {
               </div>
             </div>
 
-            <form className="space-y-4" onSubmit={onSubmit}>
+            <form className="flex flex-col gap-4" onSubmit={onSubmit}>
               <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text text-base">Query</span>
-                </div>
                 <input
                   className="input input-bordered input-primary w-full"
                   type="text"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search in documents..."
+                  placeholder="Sök efter dokument..."
                   required
                 />
               </label>
 
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text text-base">Search type</span>
-                </div>
-                <select
-                  className="select select-bordered w-full"
-                  value={method}
-                  onChange={(event) => setMethod(event.target.value as SearchMethod)}
-                >
-                  <option value="bm25">BM25</option>
-                  <option value="sqlite_fts">SQLite FTS</option>
-                  <option value="vector">Vector (FAISS)</option>
-                  <option value="vector_e5">Vector (E5 large instruct)</option>
-                  <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
-                  <option value="docplus_live">Docplus Live (web)</option>
-                  <option value="all">All (side-by-side)</option>
-                </select>
-              </label>
-
-              <details className="dropdown dropdown-bottom w-full">
-                <summary className="btn btn-ghost btn-sm">Advanced settings</summary>
-                <div className="card card-sm z-10 mt-3 w-full border border-base-300 bg-base-100 shadow-lg">
-                  <div className="card-body grid gap-4 md:grid-cols-2">
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">API base URL</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={apiBaseUrl}
-                        onChange={(event) => setApiBaseUrl(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">Parsed dir (BM25)</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={parsedDir}
-                        onChange={(event) => setParsedDir(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">SQLite FTS path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={sqliteFtsPath}
-                        onChange={(event) => setSqliteFtsPath(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">Top-k</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="number"
-                        min={1}
-                        value={topK}
-                        onChange={(event) => setTopK(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">FAISS index path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={indexPath}
-                        onChange={(event) => setIndexPath(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">Metadata path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={metadataPath}
-                        onChange={(event) => setMetadataPath(event.target.value)}
-                      />
-                    </label>
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">E5 FAISS index path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={e5IndexPath}
-                        onChange={(event) => setE5IndexPath(event.target.value)}
-                      />
-                    </label>
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">E5 metadata path</span>
-                      </div>
-                      <input
-                        className="input input-bordered"
-                        type="text"
-                        value={e5MetadataPath}
-                        onChange={(event) => setE5MetadataPath(event.target.value)}
-                      />
-                    </label>
-
-                    <label className="form-control">
-                      <div className="label">
-                        <span className="label-text">Device</span>
-                      </div>
-                      <select
-                        className="select select-bordered"
-                        value={device}
-                        onChange={(event) => setDevice(event.target.value)}
-                      >
-                        <option value="auto">auto</option>
-                        <option value="cpu">cpu</option>
-                        <option value="cuda">cuda</option>
-                      </select>
-                    </label>
+              <div className="flex flex-row gap-4">
+                <label className="form-control w-full">
+                  <div className="label">
+                    <span className="label-text text-base">Söktyp</span>
                   </div>
-                </div>
-              </details>
+                  <select
+                    className="select select-bordered w-full"
+                    value={method}
+                    onChange={(event) => setMethod(event.target.value as SearchMethod)}
+                  >
+                    <option value="bm25">BM25</option>
+                    <option value="sqlite_fts">SQLite FTS (STS-gruppens version)</option>
+                    <option value="vector">Vector (FAISS)</option>
+                    <option value="vector_e5">Vector (E5 large instruct)</option>
+                    <option value="hybrid_e5">Hybrid (BM25 + E5)</option>
+                    <option value="docplus_live">Docplus Live (web)</option>
+                    <option value="all">All (side-by-side)</option>
+                  </select>
+                </label>
+
+                <label className="form-control w-full">
+                  <div className="label">
+                    <span className="label-text text-base">Visa antal sökträffar</span>
+                  </div>
+                  <input
+                    className="input input-bordered w-full"
+                    type="number"
+                    min={1}
+                    value={topK}
+                    onChange={(event) => setTopK(event.target.value)}
+                  />
+                </label>
+              </div>
 
               <div className="pt-1">
                 <button className="btn btn-primary btn-wide" type="submit" disabled={!canSubmit}>
                   {isLoading ? (
                     <>
                       <span className="loading loading-spinner loading-sm" />
-                      Searching
+                      Söker
                     </>
                   ) : (
-                    "Search"
+                    "Sök"
                   )}
                 </button>
               </div>
@@ -625,15 +520,6 @@ export default function SearchPage() {
                                 key={`${key}-${index}-${String(result.score ?? "")}`}
                               >
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="badge badge-primary badge-outline whitespace-nowrap text-xs">
-                                    Rank {index + 1}
-                                  </span>
-                                  <span className="text-xs text-base-content/70 whitespace-nowrap">
-                                    Score:{" "}
-                                    {typeof result.score === "number"
-                                      ? result.score.toFixed(4)
-                                      : String(result.score ?? "n/a")}
-                                  </span>
                                   {result.chunk_type === "title" ? (
                                     <span className="badge badge-secondary badge-outline whitespace-nowrap text-xs">
                                       Title match
@@ -646,10 +532,9 @@ export default function SearchPage() {
                                   ) : null}
                                 </div>
                                 <div className="mt-2 space-y-1">
-                                  <p className="text-sm font-semibold">{title}</p>
                                   {url ? (
                                     <a
-                                      className="link link-primary break-all text-xs"
+                                      className="link link-primary break-all text-sm font-semibold"
                                       href={url}
                                       target="_blank"
                                       rel="noreferrer"
@@ -663,12 +548,10 @@ export default function SearchPage() {
                                         )
                                       }
                                     >
-                                      {url}
+                                      {title}
                                     </a>
                                   ) : (
-                                    <p className="text-xs text-base-content/60">
-                                      No source URL available.
-                                    </p>
+                                    <p className="text-sm font-semibold">{title}</p>
                                   )}
                                 </div>
                                 <div className="mt-3 rounded-lg border border-base-200 bg-base-200/50 p-3">
@@ -730,13 +613,6 @@ export default function SearchPage() {
                 >
                   <div className="card-body min-w-0 gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="badge badge-primary badge-outline">Rank {index + 1}</span>
-                      <span className="text-sm text-base-content/70">
-                        Score:{" "}
-                        {typeof result.score === "number"
-                          ? result.score.toFixed(4)
-                          : String(result.score ?? "n/a")}
-                      </span>
                       {result.chunk_type === "title" ? (
                         <span className="badge badge-secondary badge-outline">Title match</span>
                       ) : null}
@@ -745,21 +621,18 @@ export default function SearchPage() {
                       ) : null}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-base font-semibold">{title}</p>
                       {url ? (
                         <a
-                          className="link link-primary break-all text-sm"
+                          className="link link-primary break-all text-base font-semibold"
                           href={url}
                           target="_blank"
                           rel="noreferrer"
                           onClick={() => onResultClick(result, index + 1, lastRequestedMethod, title, url)}
                         >
-                          {url}
+                          {title}
                         </a>
                       ) : (
-                        <p className="text-sm text-base-content/60">
-                          No source URL available.
-                        </p>
+                        <p className="text-base font-semibold">{title}</p>
                       )}
                     </div>
                     <div className="rounded-xl border border-base-200 bg-base-200/50 p-4">
