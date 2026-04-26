@@ -376,18 +376,18 @@ def _best_chunk_per_document(
     results: List[Dict[str, Any]],
     top_k: int | None = None,
 ) -> List[Dict[str, Any]]:
-    best_by_source: Dict[str, Dict[str, Any]] = {}
+    best_by_document: Dict[str, Dict[str, Any]] = {}
 
     for result in results:
-        source_path = _to_text(result.get("source_path"))
-        if not source_path:
+        document_key = _document_result_key(result)
+        if not document_key:
             continue
 
         score_raw = result.get("score")
         score = float(score_raw) if isinstance(score_raw, (int, float)) else float("-inf")
-        existing = best_by_source.get(source_path)
+        existing = best_by_document.get(document_key)
         if existing is None:
-            best_by_source[source_path] = result
+            best_by_document[document_key] = result
             continue
 
         existing_score_raw = existing.get("score")
@@ -395,10 +395,10 @@ def _best_chunk_per_document(
             float(existing_score_raw) if isinstance(existing_score_raw, (int, float)) else float("-inf")
         )
         if score > existing_score:
-            best_by_source[source_path] = result
+            best_by_document[document_key] = result
 
     ranked = sorted(
-        best_by_source.values(),
+        best_by_document.values(),
         key=lambda item: float(item.get("score")) if isinstance(item.get("score"), (int, float)) else float("-inf"),
         reverse=True,
     )
