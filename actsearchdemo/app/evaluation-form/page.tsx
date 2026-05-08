@@ -569,8 +569,8 @@ export default function DemoSearchPage() {
   const allResultsRated =
     hasSubmittedQuery &&
     pipeline.finalResults.length > 0 &&
-    pipeline.finalResults.every((result, index) => {
-      const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
+    pipeline.finalResults.every((result) => {
+      const resultKey = getResultDocumentKey(result);
       return isAssessmentComplete(
         ratings[resultKey],
         relevantScopes[resultKey],
@@ -667,8 +667,8 @@ export default function DemoSearchPage() {
       return;
     }
 
-    const results = pipeline.finalResults.map((result, index) => {
-      const resultKey = result.source_path ?? `${getResultTitle(result)}-${index}`;
+    const results = pipeline.finalResults.map((result) => {
+      const resultKey = getResultDocumentKey(result);
       const selectedRating = ratings[resultKey] ?? null;
       const selectedScope = relevantScopes[resultKey] ?? null;
       const sectionLabel = relevantSections[resultKey] ?? "";
