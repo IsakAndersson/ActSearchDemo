@@ -20,7 +20,6 @@ const DEFAULT_TOP_K = 5;
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
-type RelevantScope = "whole_document" | "part_of_document";
 
 type SearchResult = {
   score?: number;
@@ -496,26 +495,8 @@ const isRelevantLikeRating = (
 
 const isAssessmentComplete = (
   rating: RelevanceRating | null | undefined,
-  scope: RelevantScope | undefined,
-  sectionLabel: string | undefined,
 ): boolean => {
-  if (rating === "not_relevant") {
-    return true;
-  }
-
-  if (!isRelevantLikeRating(rating)) {
-    return false;
-  }
-
-  if (scope === "whole_document") {
-    return true;
-  }
-
-  if (scope === "part_of_document") {
-    return (sectionLabel ?? "").trim().length > 0;
-  }
-
-  return false;
+  return rating === "not_relevant" || isRelevantLikeRating(rating);
 };
 
 export default function DemoSearchPage() {
@@ -533,8 +514,6 @@ export default function DemoSearchPage() {
   const [debugMode, setDebugMode] = useState(false);
   const [useDummyData, setUseDummyData] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
-  const [relevantScopes, setRelevantScopes] = useState<Record<string, RelevantScope>>({});
-  const [relevantSections, setRelevantSections] = useState<Record<string, string>>({});
   const [resultComments, setResultComments] = useState<Record<string, string>>({});
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
   const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
@@ -571,11 +550,7 @@ export default function DemoSearchPage() {
     pipeline.finalResults.length > 0 &&
     pipeline.finalResults.every((result) => {
       const resultKey = getResultDocumentKey(result);
-      return isAssessmentComplete(
-        ratings[resultKey],
-        relevantScopes[resultKey],
-        relevantSections[resultKey],
-      );
+      return isAssessmentComplete(ratings[resultKey]);
     });
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -589,8 +564,6 @@ export default function DemoSearchPage() {
     setSubmitError(null);
     setHasSubmittedRatings(false);
     setRatings({});
-    setRelevantScopes({});
-    setRelevantSections({});
     setResultComments({});
 
     try {
@@ -670,19 +643,14 @@ export default function DemoSearchPage() {
     const results = pipeline.finalResults.map((result) => {
       const resultKey = getResultDocumentKey(result);
       const selectedRating = ratings[resultKey] ?? null;
-      const selectedScope = relevantScopes[resultKey] ?? null;
-      const sectionLabel = relevantSections[resultKey] ?? "";
       const resultComment = resultComments[resultKey] ?? "";
 
       return {
         ...result,
         assessment: {
           rating: selectedRating,
-          relevant_scope: isRelevantLikeRating(selectedRating) ? selectedScope : null,
-          relevant_section:
-            isRelevantLikeRating(selectedRating) && selectedScope === "part_of_document"
-              ? sectionLabel
-              : "",
+          relevant_scope: null,
+          relevant_section: "",
           comment: resultComment,
         },
       };
@@ -740,8 +708,6 @@ export default function DemoSearchPage() {
       setSearchErrors([]);
       setPipeline(EMPTY_PIPELINE);
       setRatings({});
-      setRelevantScopes({});
-      setRelevantSections({});
       setResultComments({});
       setSubmitError(null);
 
@@ -761,8 +727,6 @@ export default function DemoSearchPage() {
     setRunId(0);
     setPipeline(EMPTY_PIPELINE);
     setRatings({});
-    setRelevantScopes({});
-    setRelevantSections({});
     setResultComments({});
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1171,14 +1135,7 @@ export default function DemoSearchPage() {
               const rankByMethod = getRankByMethod(result);
               const resultKey = getResultDocumentKey(result);
               const selectedRating = ratings[resultKey];
-              const isRelevantLike = isRelevantLikeRating(selectedRating);
-              const selectedScope = relevantScopes[resultKey];
-              const sectionLabel = relevantSections[resultKey] ?? "";
-              const isRatingComplete = isAssessmentComplete(
-                selectedRating,
-                selectedScope,
-                sectionLabel,
-              );
+              const isRatingComplete = isAssessmentComplete(selectedRating);
               const resultComment = resultComments[resultKey] ?? "";
 
                 return (
@@ -1255,73 +1212,6 @@ export default function DemoSearchPage() {
                             </label>
                           </div>
                         </fieldset>
-
-                        {isRelevantLike ? (
-                          <div className="space-y-4 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4 lg:col-start-3 xl:col-start-3 xl:ml-[-0.75rem]">
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-[#2f3a31]">
-                                Var i dokumentet finns den relevanta informationen?
-                              </p>
-                              <div className="flex flex-col gap-2">
-                                <label className="flex items-center gap-2 text-xs text-[#465048]">
-                                  <input
-                                    checked={selectedScope === "whole_document"}
-                                    className="h-4 w-4 accent-[#1f6e6e]"
-                                    disabled={hasSubmittedRatings}
-                                    name={`scope-${resultKey}`}
-                                    type="radio"
-                                    onChange={() =>
-                                      setRelevantScopes((current) => ({
-                                        ...current,
-                                        [resultKey]: "whole_document",
-                                      }))
-                                    }
-                                  />
-                                  Hela dokumentet
-                                </label>
-                                <label className="flex items-center gap-2 text-xs text-[#465048]">
-                                  <input
-                                    checked={selectedScope === "part_of_document"}
-                                    className="h-4 w-4 accent-[#1f6e6e]"
-                                    disabled={hasSubmittedRatings}
-                                    name={`scope-${resultKey}`}
-                                    type="radio"
-                                    onChange={() =>
-                                      setRelevantScopes((current) => ({
-                                        ...current,
-                                        [resultKey]: "part_of_document",
-                                      }))
-                                    }
-                                  />
-                                  En del/delar av dokumentet
-                                </label>
-                              </div>
-                            </div>
-
-                            {selectedScope === "part_of_document" ? (
-                              <label className="flex flex-col gap-2">
-                                <span className="text-xs text-[#2f3a31]">
-                                  Ange i vilken/vilka kapitel och/eller sidor
-                                </span>
-                                <textarea
-                                  className={`min-h-20 rounded-2xl border px-4 py-3 text-xs outline-none transition ${
-                                    hasSubmittedRatings
-                                      ? "border-[#d7dbd2] bg-[#f3f3ef] text-[#8a8f86]"
-                                      : "border-[#cfd4c9] bg-white focus:border-[#1f6e6e]"
-                                  }`}
-                                  disabled={hasSubmittedRatings}
-                                  value={sectionLabel}
-                                  onChange={(event) =>
-                                    setRelevantSections((current) => ({
-                                      ...current,
-                                      [resultKey]: event.target.value,
-                                    }))
-                                  }
-                                />
-                              </label>
-                            ) : null}
-                          </div>
-                        ) : null}
 
                         <label className="lg:col-start-3 xl:col-start-4">
                           <span className="text-xs text-[#2f3a31]">Valfri kommentar</span>
