@@ -60,6 +60,22 @@ def _result_url(result: dict[str, Any]) -> str:
     return _metadata_value(result, ("source_url", "url", "link", "href", "source"))
 
 
+def _pooled_from_methods(result: dict[str, Any]) -> str:
+    metadata = _metadata_dict(result)
+    pooled_from = metadata.get("pooled_from")
+    if isinstance(pooled_from, list):
+        methods = [_to_text(value) for value in pooled_from]
+        methods = [value for value in methods if value]
+        if methods:
+            return "|".join(methods)
+
+    direct_method = _to_text(result.get("result_method")) or _to_text(result.get("demo_method"))
+    if direct_method:
+        return direct_method
+
+    return _to_text(metadata.get("demo_method"))
+
+
 def _section_heading(result: dict[str, Any]) -> str:
     direct_heading = _to_text(result.get("section_heading"))
     if direct_heading:
@@ -139,6 +155,7 @@ def submission_to_relevant_chunk_rows(
                 "source_path": _to_text(result.get("source_path")),
                 "document_title": _result_title(result),
                 "document_url": _result_url(result),
+                "pooled_from_methods": _pooled_from_methods(result),
                 "section_heading": _section_heading(result),
                 "chunk_text": _chunk_text(result),
                 "relevant_scope": _to_text(assessment_dict.get("relevant_scope")),
@@ -177,6 +194,7 @@ def export_relevant_chunks_from_json_dir(
         "source_path",
         "document_title",
         "document_url",
+        "pooled_from_methods",
         "section_heading",
         "chunk_text",
         "relevant_scope",
