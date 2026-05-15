@@ -220,12 +220,39 @@ This reads the default SQLite database at:
 and writes:
 
 - `evaluation/qrels_from_form_submissions.csv`
+- `evaluation/form_submissions_audit.csv`
 
 By default, only results marked as relevant are exported (`relevance=1`).
 To also include explicitly non-relevant results as `relevance=0`:
 
 ```bash
 ./.venv/bin/python evaluation/form_submissions_to_qrels.py --include-non-relevant
+```
+
+For a cleaned dataset, first inspect `evaluation/form_submissions_audit.csv`.
+The audit includes `submission_id`, query text, participant, number of relevant/non-relevant
+judgments, and `looks_like_test`.
+
+For the current local data, submissions `6`, `7`, and `15` are functionality tests.
+Export the cleaned qrels with:
+
+```bash
+./.venv/bin/python evaluation/form_submissions_to_qrels.py \
+  --exclude-submission-ids 6,7,15 \
+  --query-type form_submissions_clean \
+  --include-metadata \
+  --output evaluation/qrels_from_form_submissions_clean.csv
+```
+
+Then evaluate against that cleaned form-submission dataset:
+
+```bash
+./.venv/bin/python evaluation/evaluation.py \
+  --method hybrid_e5 \
+  --top-k 20 \
+  --qrels-source form_submissions \
+  --qrels-path evaluation/qrels_from_form_submissions_clean.csv \
+  --meta experiment=form_submissions_clean_hybrid_e5
 ```
 
 ## Visualization Notebook
@@ -291,6 +318,49 @@ Key flags:
 - `--text-source`: `text` or `cleaned_text` for vector index builds
 - `--parsed-dir`: parsed JSON directory (default `flask/output/parsed`)
 - `--experiments-root`: default `evaluation/experiments`
+
+## Visualize All Evaluation Results
+
+To build one report from both directly-run terminal evaluations and experiment sweeps:
+
+```bash
+./.venv/bin/python evaluation/visualize_all_results.py
+```
+
+The script reads:
+
+- `evaluation/evaluation_summary.csv`
+- `evaluation/evaluation_results.csv`
+- `evaluation/experiments/*/results/aggregate/evaluation_summary.csv`
+- `evaluation/experiments/*/results/aggregate/evaluation_results.csv`
+
+It writes to `evaluation/plots/all_results/`:
+
+- `all_evaluation_summary.csv`: normalized run-level results with timestamps and metadata
+- `all_evaluation_results.csv`: normalized per-query-type results with timestamps and metadata
+- `all_run_total_hits.csv`: total hit counts per run across all query types
+- `all_results_report.html`: HTML report linking the generated plots and metadata tables
+- `average_rr20_over_time.png`
+- `average_rank_over_time.png`
+- `top_runs_by_average_rr20.png`
+- `rr20_by_query_type_heatmap.png`
+- `average_rr20_by_chunk_size.png`
+- `total_hits_all_runs.png`
+
+By default, experiment aggregate CSVs are used because they already contain the individual
+run rows without duplicating them. To scan `results/runs/**/evaluation_*.csv` files too:
+
+```bash
+./.venv/bin/python evaluation/visualize_all_results.py --include-experiment-run-files
+```
+
+Useful flags:
+
+- `--output-dir`: output directory for CSVs, PNGs, and HTML
+- `--top-n`: number of top runs included in dense plots
+- `--max-table-rows`: maximum rows shown in the HTML tables; full data is still written to CSV
+- `--experiments-root`: alternate experiments directory
+- `--qrels-source` / `--qrels-path`: qrels source used for total-hit counting
 
 ## Search Adapter
 

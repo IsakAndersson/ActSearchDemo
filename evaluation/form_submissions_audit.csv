@@ -1,0 +1,17 @@
+submission_id,created_at,participant_name,query_id,information_need,general_comment,num_results,num_relevant,num_non_relevant,num_unrated,looks_like_test
+1,2026-03-05T11:06:56.142152+00:00,Isak,sovrutiner,sovrutiner,,27,3,24,0,False
+2,2026-03-05T15:54:46.592962+00:00,Anna,amning,amning,hejsan,26,1,25,0,False
+3,2026-03-11T19:17:10.917800+00:00,Ebba,smittspårning campylobacter,Vilka rutiner ska utföras vid smittspårning och smittskyddsanmälan av patient med campylobacter?,,25,9,16,0,False
+4,2026-03-11T19:26:01.672773+00:00,Ebba,rutin heparininfusion lungemboli,Rutiner och kontrollintervall vid behandling med heparininfusion vid lungemboli,,28,11,17,0,False
+5,2026-03-11T19:45:07.636181+00:00,Ebba,rutin paracetamolintoxikation,Behandlingsriktlinjer och övervakning av patient som intoxikerat på paracetamol,,20,12,8,0,False
+6,2026-03-12T10:37:36.149470+00:00,Anna,test,test,,30,0,30,0,True
+7,2026-03-16T15:01:41.258316+00:00,Anna,test,test,,28,0,28,0,True
+8,2026-03-20T13:56:21.237733+00:00,Isak,processkartor plastik- och käkkirurgi,Vilka process kartor finns innom verksamhetsområdet plastikkirugi och käkkirurgi,,28,19,9,0,False
+9,2026-03-24T10:23:15.938980+00:00,Isak,Sovrutiner,Familjen vill sova med sitt barn mellan sig. Var hittar du informationen du behöver förmedla till föräldrarna?,,8,3,5,0,False
+10,2026-03-25T08:32:56.635945+00:00,Admin,rita processkartor,jag vill veta hur vi inom regionen ska rita och utveckla kliniska processkartor,,18,6,12,0,False
+11,2026-03-25T09:00:06.525154+00:00,Admin,medarbetarinnovation,Hur arbetar regionen med medarbetarinnovation,,14,7,7,0,False
+12,2026-03-27T11:02:53.422437+00:00,Admin,"Kontakt med förlossning barnmorska råd, riskbedömning, behov","Vilka riktlinjer och rutiner är viktiga att känna till och efterleva när patient som ska föda tar kontakt med förlossningen (då ska vi utforska behov, bedöma risk och ge råd). Jag är barnmorska",,16,8,8,0,False
+13,2026-03-27T11:24:39.654189+00:00,Admin,Koordinator förlossningen kontakt med förlossning,"Jag är koordinator på förlossningsavdelningen. Vilka riktlinjer och rutiner bör jag ha koll på när patienten först tar kontakt med förlossningen. Vi ska utforska behov, bedöma risk och ge råd",,15,4,11,0,False
+14,2026-03-27T11:34:05.145377+00:00,Admin,Städuppgifter på operationssal inom brännskadecentrum,Städuppgifter på operationssal inom brännskadecentrum,,8,5,3,0,False
+15,2026-05-08T10:45:13.297329+00:00,isak,Test,Test,,10,0,10,0,True
+16,2026-05-08T10:57:58.771719+00:00,Adam,Anestesimetoder OPÖ,Vilken anestesimetod ska användas vid tandsanering,Det finns dokument med föreslagna metoder från varje avdelning men de heter olika saker och kan vara svåra att hitta.,16,3,13,0,False
