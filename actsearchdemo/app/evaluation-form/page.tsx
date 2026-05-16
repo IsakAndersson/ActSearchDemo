@@ -20,6 +20,7 @@ const DEFAULT_TOP_K = 5;
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
+type ViewMode = "normal" | "demo";
 
 type SearchResult = {
   score?: number;
@@ -52,6 +53,17 @@ type DummyDoc = {
   url: string;
   category: string;
   text: string;
+  headings?: Array<{
+    heading: string;
+    page?: number;
+    heuristic?: boolean;
+  }>;
+};
+
+type DocumentSectionHeading = {
+  heading: string;
+  page?: number;
+  heuristic?: boolean;
 };
 
 const METHOD_LABELS: Record<SearchMethod, string> = {
@@ -156,6 +168,43 @@ const getResultChunkText = (result: SearchResult): string => {
   return getStringValue(result.text) ?? "";
 };
 
+const getResultDocumentSectionHeadings = (result: SearchResult): DocumentSectionHeading[] => {
+  const headings = result.metadata?.document_section_headings;
+  if (!Array.isArray(headings)) {
+    return [];
+  }
+
+  return headings.flatMap((item) => {
+    if (typeof item === "string") {
+      const trimmed = item.trim();
+      return trimmed ? [{ heading: trimmed }] : [];
+    }
+
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+
+    const heading =
+      typeof item.heading === "string" && item.heading.trim().length > 0
+        ? item.heading.trim()
+        : undefined;
+    const page = typeof item.page === "number" && item.page > 0 ? item.page : undefined;
+    const heuristic = item.heuristic === true;
+    return heading ? [{ heading, page, heuristic }] : [];
+  });
+};
+
+const normalizeHeadingForMatch = (value: string | undefined): string => {
+  return value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("sv-SE") ?? "";
+};
+
+const buildPdfPageUrl = (url: string, page: number | undefined): string => {
+  if (!page || page < 1 || url === "#") {
+    return url;
+  }
+  return `${url}#page=${page}`;
+};
+
 const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
   bm25_query: [],
   bm25_information_need: [],
@@ -179,6 +228,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/feber-vuxna",
     category: "Akutmedicin",
     text: "Översikt av initial bedömning, vitalparametrar och uppföljning vid feber.",
+    headings: [
+      { heading: "Initial bedömning", page: 1 },
+      { heading: "Vitalparametrar", page: 2 },
+      { heading: "Provtagning", page: 3 },
+      { heading: "Uppföljning", page: 4 },
+    ],
   },
   {
     id: "dummy-2",
@@ -186,6 +241,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/lakemedelshantering",
     category: "Patientsäkerhet",
     text: "Rutiner för dubbelkontroll, signering och avvikelsehantering.",
+    headings: [
+      { heading: "Ordination", page: 1 },
+      { heading: "Dubbelkontroll", page: 2 },
+      { heading: "Signering", page: 3 },
+      { heading: "Avvikelsehantering", page: 4 },
+    ],
   },
   {
     id: "dummy-3",
@@ -193,6 +254,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/postop-smarta",
     category: "Anestesi",
     text: "Rekommendationer för multimodal smärtbehandling och monitorering.",
+    headings: [
+      { heading: "Smärtskattning", page: 1 },
+      { heading: "Läkemedel", page: 2 },
+      { heading: "Monitorering", page: 3 },
+      { heading: "Uppföljning", page: 4 },
+    ],
   },
   {
     id: "dummy-4",
@@ -200,6 +267,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/nyfott-forsta-dygnet",
     category: "Neonatalvård",
     text: "Basala kontroller och stödjande vård första dygnet efter förlossning.",
+    headings: [
+      { heading: "Temperatur", page: 1 },
+      { heading: "Andning", page: 2 },
+      { heading: "Nutrition", page: 3 },
+      { heading: "Observation första dygnet", page: 4 },
+    ],
   },
   {
     id: "dummy-5",
@@ -207,6 +280,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/trycksarsprevention",
     category: "Omvårdnad",
     text: "Riskbedömning, lägesändring och hudinspektion enligt lokala riktlinjer.",
+    headings: [
+      { heading: "Riskbedömning", page: 1 },
+      { heading: "Hudinspektion", page: 2 },
+      { heading: "Lägesändring", page: 3 },
+      { heading: "Dokumentation", page: 4 },
+    ],
   },
   {
     id: "dummy-6",
@@ -214,6 +293,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/fallrisk-atgarder",
     category: "Omvårdnad",
     text: "Strukturerad fallriskbedömning och förebyggande åtgärder på vårdavdelning.",
+    headings: [
+      { heading: "Riskfaktorer", page: 1 },
+      { heading: "Bedömningsinstrument", page: 2 },
+      { heading: "Förebyggande åtgärder", page: 3 },
+      { heading: "Uppföljning", page: 4 },
+    ],
   },
   {
     id: "dummy-7",
@@ -221,6 +306,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/journaldokumentation",
     category: "Administration",
     text: "Principer för saklig, tydlig och spårbar dokumentation i journal.",
+    headings: [
+      { heading: "Grundprinciper", page: 1 },
+      { heading: "Språkbruk", page: 2 },
+      { heading: "Ansvar", page: 3 },
+      { heading: "Spårbarhet", page: 4 },
+    ],
   },
   {
     id: "dummy-8",
@@ -228,6 +319,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/basal-hygien",
     category: "Vårdhygien",
     text: "Handhygien, skyddsutrustning och rutiner för att förebygga smittspridning.",
+    headings: [
+      { heading: "Handhygien", page: 1 },
+      { heading: "Skyddsutrustning", page: 2 },
+      { heading: "Patientnära arbete", page: 3 },
+      { heading: "Städning", page: 4 },
+    ],
   },
   {
     id: "dummy-9",
@@ -235,6 +332,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/dehydrering-aldre",
     category: "Geriatrik",
     text: "Bedömning av vätskebrist och rekommenderad initial behandling.",
+    headings: [
+      { heading: "Symtom", page: 1 },
+      { heading: "Riskgrupper", page: 2 },
+      { heading: "Vätskebehandling", page: 3 },
+      { heading: "Monitorering", page: 4 },
+    ],
   },
   {
     id: "dummy-10",
@@ -242,6 +345,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/overrapportering",
     category: "Kommunikation",
     text: "Standardiserad överrapportering med fokus på patientsäkerhet och ansvar.",
+    headings: [
+      { heading: "SBAR", page: 1 },
+      { heading: "Ansvarsfördelning", page: 2 },
+      { heading: "Riskinformation", page: 3 },
+      { heading: "Bekräftelse", page: 4 },
+    ],
   },
   {
     id: "dummy-11",
@@ -249,6 +358,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/provtagning-hantering",
     category: "Laboratoriemedicin",
     text: "Steg för korrekt provtagning, märkning och transport till lab.",
+    headings: [
+      { heading: "Förberedelser", page: 1 },
+      { heading: "Provtagning", page: 2 },
+      { heading: "Märkning", page: 3 },
+      { heading: "Transport", page: 4 },
+    ],
   },
   {
     id: "dummy-12",
@@ -256,6 +371,12 @@ const DUMMY_DOCS: DummyDoc[] = [
     url: "https://dummy.local/doc/triagering-akut",
     category: "Akutmedicin",
     text: "Prioriteringsprinciper och flöde vid triagering av inkommande patienter.",
+    headings: [
+      { heading: "Prioriteringsnivåer", page: 1 },
+      { heading: "Ankomstbedömning", page: 2 },
+      { heading: "Flöde", page: 3 },
+      { heading: "Övervakning", page: 4 },
+    ],
   },
 ];
 
@@ -305,6 +426,7 @@ const buildDummyMethodResults = (
         source_url: doc.url,
         category: doc.category,
         source: "dummydata",
+        document_section_headings: doc.headings ?? [],
       },
       source_path: `dummy/${doc.id}.json`,
       chunk_type: index % 4 === 0 ? "title" : "body",
@@ -521,9 +643,11 @@ export default function DemoSearchPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [participantName, setParticipantName] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("demo");
   const canSubmit = query.trim().length > 0 && informationNeed.trim().length > 0;
   const hasSubmittedQuery = submittedQuery.trim().length > 0;
   const isAdminUser = participantName === "admin" || participantName === "Admin";
+  const showDemoResultDetails = viewMode === "demo";
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -839,6 +963,39 @@ export default function DemoSearchPage() {
                   onChange={(event) => setUseDummyData(event.target.checked)}
                 />
               </label>
+
+              <div className="rounded-2xl border border-[#d8ddd3] bg-white px-4 py-3 text-sm text-[#556055] md:min-w-[22rem]">
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium">Visningsläge</span>
+                  <span className="text-xs opacity-80">
+                    Vanlig döljer kapitelrubriker. Demo visar kapitelrubriker, sidnummer och markeringar.
+                  </span>
+                </div>
+                <div className="mt-3 inline-flex rounded-full border border-[#cfd4c9] bg-[#f7f8f4] p-1">
+                  <button
+                    className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
+                      viewMode === "normal"
+                        ? "bg-[#425043] text-white"
+                        : "text-[#5f685f] hover:text-[#1f6e6e]"
+                    }`}
+                    type="button"
+                    onClick={() => setViewMode("normal")}
+                  >
+                    Vanlig
+                  </button>
+                  <button
+                    className={`rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
+                      viewMode === "demo"
+                        ? "bg-[#1f6e6e] text-white"
+                        : "text-[#5f685f] hover:text-[#1f6e6e]"
+                    }`}
+                    type="button"
+                    onClick={() => setViewMode("demo")}
+                  >
+                    Demo
+                  </button>
+                </div>
+              </div>
             </>
           ) : null}
 
@@ -1137,6 +1294,8 @@ export default function DemoSearchPage() {
               const selectedRating = ratings[resultKey];
               const isRatingComplete = isAssessmentComplete(selectedRating);
               const resultComment = resultComments[resultKey] ?? "";
+              const documentSectionHeadings = getResultDocumentSectionHeadings(result);
+              const matchedSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result));
 
                 return (
                   <article
@@ -1153,6 +1312,41 @@ export default function DemoSearchPage() {
                       >
                         <div className="min-w-0 lg:col-start-1">
                           <h2 className="font-serif text-lg text-[#203327]">{getResultTitle(result)}</h2>
+                          {showDemoResultDetails && documentSectionHeadings.length > 0 ? (
+                            <div className="mt-3">
+                              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
+                                Kapitel i dokumentet
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {documentSectionHeadings.map((item) => {
+                                  const isMatchedHeading =
+                                    matchedSectionHeading.length > 0 &&
+                                    normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
+
+                                  return (
+                                  <a
+                                    className={`rounded-full border px-3 py-1 text-xs ${
+                                      isMatchedHeading
+                                        ? "border-[#1f6e6e] bg-[#dff4ee] font-semibold text-[#184f4f]"
+                                        : "border-[#dfe4db] bg-[#f8fbf8] text-[#435246]"
+                                    }`}
+                                    href={buildPdfPageUrl(getResultUrl(result), item.page)}
+                                    key={`${resultKey}-${item.heading}-${item.page ?? "nopage"}`}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    {item.heading}
+                                    {item.page ? ` (s. ${item.page})` : ""}
+                                    {item.heuristic ? " • heuristisk" : ""}
+                                  </a>
+                                  );
+                                })}
+                              </div>
+                              <p className="mt-2 text-[11px] text-[#667166]">
+                                Markerad etikett = rubriken som träffen matchade mot. Heuristisk betyder att rubriken uppskattats från dokumenttexten.
+                              </p>
+                            </div>
+                          ) : null}
                           {getResultSectionHeading(result) ? (
                             <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6f7b72]">
                               {getResultSectionHeading(result)}

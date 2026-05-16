@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from flask import Flask, jsonify, request
 
+from document_structure import get_document_sections
 from search.bm25_search import bm25_search
 from search.sqlite_fts_search import sqlite_fts_search as sqlite_fts_search_impl
 from search.vector_index import DEFAULT_MODEL, VECTOR_MODEL_PROFILES, query_index
@@ -39,6 +40,8 @@ except Exception as exc:  # noqa: BLE001
 
 
 E5_PROFILE = VECTOR_MODEL_PROFILES["e5_large_instruct"]
+DOCUMENT_SECTION_HEADINGS_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+DOCUMENT_SECTION_HEADINGS_LOCK = threading.Lock()
 
 
 def _get_env_default(name: str, fallback: str) -> str:
@@ -469,6 +472,82 @@ def _evaluation_form_search_bucket(
     raise ValueError(f"Unsupported evaluation search bucket: {bucket}")
 
 
+def _read_document_section_headings(source_path: str) -> List[Dict[str, Any]]:
+    with open(source_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    fallback_title = _extract_result_title(
+        {
+            "source_path": source_path,
+            "metadata": payload.get("metadata"),
+        }
+    )
+    sections = get_document_sections(payload, fallback_title=fallback_title)
+    headings: List[Dict[str, Any]] = []
+    seen: set[Tuple[str, int | None]] = set()
+
+    for section in sections:
+        heading = _to_text(section.get("heading") or section.get("title"))
+        page_raw = section.get("page")
+        page = page_raw if isinstance(page_raw, int) and page_raw > 0 else None
+        source = _to_text(section.get("source")) or "unknown"
+        key = (heading, page)
+        if not heading or key in seen:
+            continue
+        headings.append(
+            {
+                "heading": heading,
+                "page": page,
+                "heuristic": source in {"heuristic", "fallback", "toc_preface"},
+            }
+        )
+        seen.add(key)
+
+    return headings
+
+
+def _document_section_headings_for_result(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    source_path = _to_text(result.get("source_path"))
+    if not source_path:
+        return []
+
+    path = Path(source_path)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parent / path
+    resolved_path = str(path.resolve())
+
+    with DOCUMENT_SECTION_HEADINGS_LOCK:
+        cached = DOCUMENT_SECTION_HEADINGS_CACHE.get(resolved_path)
+    if cached is not None:
+        return cached
+
+    try:
+        headings = _read_document_section_headings(resolved_path)
+    except Exception:  # noqa: BLE001
+        headings = []
+
+    with DOCUMENT_SECTION_HEADINGS_LOCK:
+        DOCUMENT_SECTION_HEADINGS_CACHE[resolved_path] = headings
+    return headings
+
+
+def _attach_document_section_headings(result: Dict[str, Any]) -> Dict[str, Any]:
+    headings = _document_section_headings_for_result(result)
+    metadata = result.get("metadata")
+    metadata_dict = dict(metadata) if isinstance(metadata, dict) else {}
+    metadata_dict["document_section_headings"] = headings
+    return {
+        **result,
+        "metadata": metadata_dict,
+    }
+
+
+def _enrich_results_with_document_section_headings(
+    results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return [_attach_document_section_headings(result) for result in results]
+
+
 def _safe_bool(value: str, fallback: bool) -> bool:
     normalized = _to_text(value).lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -816,6 +895,7 @@ def search() -> Any:
                     use_chunking=bm25_use_chunking,
                 )
                 results = _best_chunk_per_document(raw_results, top_k=None)
+                results = _enrich_results_with_document_section_headings(results)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
@@ -829,6 +909,7 @@ def search() -> Any:
                     use_chunking=bm25_use_chunking,
                 )
                 results = _best_chunk_per_document(raw_results, top_k=None)
+                results = _enrich_results_with_document_section_headings(results)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"SQLite FTS search failed: {exc}")
@@ -843,6 +924,7 @@ def search() -> Any:
                     device_preference=defaults["device"],
                 )
                 results = _best_chunk_per_document(raw_results, top_k=None)
+                results = _enrich_results_with_document_section_headings(results)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
@@ -857,6 +939,7 @@ def search() -> Any:
                     device_preference=defaults["device"],
                 )
                 results = _best_chunk_per_document(raw_results, top_k=None)
+                results = _enrich_results_with_document_section_headings(results)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
@@ -892,9 +975,11 @@ def search() -> Any:
                 e5_results=e5_results,
                 top_k=None,
             )
+            results = _enrich_results_with_document_section_headings(results)
         elif method == "docplus_live":
             try:
                 results = _docplus_live_results(query=query, top_k=top_k)
+                results = _enrich_results_with_document_section_headings(results)
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Docplus live search failed: {exc}")
@@ -916,12 +1001,14 @@ def search() -> Any:
 
             for bucket, bucket_query in bucket_queries.items():
                 try:
-                    results_by_method[bucket] = _evaluation_form_search_bucket(
-                        bucket=bucket,
-                        query=bucket_query,
-                        defaults=defaults,
-                        top_k=top_k,
-                        bm25_use_chunking=bm25_use_chunking,
+                    results_by_method[bucket] = _enrich_results_with_document_section_headings(
+                        _evaluation_form_search_bucket(
+                            bucket=bucket,
+                            query=bucket_query,
+                            defaults=defaults,
+                            top_k=top_k,
+                            bm25_use_chunking=bm25_use_chunking,
+                        )
                     )
                     successful_methods += 1
                 except Exception as exc:  # noqa: BLE001
@@ -936,7 +1023,9 @@ def search() -> Any:
                     top_k=top_k,
                     use_chunking=bm25_use_chunking,
                 )
-                results_by_method["bm25"] = _best_chunk_per_document(raw_bm25_results, top_k=None)
+                results_by_method["bm25"] = _enrich_results_with_document_section_headings(
+                    _best_chunk_per_document(raw_bm25_results, top_k=None)
+                )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"BM25 search failed: {exc}")
@@ -949,9 +1038,11 @@ def search() -> Any:
                     db_path=defaults["sqlite_fts_path"],
                     use_chunking=bm25_use_chunking,
                 )
-                results_by_method["sqlite_fts"] = _best_chunk_per_document(
-                    raw_sqlite_fts_results,
-                    top_k=None,
+                results_by_method["sqlite_fts"] = _enrich_results_with_document_section_headings(
+                    _best_chunk_per_document(
+                        raw_sqlite_fts_results,
+                        top_k=None,
+                    )
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
@@ -966,7 +1057,9 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
-                results_by_method["vector"] = _best_chunk_per_document(raw_vector_results, top_k=None)
+                results_by_method["vector"] = _enrich_results_with_document_section_headings(
+                    _best_chunk_per_document(raw_vector_results, top_k=None)
+                )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector search failed: {exc}")
@@ -980,18 +1073,22 @@ def search() -> Any:
                     top_k=top_k,
                     device_preference=defaults["device"],
                 )
-                results_by_method["vector_e5"] = _best_chunk_per_document(
-                    raw_vector_e5_results,
-                    top_k=None,
+                results_by_method["vector_e5"] = _enrich_results_with_document_section_headings(
+                    _best_chunk_per_document(
+                        raw_vector_e5_results,
+                        top_k=None,
+                    )
                 )
                 successful_methods += 1
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"Vector E5 search failed: {exc}")
                 results_by_method["vector_e5"] = []
-            results_by_method["hybrid_e5"] = _rrf_hybrid_documents(
-                bm25_results=results_by_method.get("bm25", []),
-                e5_results=results_by_method.get("vector_e5", []),
-                top_k=None,
+            results_by_method["hybrid_e5"] = _enrich_results_with_document_section_headings(
+                _rrf_hybrid_documents(
+                    bm25_results=results_by_method.get("bm25", []),
+                    e5_results=results_by_method.get("vector_e5", []),
+                    top_k=None,
+                )
             )
         else:
             errors.append(f"Unknown method '{method}'.")

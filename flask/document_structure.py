@@ -230,6 +230,7 @@ def _build_section_payload(
     index: int,
     level: Optional[int] = None,
     page: Optional[int] = None,
+    source: str = "heuristic",
 ) -> Dict[str, Any]:
     raw_text = "\n".join(line for line in body_lines if _normalize_line(line)).strip()
     cleaned = clean_text(raw_text)
@@ -240,6 +241,7 @@ def _build_section_payload(
         "title": heading,
         "level": resolved_level,
         "page": page,
+        "source": source,
         "raw_text": raw_text,
         "text": cleaned,
     }
@@ -275,6 +277,7 @@ def _derive_sections_from_toc(lines: List[TextLine], fallback_title: Optional[st
                     body_lines=preface_lines,
                     index=0,
                     level=1,
+                    source="toc_preface",
                 )
             )
 
@@ -292,6 +295,7 @@ def _derive_sections_from_toc(lines: List[TextLine], fallback_title: Optional[st
                 index=len(sections),
                 level=entry.level,
                 page=entry.page,
+                source="toc",
             )
         )
 
@@ -319,6 +323,7 @@ def _derive_sections_from_headings(lines: List[TextLine], fallback_title: Option
                         heading=current_heading or _normalize_line(fallback_title or "Document"),
                         body_lines=current_body,
                         index=len(sections),
+                        source="heuristic",
                     )
                 )
                 current_body = []
@@ -332,6 +337,7 @@ def _derive_sections_from_headings(lines: List[TextLine], fallback_title: Option
                 heading=current_heading or _normalize_line(fallback_title or "Document"),
                 body_lines=current_body,
                 index=len(sections),
+                source="heuristic",
             )
         )
 
@@ -363,6 +369,7 @@ def derive_document_sections(text: str, fallback_title: Optional[str] = None) ->
         "title": _normalize_line(fallback_title or "Document"),
         "level": 1,
         "page": None,
+        "source": "fallback",
         "raw_text": text.strip(),
         "text": cleaned,
     }
@@ -400,6 +407,7 @@ def get_document_sections(payload: Dict[str, Any], fallback_title: Optional[str]
                     "title": heading,
                     "level": level,
                     "page": page_value if isinstance(page_value, int) and page_value > 0 else None,
+                    "source": str(item.get("source") or "stored").strip() or "stored",
                     "raw_text": stored_raw_text.strip(),
                     "text": text_value,
                     "path": [_normalize_line(part) for part in path_value if _normalize_line(part)],
