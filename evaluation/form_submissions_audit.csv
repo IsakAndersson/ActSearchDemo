@@ -15,3 +15,41 @@ submission_id,created_at,participant_name,query_id,information_need,general_comm
 14,2026-03-27T11:34:05.145377+00:00,Admin,Städuppgifter på operationssal inom brännskadecentrum,Städuppgifter på operationssal inom brännskadecentrum,,8,5,3,0,False
 15,2026-05-08T10:45:13.297329+00:00,isak,Test,Test,,10,0,10,0,True
 16,2026-05-08T10:57:58.771719+00:00,Adam,Anestesimetoder OPÖ,Vilken anestesimetod ska användas vid tandsanering,Det finns dokument med föreslagna metoder från varje avdelning men de heter olika saker och kan vara svåra att hitta.,16,3,13,0,False
+17,2026-05-15T10:39:28.882964+00:00,morten,städ brännskadeoperation,vilka städrutiner finns för städ av operationssal på brännskadecentrum,,10,3,7,0,False
+18,2026-05-15T11:13:11.757990+00:00,morten,städ operation brännskada multiresistenta,städrutiner av operationssal vid multiresistenta bakterier,,15,6,9,0,False
+19,2026-05-15T11:17:10.197795+00:00,morten,intag ny patient,"intag av ny brännskadepatient, rutiner",,11,3,8,0,False
+20,2026-05-15T11:20:35.006999+00:00,morten,videobesök mottagning,rutiner för videbesök på brännskadecentrum på mottagningen,,16,4,12,0,False
+21,2026-05-15T11:25:13.633743+00:00,morten,boka mottagning brännskada,boka mottagningsbesök på brännskadecentrum,,16,4,12,0,False
+22,2026-05-15T13:21:59.275862+00:00,morten,escharotomi,eskarotomier,svårt ord att skriva rätt så intressant att se sökträffar,12,2,10,0,False
+23,2026-05-15T13:26:31.151081+00:00,morten,antibiotika brännskador,antibiotika behandling och brännskador,,11,3,8,0,False
+24,2026-05-15T13:29:58.904710+00:00,morten,anestesi brännskada operation,anestesirutiner vid brännskadeoperationer,,9,6,3,0,False
+25,2026-05-15T13:31:58.393318+00:00,morten,plocklista lig,plock lista vid läpp käk gomspalts kirurgi,,20,2,18,0,False
+26,2026-05-15T13:33:41.525046+00:00,morten,plocklista kranie,plocklista till operation för kraniofacial kirurgi,,17,2,15,0,False
+27,2026-05-15T13:35:17.087727+00:00,morten,vårdprogram malign melanom,vårdprogram för malign melanom,,8,4,4,0,False
+28,2026-05-15T13:37:28.321895+00:00,morten,diep,få översikt om allt aktuellt om diep rekonstruktioner /operationer,,16,9,7,0,False
+29,2026-05-15T13:39:45.390896+00:00,morten,utskrivning karniosynostos,utskrivningsrutiner för patienten med diagnosen kraniosynostos,,13,5,8,0,False
+30,2026-05-15T13:42:12.833141+00:00,morten,ärrbehandling brännskador,ärrbehandling brännskadevård,,12,1,11,0,False
+31,2026-05-15T13:45:35.713512+00:00,morten,extraktion tand rutiner,"borttagande av tand på käkkirurgen, rutiner",,14,8,6,0,False
+32,2026-05-15T13:47:40.185546+00:00,morten,inhalationssskador brännskada,inhalations skador vid brännskada,,11,3,8,0,False
+33,2026-05-15T13:49:12.455386+00:00,morten,diagnosregistrering brännskador,diagnosregistrering brännskador,,7,0,7,0,False
+34,2026-05-15T13:52:13.324597+00:00,morten,rutiner förlossning,rutiner första gångs förlossning,,15,8,7,0,False
+35,2026-05-15T13:54:26.368511+00:00,morten,sepsis brännskador,sepsis behandling brännskador,,9,1,8,0,False
+36,2026-05-15T13:56:25.377417+00:00,morten,läkemedel rutin brännskador,rutin läkemedel brännskador,,8,1,7,0,False
+37,2026-05-15T13:58:20.539976+00:00,morten,lymfödem rutiner,lymfödem behandlingsrutiner,,10,6,4,0,False
+38,2026-05-16T11:31:29.300163+00:00,einar,DIEP lambå postop dag 4,Rutin vid dag 4 efter lambå operation. Ska kompressionskläder på dag 4? Vilka restriktioner gäller dag 4 efter lambå operation?,"Kan också vara: DIEP postop dag 4 kompression
+eller: DIEP postop dag 4 restriktioner",15,1,14,0,False
+39,2026-05-16T11:34:54.220560+00:00,einar,Läkemedel brännskada barn,Vilka läkemedel ska man sätta in för brännskadade barn?,,7,0,7,0,False
+40,2026-05-17T13:55:56.239603+00:00,morten,trycksår undersköterska,vad skall jag tänka på om jag tror att en patient håller på att få trycksår,,17,5,12,0,False
+41,2026-05-17T13:58:16.233426+00:00,morten,preoperativ tvätt plastik,preoperativ tvätt på plastik patienter,,6,3,3,0,False
+42,2026-05-17T14:04:31.211247+00:00,morten,vitalparametrar plastik,hur och vad kollar jag när det gäller vitalparamentrar på plastiken,,14,6,8,0,False
+43,2026-05-17T14:07:33.964742+00:00,morten,"kranisosynostos, distraktion",distraktion kraniosynostos patient hur gör man,,13,4,9,0,False
+44,2026-05-17T14:14:03.681921+00:00,morten,lkg operationssjuksköterska preop,vad gör jag som opertionssjuksköterska inför läpp käk gomspaltsoperationer,,18,4,14,0,False
+45,2026-05-17T14:29:51.136557+00:00,morten,rekrytering lungor brännskada,rekrytering av lungor på brännskadecentrum,,10,1,9,0,False
+46,2026-05-17T14:31:35.075727+00:00,morten,intag brännskada,inntag av ny patient på brännskadecentrum,,9,4,5,0,False
+47,2026-05-17T14:34:07.312234+00:00,morten,rutin blodprover brännskada,rutin blodprovstagning på brännskadecentrum,,15,1,14,0,False
+48,2026-05-17T14:43:37.609530+00:00,morten,anestesi förberedelse brännskadeoperation,förberedelse anestesi vid brännskadeoperationer,,8,4,4,0,False
+49,2026-05-17T14:45:12.990158+00:00,morten,rutiner tvilling förlossning,rutiner vid tvillingförlossning,,5,1,4,0,False
+50,2026-05-17T14:49:54.879153+00:00,morten,återbesök 12 månader brännsklada,12 månaders uppföljning av brännskadepatienter,,13,4,9,0,False
+51,2026-05-17T14:53:57.466803+00:00,morten,lkg anhöriginformation,anhörig information vid läpp käk gomspalt,,15,3,12,0,False
+52,2026-05-17T14:57:01.516402+00:00,morten,introduktion läkare plastik,introduktionsprogram för läkare på plastikkirurgen,,14,4,10,0,False
+53,2026-05-17T15:02:35.018552+00:00,morten,dmk malign melanom plastikläkare,mdk malignt melanom vad är rollen/uppgifter för plastikkirurger,,6,4,2,0,False
