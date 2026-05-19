@@ -570,6 +570,8 @@ def _write_html_report(
     form_grouped_metrics_image_name: str,
     form_grouped_metrics_extended_df: pd.DataFrame,
     form_grouped_metrics_extended_image_name: str,
+    form_ndcg_word_count_image_name: str,
+    form_ndcg_character_count_image_name: str,
     output_dir: Path,
     image_paths: list[Path],
     max_table_rows: int,
@@ -635,6 +637,24 @@ def _write_html_report(
     <div class="table-wrap">{_html_table(form_grouped_metrics_extended_df, max_table_rows)}</div>
   </section>"""
 
+    form_ndcg_length_html = ""
+    if form_ndcg_word_count_image_name or form_ndcg_character_count_image_name:
+        word_count_image_html = ""
+        character_count_image_html = ""
+        if form_ndcg_word_count_image_name:
+            word_count_image_html = (
+                f'<section><h2>Form Submissions Ndcg Vs Word Count</h2>'
+                f'<img src="{html.escape(form_ndcg_word_count_image_name)}" '
+                f'alt="Form submissions nDCG vs word count"></section>'
+            )
+        if form_ndcg_character_count_image_name:
+            character_count_image_html = (
+                f'<section><h2>Form Submissions Ndcg Vs Character Count</h2>'
+                f'<img src="{html.escape(form_ndcg_character_count_image_name)}" '
+                f'alt="Form submissions nDCG vs character count"></section>'
+            )
+        form_ndcg_length_html = word_count_image_html + "\n" + character_count_image_html
+
     body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -661,6 +681,7 @@ def _write_html_report(
   {image_html}
   {form_grouped_metrics_html}
   {form_grouped_metrics_extended_html}
+  {form_ndcg_length_html}
   <section>
     <h2>Top Runs With Metadata</h2>
     <div class="table-wrap">{_html_table(top_summary, max_table_rows)}</div>
@@ -799,6 +820,20 @@ def main() -> None:
         if form_grouped_metrics_extended_image_path.exists()
         else ""
     )
+    form_ndcg_word_count_image_path = (
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_ndcg_vs_word_count.png"
+    )
+    form_ndcg_character_count_image_path = (
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_ndcg_vs_character_count.png"
+    )
+    form_ndcg_word_count_image_name = (
+        form_ndcg_word_count_image_path.name if form_ndcg_word_count_image_path.exists() else ""
+    )
+    form_ndcg_character_count_image_name = (
+        form_ndcg_character_count_image_path.name
+        if form_ndcg_character_count_image_path.exists()
+        else ""
+    )
 
     summary_csv = output_dir / "all_evaluation_summary.csv"
     results_csv = output_dir / "all_evaluation_results.csv"
@@ -830,6 +865,8 @@ def main() -> None:
         form_grouped_metrics_image_name=form_grouped_metrics_image_name,
         form_grouped_metrics_extended_df=form_grouped_metrics_extended_df,
         form_grouped_metrics_extended_image_name=form_grouped_metrics_extended_image_name,
+        form_ndcg_word_count_image_name=form_ndcg_word_count_image_name,
+        form_ndcg_character_count_image_name=form_ndcg_character_count_image_name,
         output_dir=output_dir,
         image_paths=image_paths,
         max_table_rows=args.max_table_rows,

@@ -130,6 +130,30 @@ def _load_clean_form_submissions_qrels(path: Path) -> tuple[pd.DataFrame, int, i
     ), query_queries, info_need_queries
 
 
+def _build_combined_queries(
+    query_queries: Sequence[Tuple[str, str]],
+    info_need_queries: Sequence[Tuple[str, str]],
+) -> list[dict[str, str]]:
+    combined_queries: list[dict[str, str]] = []
+    for query_id, query_text in query_queries:
+        combined_queries.append(
+            {
+                "query_id": query_id,
+                "query_text": query_text,
+                "source_text_type": "query",
+            }
+        )
+    for query_id, query_text in info_need_queries:
+        combined_queries.append(
+            {
+                "query_id": query_id,
+                "query_text": query_text,
+                "source_text_type": "information_need",
+            }
+        )
+    return combined_queries
+
+
 def _build_run_df(
     queries: Sequence[Tuple[str, str]],
     search_fn: Callable[[str, int], List[Tuple[str, float]]],
@@ -141,6 +165,49 @@ def _build_run_df(
         for doc_id, score in results:
             rows.append({"query_id": query_id, "doc_id": str(doc_id), "score": float(score)})
     return pd.DataFrame(rows, columns=["query_id", "doc_id", "score"])
+
+
+def _compute_per_query_ndcg(
+    qrels_df: pd.DataFrame,
+    combined_queries: Sequence[dict[str, str]],
+    method_order: Sequence[str],
+    top_k: int,
+) -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    query_frame = pd.DataFrame(combined_queries)
+
+    for method_key in method_order:
+        search_fn = METHODS[method_key]
+        runs = _build_run_df(
+            [(row["query_id"], row["query_text"]) for row in combined_queries],
+            search_fn,
+            top_k=top_k,
+        )
+        metric_results = list(
+            ir_measures.iter_calc(
+                [nDCG @ 10],
+                qrels_df[["query_id", "doc_id", "relevance"]],
+                runs,
+            )
+        )
+        ndcg_by_query_id = {str(result.query_id): float(result.value) for result in metric_results}
+
+        for row in query_frame.itertuples(index=False):
+            query_text = str(row.query_text)
+            rows.append(
+                {
+                    "method": method_key,
+                    "method_label": METHOD_LABELS[method_key],
+                    "query_id": str(row.query_id),
+                    "query_text": query_text,
+                    "source_text_type": str(row.source_text_type),
+                    "word_count": len(query_text.split()),
+                    "character_count": len(query_text),
+                    "ndcg@10": ndcg_by_query_id.get(str(row.query_id), 0.0),
+                }
+            )
+
+    return pd.DataFrame(rows)
 
 
 def _compute_scores(
@@ -259,6 +326,49 @@ def _plot_grouped_bars(
     plt.close(fig)
 
 
+def _plot_ndcg_vs_length(
+    per_query_df: pd.DataFrame,
+    output_path: Path,
+    x_column: str,
+    x_label: str,
+    title: str,
+) -> None:
+    color_map = {
+        "bm25": "#4c78a8",
+        "dense_e5": "#f58518",
+        "hybrid_e5": "#54a24b",
+    }
+    fig, ax = plt.subplots(figsize=(11.5, 7.0))
+
+    for method_key in CORE_METHOD_ORDER:
+        method_df = per_query_df[per_query_df["method"] == method_key].copy()
+        if method_df.empty:
+            continue
+        ax.scatter(
+            method_df[x_column],
+            method_df["ndcg@10"],
+            s=70,
+            alpha=0.75,
+            color=color_map[method_key],
+            edgecolors="#1f2933",
+            linewidths=0.5,
+            label=METHOD_LABELS[method_key],
+        )
+
+    ax.set_xlabel(x_label)
+    ax.set_ylabel("nDCG@10")
+    ax.set_ylim(-0.02, 1.05)
+    ax.set_title(title)
+    ax.grid(axis="both", color="#d9d9d9", linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.legend(loc="best")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a grouped bar chart for form submissions metrics across BM25, Dense, and Hybrid."
@@ -288,6 +398,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     qrels_bundle, query_queries, info_need_queries = _load_clean_form_submissions_qrels(Path(args.qrels_path).resolve())
     qrels_df, qrels_count, information_need_count = qrels_bundle
+    combined_queries = _build_combined_queries(query_queries, info_need_queries)
 
     scores_df = _compute_scores(
         qrels_df=qrels_df,
@@ -298,6 +409,12 @@ def main() -> None:
         information_need_count=information_need_count,
         method_order=EXTENDED_METHOD_ORDER,
     )
+    per_query_ndcg_df = _compute_per_query_ndcg(
+        qrels_df=qrels_df,
+        combined_queries=combined_queries,
+        method_order=CORE_METHOD_ORDER,
+        top_k=args.top_k,
+    )
 
     core_scores_df = scores_df[scores_df["method"].isin(CORE_METHOD_ORDER)].copy()
     extended_scores_df = scores_df[scores_df["method"].isin(EXTENDED_METHOD_ORDER)].copy()
@@ -306,9 +423,13 @@ def main() -> None:
     png_path = output_dir / "form_submissions_grouped_metrics.png"
     extended_csv_path = output_dir / "form_submissions_grouped_metrics_extended.csv"
     extended_png_path = output_dir / "form_submissions_grouped_metrics_extended.png"
+    per_query_csv_path = output_dir / "form_submissions_ndcg_per_query.csv"
+    ndcg_words_png_path = output_dir / "form_submissions_ndcg_vs_word_count.png"
+    ndcg_characters_png_path = output_dir / "form_submissions_ndcg_vs_character_count.png"
 
     core_scores_df.to_csv(csv_path, index=False)
     extended_scores_df.to_csv(extended_csv_path, index=False)
+    per_query_ndcg_df.to_csv(per_query_csv_path, index=False)
     _plot_grouped_bars(
         scores_df=core_scores_df,
         output_path=png_path,
@@ -325,12 +446,29 @@ def main() -> None:
         method_order=EXTENDED_METHOD_ORDER,
         title="Form submissions: grouped metrics by retrieval method (extended)",
     )
+    _plot_ndcg_vs_length(
+        per_query_df=per_query_ndcg_df,
+        output_path=ndcg_words_png_path,
+        x_column="word_count",
+        x_label="Number of words in query / information need",
+        title="Form submissions: nDCG@10 vs word count",
+    )
+    _plot_ndcg_vs_length(
+        per_query_df=per_query_ndcg_df,
+        output_path=ndcg_characters_png_path,
+        x_column="character_count",
+        x_label="Number of characters in query / information need",
+        title="Form submissions: nDCG@10 vs character count",
+    )
 
     print(f"Using {qrels_count} unique qrels across {information_need_count} information needs.")
     print(f"Wrote {csv_path}")
     print(f"Wrote {png_path}")
     print(f"Wrote {extended_csv_path}")
     print(f"Wrote {extended_png_path}")
+    print(f"Wrote {per_query_csv_path}")
+    print(f"Wrote {ndcg_words_png_path}")
+    print(f"Wrote {ndcg_characters_png_path}")
 
 
 if __name__ == "__main__":
