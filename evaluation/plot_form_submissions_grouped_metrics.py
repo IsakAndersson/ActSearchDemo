@@ -369,6 +369,86 @@ def _plot_ndcg_vs_length(
     plt.close(fig)
 
 
+def _plot_ndcg_vs_length_quantiles(
+    per_query_df: pd.DataFrame,
+    output_path: Path,
+    x_column: str,
+    x_label: str,
+    title: str,
+    quantiles: int = 5,
+) -> None:
+    color_map = {
+        "bm25": "#4c78a8",
+        "dense_e5": "#f58518",
+        "hybrid_e5": "#54a24b",
+    }
+
+    fig, ax = plt.subplots(figsize=(11.5, 7.0))
+
+    for method_key in CORE_METHOD_ORDER:
+        method_df = per_query_df[per_query_df["method"] == method_key].copy()
+        if method_df.empty:
+            continue
+
+        unique_count = method_df[x_column].nunique()
+        q = min(quantiles, unique_count)
+        if q < 2:
+            continue
+
+        method_df["length_bin"] = pd.qcut(
+            method_df[x_column],
+            q=q,
+            duplicates="drop",
+        )
+        if method_df["length_bin"].nunique() < 2:
+            continue
+
+        grouped = (
+            method_df.groupby("length_bin", observed=True)
+            .agg(
+                mean_length=(x_column, "mean"),
+                mean_ndcg=("ndcg@10", "mean"),
+                count=("ndcg@10", "size"),
+            )
+            .reset_index()
+            .sort_values("mean_length", kind="stable")
+        )
+
+        ax.plot(
+            grouped["mean_length"],
+            grouped["mean_ndcg"],
+            marker="o",
+            linewidth=2.0,
+            markersize=6,
+            color=color_map[method_key],
+            label=METHOD_LABELS[method_key],
+        )
+
+        for row in grouped.itertuples(index=False):
+            interval_text = str(row.length_bin)
+            ax.annotate(
+                f"n={int(row.count)}\n{interval_text}",
+                (row.mean_length, row.mean_ndcg),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                fontsize=7,
+            )
+
+    ax.set_xlabel(f"{x_label} (quantile-bin average)")
+    ax.set_ylabel("Mean nDCG@10")
+    ax.set_ylim(-0.02, 1.05)
+    ax.set_title(title)
+    ax.grid(axis="both", color="#d9d9d9", linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.legend(loc="best")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create a grouped bar chart for form submissions metrics across BM25, Dense, and Hybrid."
@@ -426,6 +506,8 @@ def main() -> None:
     per_query_csv_path = output_dir / "form_submissions_ndcg_per_query.csv"
     ndcg_words_png_path = output_dir / "form_submissions_ndcg_vs_word_count.png"
     ndcg_characters_png_path = output_dir / "form_submissions_ndcg_vs_character_count.png"
+    ndcg_words_quantiles_png_path = output_dir / "form_submissions_ndcg_vs_word_count_quantiles.png"
+    ndcg_characters_quantiles_png_path = output_dir / "form_submissions_ndcg_vs_character_count_quantiles.png"
 
     core_scores_df.to_csv(csv_path, index=False)
     extended_scores_df.to_csv(extended_csv_path, index=False)
@@ -460,6 +542,20 @@ def main() -> None:
         x_label="Number of characters in query / information need",
         title="Form submissions: nDCG@10 vs character count",
     )
+    _plot_ndcg_vs_length_quantiles(
+        per_query_df=per_query_ndcg_df,
+        output_path=ndcg_words_quantiles_png_path,
+        x_column="word_count",
+        x_label="Number of words in query / information need",
+        title="Form submissions: mean nDCG@10 vs word count quantile bins",
+    )
+    _plot_ndcg_vs_length_quantiles(
+        per_query_df=per_query_ndcg_df,
+        output_path=ndcg_characters_quantiles_png_path,
+        x_column="character_count",
+        x_label="Number of characters in query / information need",
+        title="Form submissions: mean nDCG@10 vs character count quantile bins",
+    )
 
     print(f"Using {qrels_count} unique qrels across {information_need_count} information needs.")
     print(f"Wrote {csv_path}")
@@ -469,6 +565,8 @@ def main() -> None:
     print(f"Wrote {per_query_csv_path}")
     print(f"Wrote {ndcg_words_png_path}")
     print(f"Wrote {ndcg_characters_png_path}")
+    print(f"Wrote {ndcg_words_quantiles_png_path}")
+    print(f"Wrote {ndcg_characters_quantiles_png_path}")
 
 
 if __name__ == "__main__":
