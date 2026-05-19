@@ -67,12 +67,14 @@ def evaluate_system(
 
     #todo: lägg in for-loop som loopar igenom varje sökfunktion och kör evaluate
     print("[evaluation] Running retrieval evaluation...", flush=True)
-    results_by_query, average_rank, average_score, run_df = evaluate(
+    results_by_query, summary_metrics, run_df = evaluate(
         search_function,
         k,
         query_type_frames=query_type_frames,
         return_runs=True,
     )
+    average_rank = float(summary_metrics["average_rank"])
+    average_score = float(summary_metrics["average_score"])
     cet = timezone(timedelta(hours=1), name="CET")
     run_metadata = {
         "evaluated_at_cet": datetime.now(cet).isoformat(timespec="seconds"),
@@ -87,11 +89,10 @@ def evaluate_system(
     if qrels_path:
         run_metadata["qrels_path"] = str(Path(qrels_path).resolve())
     run_metadata.update(_validate_flat_metadata(metadata))
-    print_results(results_by_query, average_score, average_rank, run_metadata=run_metadata)
+    print_results(results_by_query, summary_metrics, run_metadata=run_metadata)
     save_results_to_csv(
         results_by_query,
-        average_score,
-        average_rank,
+        summary_metrics,
         run_metadata,
         run_df=run_df,
         output_dir=output_dir,
@@ -101,8 +102,7 @@ def evaluate_system(
 
 def save_results_to_csv(
     detailed_results,
-    average_score,
-    average_rank,
+    summary_metrics,
     run_metadata=None,
     run_df=None,
     output_dir: Optional[str] = None,
@@ -134,10 +134,7 @@ def save_results_to_csv(
         append_df_to_csv(detailed_results_with_metadata, target / "evaluation_results.csv")
 
     # 2) Overall summary metrics
-    summary_row = {
-        "average_rank": average_rank,
-        "average_score": average_score
-    }
+    summary_row = dict(summary_metrics)
     if run_metadata:
         summary_row.update(run_metadata)
     for target in targets:
@@ -172,7 +169,7 @@ def evaluate(search_function, k, doc_ids=None, query_types_cols=None, return_run
 		queries = query_frame["queries"]["query_id"]
 		qrels = query_frame["qrels"]
 		if return_runs:
-			rr20, average_rank, run_df = evaluate_query_type(
+			metrics, run_df = evaluate_query_type(
 				queries=queries,
 				search_function=search_function,
 				k=k,
@@ -181,7 +178,7 @@ def evaluate(search_function, k, doc_ids=None, query_types_cols=None, return_run
 				progress_label=query_type,
 			)
 		else:
-			rr20, average_rank = evaluate_query_type(
+			metrics = evaluate_query_type(
 				queries=queries,
 				search_function=search_function,
 				k=k,
@@ -190,26 +187,32 @@ def evaluate(search_function, k, doc_ids=None, query_types_cols=None, return_run
 			)
 			run_df = None
 		print(
-			f"[evaluation] Done query type '{query_type}'. RR@20={rr20:.4f}, avg_rank={average_rank:.2f}",
+			f"[evaluation] Done query type '{query_type}'. RR@20={metrics['RR@20']:.4f}, "
+            f"nDCG@10={metrics['nDCG@10']:.4f}, Recall@10={metrics['Recall@10']:.4f}, "
+            f"avg_rank={metrics['average_rank']:.2f}",
 			flush=True,
 		)
-		rows.append({"query_type": query_type, "RR@20": rr20, "average_rank": average_rank})
+		rows.append({"query_type": query_type, **metrics})
 		if return_runs and run_df is not None and not run_df.empty:
 			run_df = run_df.copy()
 			run_df["query_type"] = query_type
 			all_runs.append(run_df)
 		
 	results_by_query_type = pd.DataFrame(rows)
-	average_score = results_by_query_type["RR@20"].mean()
-	average_rank = results_by_query_type["average_rank"].mean()
+	summary_metrics = {
+		"average_score": float(results_by_query_type["RR@20"].mean()),
+		"average_rank": float(results_by_query_type["average_rank"].mean()),
+		"average_ndcg@10": float(results_by_query_type["nDCG@10"].mean()),
+		"average_recall@10": float(results_by_query_type["Recall@10"].mean()),
+	}
 
 	if return_runs:
 		combined_run = pd.concat(all_runs, ignore_index=True) if all_runs else pd.DataFrame(
 			columns=["doc_id", "query_id", "score", "query_type"]
 		)
-		return (results_by_query_type, average_rank, average_score, combined_run)
+		return (results_by_query_type, summary_metrics, combined_run)
 
-	return (results_by_query_type, average_rank, average_score)
+	return (results_by_query_type, summary_metrics)
 
 def evaluate_query_type(
 	queries,
@@ -230,12 +233,12 @@ def evaluate_query_type(
 		k,
 		progress_label=progress_label,
 	)
-    scores = calculate_metrics(qrels, run)
-    rr20 = list(scores.values())[0]
+    metrics = calculate_metrics(qrels, run)
     avg_rank = calculate_average_rank(qrels, run)
+    metrics["average_rank"] = avg_rank
     if return_run:
-        return rr20, avg_rank, run
-    return rr20, avg_rank
+        return metrics, run
+    return metrics
 
 def build_run_df(
     queries: pd.Series,
@@ -384,9 +387,13 @@ MRR@20: För varje query beräknas: 1/positionen för det rätta dokumentet. 0 p
 		Tar snittet över alla queries. 
 """
 def calculate_metrics(qrels, run):
-	metrics = [RR@20]
+	metrics = [RR@20, nDCG@10, Recall@10]
 	results = ir_measures.calc_aggregate(metrics, qrels, run)
-	return results
+	return {
+		"RR@20": float(results[RR@20]),
+		"nDCG@10": float(results[nDCG@10]),
+		"Recall@10": float(results[Recall@10]),
+	}
 
 # Average rank for a query type
 def calculate_average_rank(qrels, run):
@@ -401,7 +408,7 @@ def calculate_average_rank(qrels, run):
 	avg_rank = sum(ranks) / len(ranks) if ranks else 0
 	return avg_rank
 
-def print_results(results, average_score, average_rank, run_metadata=None):
+def print_results(results, summary_metrics, run_metadata=None):
 	BOLD = '\033[1m'
 	UNDERLINE = '\033[4m'
 	END = '\033[0m'
@@ -413,10 +420,14 @@ def print_results(results, average_score, average_rank, run_metadata=None):
 			print(f"  {key}: {run_metadata[key]}")
 		print()
 	print(results.to_string(index=False))
-	print("\n Genomsnittlig RR@20: " + str(average_score))
-	print(" Genomsnittlig average rank: " + str(average_rank) + "\n")
+	print("\n Genomsnittlig RR@20: " + str(summary_metrics["average_score"]))
+	print(" Genomsnittlig nDCG@10: " + str(summary_metrics["average_ndcg@10"]))
+	print(" Genomsnittlig Recall@10: " + str(summary_metrics["average_recall@10"]))
+	print(" Genomsnittlig average rank: " + str(summary_metrics["average_rank"]) + "\n")
 	print(UNDERLINE + "Förklaring av mått:" + END 
        + "\nRR@20 (Mean Reciprocal Rank): Mäter hur högt upp i resultatlistan det rätta svaret placeras i topp 20. Beräknas som 1/positionen för det rätta dokumentet. \n1.0 = Perfekt score (högst upp varje gång) \n0.0 = Utanför topp 20 varje gång\n"
+       + "\nnDCG@10: Mäter hur bra rankingen är i topp 10, med högre vikt på träffar högt upp i listan.\n"
+       + "\nRecall@10: Andel relevanta dokument som hittas inom topp 10.\n"
        + "\nAverage rank: Genomsnittlig position av rätt dokument. Ignorerar resultat utanför top k.\n"
        )
 

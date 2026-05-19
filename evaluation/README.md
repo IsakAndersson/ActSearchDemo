@@ -7,12 +7,16 @@ This module evaluates retrieval quality for Docplus search methods using labeled
 `evaluation.py` computes:
 
 - `RR@20` per query type
+- `nDCG@10` per query type
+- `Recall@10` per query type
 - `average_rank` per query type
-- global averages across query types
+- global averages across query types for all metrics
 
 Note:
 
 - `RR@20` includes misses as `0` (standard behavior).
+- `nDCG@10` is computed with cutoff 10.
+- `Recall@10` is computed with cutoff 10.
 - `average_rank` only averages ranks for hits within top `k` (misses are excluded).
 
 ## Expected Search Function Format
@@ -189,8 +193,8 @@ CLI flags:
 Evaluation output behavior:
 
 - `qrels.csv`: latest downloaded sheet snapshot
-- `evaluation_results.csv`: per-query-type metrics (appends)
-- `evaluation_summary.csv`: one summary row per evaluation run (appends)
+- `evaluation_results.csv`: per-query-type metrics (`RR@20`, `nDCG@10`, `Recall@10`, `average_rank`) (appends)
+- `evaluation_summary.csv`: one summary row per evaluation run, including aggregate averages for the metrics above (appends)
 - `evaluation_run.csv`: full run rows (`query_id`, `doc_id`, `score`, `query_type`) for the latest run only (overwrites each run)
 - `../flask/evaluation_visualization.ipynb`: notebook for plotting summary/results/run CSVs
 
