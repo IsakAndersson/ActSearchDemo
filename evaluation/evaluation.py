@@ -499,7 +499,7 @@ def main():
     parser.add_argument(
         "--method",
         choices=["bm25", "sqlite_fts", "dense", "dense_e5", "hybrid", "hybrid_e5", "docplus_live", "sts_live"],
-        default="hybrid",
+        default="hybrid_e5",
         help="Search method to evaluate.",
     )
     parser.add_argument(

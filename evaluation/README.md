@@ -175,7 +175,7 @@ Run from terminal with flags:
 
 CLI flags:
 
-- `--method`: `bm25`, `sqlite_fts`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid`)
+- `--method`: `bm25`, `sqlite_fts`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`, `docplus_live`, or `sts_live` (default: `hybrid_e5`)
 - `--top-k`: integer > 0 (default: `20`)
 - `--meta KEY=VALUE`: optional metadata entry, repeat for multiple fields
 - `--qrels-source`: `google_sheet` or `form_submissions` (default: `google_sheet`)
