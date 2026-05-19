@@ -18,10 +18,22 @@ from ir_measures import RR, nDCG
 
 try:
     from .evaluation import EVALUATION_DIR
-    from .search_adapter import bm25_search, dense_search, hybrid_search
+    from .search_adapter import (
+        bm25_search,
+        dense_e5_search,
+        docplus_live_search,
+        hybrid_e5_search,
+        sqlite_fts_search,
+    )
 except ImportError:
     from evaluation import EVALUATION_DIR
-    from search_adapter import bm25_search, dense_search, hybrid_search
+    from search_adapter import (
+        bm25_search,
+        dense_e5_search,
+        docplus_live_search,
+        hybrid_e5_search,
+        sqlite_fts_search,
+    )
 
 
 DEFAULT_QRELS_PATH = EVALUATION_DIR / "qrels_from_form_submissions_clean.csv"
@@ -29,15 +41,22 @@ DEFAULT_OUTPUT_DIR = EVALUATION_DIR / "plots" / "form_submissions_grouped_metric
 
 METHODS: Dict[str, Callable[[str, int], List[Tuple[str, float]]]] = {
     "bm25": bm25_search,
-    "dense": dense_search,
-    "hybrid": hybrid_search,
+    "dense_e5": dense_e5_search,
+    "hybrid_e5": hybrid_e5_search,
+    "sqlite_fts": sqlite_fts_search,
+    "docplus_live": docplus_live_search,
 }
 
 METHOD_LABELS = {
     "bm25": "BM25",
-    "dense": "Dense",
-    "hybrid": "Hybrid",
+    "dense_e5": "Dense E5",
+    "hybrid_e5": "Hybrid E5",
+    "sqlite_fts": "SQLite FTS",
+    "docplus_live": "Docplus Live",
 }
+
+CORE_METHOD_ORDER = ["bm25", "dense_e5", "hybrid_e5"]
+EXTENDED_METHOD_ORDER = ["bm25", "dense_e5", "hybrid_e5", "sqlite_fts", "docplus_live"]
 
 METRIC_SPECS: Sequence[Tuple[str, object, str, str]] = (
     ("NDCG@10 (query)", nDCG @ 10, "query", "ndcg10_query"),
@@ -131,9 +150,11 @@ def _compute_scores(
     top_k: int,
     qrels_count: int,
     information_need_count: int,
+    method_order: Sequence[str],
 ) -> pd.DataFrame:
     rows: List[dict[str, object]] = []
-    for method_key, search_fn in METHODS.items():
+    for method_key in method_order:
+        search_fn = METHODS[method_key]
         query_run = _build_run_df(query_queries, search_fn, top_k=top_k)
         info_need_run = _build_run_df(info_need_queries, search_fn, top_k=top_k)
 
@@ -164,24 +185,28 @@ def _plot_grouped_bars(
     output_path: Path,
     qrels_count: int,
     information_need_count: int,
+    method_order: Sequence[str],
+    title: str,
 ) -> None:
     metric_order = [label for label, _, _, _ in METRIC_SPECS]
-    method_order = ["bm25", "dense", "hybrid"]
     color_map = {
         "bm25": "#4c78a8",
-        "dense": "#f58518",
-        "hybrid": "#54a24b",
+        "dense_e5": "#f58518",
+        "hybrid_e5": "#54a24b",
+        "sqlite_fts": "#e45756",
+        "docplus_live": "#72b7b2",
     }
 
     x_positions = list(range(len(metric_order)))
-    bar_width = 0.22
+    bar_width = min(0.18, 0.78 / max(1, len(method_order)))
+    center_offset = (len(method_order) - 1) / 2
     offsets = {
-        "bm25": -bar_width,
-        "dense": 0.0,
-        "hybrid": bar_width,
+        method_key: (index - center_offset) * bar_width
+        for index, method_key in enumerate(method_order)
     }
 
-    fig, ax = plt.subplots(figsize=(12.5, 7.2))
+    fig_width = 12.5 if len(method_order) <= 3 else 14.5
+    fig, ax = plt.subplots(figsize=(fig_width, 7.2))
 
     for method_key in method_order:
         method_scores = (
@@ -214,7 +239,7 @@ def _plot_grouped_bars(
     ax.set_xticklabels(metric_order, rotation=15, ha="right")
     ax.set_ylabel("Score")
     ax.set_ylim(0, 1.08)
-    ax.set_title("Form submissions: grouped metrics by retrieval method")
+    ax.set_title(title)
     ax.grid(axis="y", color="#d9d9d9", linewidth=0.8)
     ax.set_axisbelow(True)
     ax.legend(loc="upper right")
@@ -271,21 +296,41 @@ def main() -> None:
         top_k=args.top_k,
         qrels_count=qrels_count,
         information_need_count=information_need_count,
+        method_order=EXTENDED_METHOD_ORDER,
     )
+
+    core_scores_df = scores_df[scores_df["method"].isin(CORE_METHOD_ORDER)].copy()
+    extended_scores_df = scores_df[scores_df["method"].isin(EXTENDED_METHOD_ORDER)].copy()
 
     csv_path = output_dir / "form_submissions_grouped_metrics.csv"
     png_path = output_dir / "form_submissions_grouped_metrics.png"
-    scores_df.to_csv(csv_path, index=False)
+    extended_csv_path = output_dir / "form_submissions_grouped_metrics_extended.csv"
+    extended_png_path = output_dir / "form_submissions_grouped_metrics_extended.png"
+
+    core_scores_df.to_csv(csv_path, index=False)
+    extended_scores_df.to_csv(extended_csv_path, index=False)
     _plot_grouped_bars(
-        scores_df=scores_df,
+        scores_df=core_scores_df,
         output_path=png_path,
         qrels_count=qrels_count,
         information_need_count=information_need_count,
+        method_order=CORE_METHOD_ORDER,
+        title="Form submissions: grouped metrics by retrieval method",
+    )
+    _plot_grouped_bars(
+        scores_df=extended_scores_df,
+        output_path=extended_png_path,
+        qrels_count=qrels_count,
+        information_need_count=information_need_count,
+        method_order=EXTENDED_METHOD_ORDER,
+        title="Form submissions: grouped metrics by retrieval method (extended)",
     )
 
     print(f"Using {qrels_count} unique qrels across {information_need_count} information needs.")
     print(f"Wrote {csv_path}")
     print(f"Wrote {png_path}")
+    print(f"Wrote {extended_csv_path}")
+    print(f"Wrote {extended_png_path}")
 
 
 if __name__ == "__main__":

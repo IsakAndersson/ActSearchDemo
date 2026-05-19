@@ -568,6 +568,8 @@ def _write_html_report(
     total_hits_df: pd.DataFrame,
     form_grouped_metrics_df: pd.DataFrame,
     form_grouped_metrics_image_name: str,
+    form_grouped_metrics_extended_df: pd.DataFrame,
+    form_grouped_metrics_extended_image_name: str,
     output_dir: Path,
     image_paths: list[Path],
     max_table_rows: int,
@@ -610,6 +612,29 @@ def _write_html_report(
     <div class="table-wrap">{_html_table(form_grouped_metrics_df, max_table_rows)}</div>
   </section>"""
 
+    form_grouped_metrics_extended_html = ""
+    if not form_grouped_metrics_extended_df.empty:
+        qrels_summary = ""
+        if {"qrels_count", "information_need_count"}.issubset(form_grouped_metrics_extended_df.columns):
+            first_row = form_grouped_metrics_extended_df.iloc[0]
+            qrels_summary = (
+                f"<p>Using {html.escape(str(first_row['qrels_count']))} qrels across "
+                f"{html.escape(str(first_row['information_need_count']))} information needs.</p>"
+            )
+        form_grouped_metrics_extended_image_html = ""
+        if form_grouped_metrics_extended_image_name:
+            form_grouped_metrics_extended_image_html = (
+                f'<img src="{html.escape(form_grouped_metrics_extended_image_name)}" '
+                f'alt="Form submissions grouped metrics extended">'
+            )
+        form_grouped_metrics_extended_html = f"""
+  <section>
+    <h2>Form Submissions Grouped Metrics Extended</h2>
+    {qrels_summary}
+    {form_grouped_metrics_extended_image_html}
+    <div class="table-wrap">{_html_table(form_grouped_metrics_extended_df, max_table_rows)}</div>
+  </section>"""
+
     body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -635,6 +660,7 @@ def _write_html_report(
   </section>
   {image_html}
   {form_grouped_metrics_html}
+  {form_grouped_metrics_extended_html}
   <section>
     <h2>Top Runs With Metadata</h2>
     <div class="table-wrap">{_html_table(top_summary, max_table_rows)}</div>
@@ -756,11 +782,22 @@ def main() -> None:
     form_grouped_metrics_df = _load_optional_csv(
         FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics.csv"
     )
+    form_grouped_metrics_extended_df = _load_optional_csv(
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics_extended.csv"
+    )
     form_grouped_metrics_image_path = (
         FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics.png"
     )
+    form_grouped_metrics_extended_image_path = (
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics_extended.png"
+    )
     form_grouped_metrics_image_name = (
         form_grouped_metrics_image_path.name if form_grouped_metrics_image_path.exists() else ""
+    )
+    form_grouped_metrics_extended_image_name = (
+        form_grouped_metrics_extended_image_path.name
+        if form_grouped_metrics_extended_image_path.exists()
+        else ""
     )
 
     summary_csv = output_dir / "all_evaluation_summary.csv"
@@ -791,6 +828,8 @@ def main() -> None:
         total_hits_df=total_hits_df,
         form_grouped_metrics_df=form_grouped_metrics_df,
         form_grouped_metrics_image_name=form_grouped_metrics_image_name,
+        form_grouped_metrics_extended_df=form_grouped_metrics_extended_df,
+        form_grouped_metrics_extended_image_name=form_grouped_metrics_extended_image_name,
         output_dir=output_dir,
         image_paths=image_paths,
         max_table_rows=args.max_table_rows,
