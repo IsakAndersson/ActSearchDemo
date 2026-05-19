@@ -129,6 +129,8 @@ def _compute_scores(
     query_queries: Sequence[Tuple[str, str]],
     info_need_queries: Sequence[Tuple[str, str]],
     top_k: int,
+    qrels_count: int,
+    information_need_count: int,
 ) -> pd.DataFrame:
     rows: List[dict[str, object]] = []
     for method_key, search_fn in METHODS.items():
@@ -150,6 +152,8 @@ def _compute_scores(
                     "metric_slug": metric_slug,
                     "query_variant": variant,
                     "value": float(value),
+                    "qrels_count": qrels_count,
+                    "information_need_count": information_need_count,
                 }
             )
     return pd.DataFrame(rows)
@@ -256,6 +260,7 @@ def main() -> None:
         raise ValueError("--top-k must be at least 100 to compute RR@100 correctly.")
 
     output_dir = Path(args.output_dir).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
     qrels_bundle, query_queries, info_need_queries = _load_clean_form_submissions_qrels(Path(args.qrels_path).resolve())
     qrels_df, qrels_count, information_need_count = qrels_bundle
 
@@ -264,6 +269,8 @@ def main() -> None:
         query_queries=query_queries,
         info_need_queries=info_need_queries,
         top_k=args.top_k,
+        qrels_count=qrels_count,
+        information_need_count=information_need_count,
     )
 
     csv_path = output_dir / "form_submissions_grouped_metrics.csv"

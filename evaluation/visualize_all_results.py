@@ -25,6 +25,7 @@ except ImportError:
 
 EVALUATION_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = EVALUATION_DIR / "plots" / "all_results"
+FORM_SUBMISSIONS_GROUPED_METRICS_DIR = EVALUATION_DIR / "plots" / "form_submissions_grouped_metrics"
 SUMMARY_FILE_NAME = "evaluation_summary.csv"
 RESULTS_FILE_NAME = "evaluation_results.csv"
 RUN_FILE_NAME = "evaluation_run.csv"
@@ -555,10 +556,18 @@ def _html_table(df: pd.DataFrame, max_rows: int) -> str:
     return f"<table><thead><tr>{headers}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
 
 
+def _load_optional_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(path)
+
+
 def _write_html_report(
     summary_df: pd.DataFrame,
     results_df: pd.DataFrame,
     total_hits_df: pd.DataFrame,
+    form_grouped_metrics_df: pd.DataFrame,
+    form_grouped_metrics_image_name: str,
     output_dir: Path,
     image_paths: list[Path],
     max_table_rows: int,
@@ -577,6 +586,29 @@ def _write_html_report(
         f'<img src="{html.escape(image)}" alt="{html.escape(image)}"></section>'
         for image in relative_images
     )
+
+    form_grouped_metrics_html = ""
+    if not form_grouped_metrics_df.empty:
+        qrels_summary = ""
+        if {"qrels_count", "information_need_count"}.issubset(form_grouped_metrics_df.columns):
+            first_row = form_grouped_metrics_df.iloc[0]
+            qrels_summary = (
+                f"<p>Using {html.escape(str(first_row['qrels_count']))} qrels across "
+                f"{html.escape(str(first_row['information_need_count']))} information needs.</p>"
+            )
+        form_grouped_metrics_image_html = ""
+        if form_grouped_metrics_image_name:
+            form_grouped_metrics_image_html = (
+                f'<img src="{html.escape(form_grouped_metrics_image_name)}" '
+                f'alt="Form submissions grouped metrics">'
+            )
+        form_grouped_metrics_html = f"""
+  <section>
+    <h2>Form Submissions Grouped Metrics</h2>
+    {qrels_summary}
+    {form_grouped_metrics_image_html}
+    <div class="table-wrap">{_html_table(form_grouped_metrics_df, max_table_rows)}</div>
+  </section>"""
 
     body = f"""<!doctype html>
 <html lang="en">
@@ -602,6 +634,7 @@ def _write_html_report(
     <p>Normalized data files: <code>all_evaluation_summary.csv</code> and <code>all_evaluation_results.csv</code>.</p>
   </section>
   {image_html}
+  {form_grouped_metrics_html}
   <section>
     <h2>Top Runs With Metadata</h2>
     <div class="table-wrap">{_html_table(top_summary, max_table_rows)}</div>
@@ -720,6 +753,15 @@ def main() -> None:
 
     qrels_df = _build_qrels_table(args.qrels_source, args.qrels_path)
     total_hits_df = _build_total_hits_df(run_df, qrels_df)
+    form_grouped_metrics_df = _load_optional_csv(
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics.csv"
+    )
+    form_grouped_metrics_image_path = (
+        FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics.png"
+    )
+    form_grouped_metrics_image_name = (
+        form_grouped_metrics_image_path.name if form_grouped_metrics_image_path.exists() else ""
+    )
 
     summary_csv = output_dir / "all_evaluation_summary.csv"
     results_csv = output_dir / "all_evaluation_results.csv"
@@ -747,6 +789,8 @@ def main() -> None:
         summary_df=summary_df,
         results_df=results_df,
         total_hits_df=total_hits_df,
+        form_grouped_metrics_df=form_grouped_metrics_df,
+        form_grouped_metrics_image_name=form_grouped_metrics_image_name,
         output_dir=output_dir,
         image_paths=image_paths,
         max_table_rows=args.max_table_rows,
