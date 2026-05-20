@@ -16,10 +16,12 @@ const METHODS = [
   "hybrid_e5_information_need",
 ] as const;
 const DEFAULT_TOP_K = 5;
+const CHAPTER_LIST_COLLAPSE_LIMIT = 10;
 
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
+type ChapterMatchRating = "yes" | "partial" | "no";
 type ViewMode = "normal" | "demo";
 
 type SearchResult = {
@@ -656,6 +658,8 @@ export default function DemoSearchPage() {
   const [debugMode, setDebugMode] = useState(false);
   const [useDummyData, setUseDummyData] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
+  const [chapterMatchRatings, setChapterMatchRatings] = useState<Record<string, ChapterMatchRating>>({});
+  const [expandedChapterLists, setExpandedChapterLists] = useState<Record<string, boolean>>({});
   const [resultComments, setResultComments] = useState<Record<string, string>>({});
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
   const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
@@ -708,6 +712,8 @@ export default function DemoSearchPage() {
     setSubmitError(null);
     setHasSubmittedRatings(false);
     setRatings({});
+    setChapterMatchRatings({});
+    setExpandedChapterLists({});
     setResultComments({});
 
     try {
@@ -787,13 +793,14 @@ export default function DemoSearchPage() {
     const results = pipeline.finalResults.map((result) => {
       const resultKey = getResultDocumentKey(result);
       const selectedRating = ratings[resultKey] ?? null;
+      const selectedChapterMatchRating = chapterMatchRatings[resultKey] ?? null;
       const resultComment = resultComments[resultKey] ?? "";
 
       return {
         ...result,
         assessment: {
           rating: selectedRating,
-          relevant_scope: null,
+          relevant_scope: selectedChapterMatchRating,
           relevant_section: "",
           comment: resultComment,
         },
@@ -852,6 +859,8 @@ export default function DemoSearchPage() {
       setSearchErrors([]);
       setPipeline(EMPTY_PIPELINE);
       setRatings({});
+      setChapterMatchRatings({});
+      setExpandedChapterLists({});
       setResultComments({});
       setSubmitError(null);
 
@@ -871,6 +880,8 @@ export default function DemoSearchPage() {
     setRunId(0);
     setPipeline(EMPTY_PIPELINE);
     setRatings({});
+    setChapterMatchRatings({});
+    setExpandedChapterLists({});
     setResultComments({});
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1312,6 +1323,7 @@ export default function DemoSearchPage() {
               const rankByMethod = getRankByMethod(result);
               const resultKey = getResultDocumentKey(result);
               const selectedRating = ratings[resultKey];
+              const selectedChapterMatchRating = chapterMatchRatings[resultKey];
               const isRatingComplete = isAssessmentComplete(selectedRating);
               const resultComment = resultComments[resultKey] ?? "";
               const documentSectionHeadings = getResultDocumentSectionHeadings(result);
@@ -1325,6 +1337,15 @@ export default function DemoSearchPage() {
                 documentSectionHeadings.length > 0 &&
                 !hasHeuristicDocumentSectionHeadings &&
                 hasAnyDocumentSectionPages;
+              const isChapterListExpanded = expandedChapterLists[resultKey] === true;
+              const visibleDocumentSectionHeadings =
+                shouldShowDocumentSectionHeadings &&
+                !isChapterListExpanded &&
+                documentSectionHeadings.length > CHAPTER_LIST_COLLAPSE_LIMIT
+                  ? documentSectionHeadings.slice(0, CHAPTER_LIST_COLLAPSE_LIMIT)
+                  : documentSectionHeadings;
+              const shouldShowChapterMatchQuestion =
+                showDemoResultDetails && shouldShowDocumentSectionHeadings;
               const matchedSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result));
               const matchedSectionPage = getResultSectionPage(result);
 
@@ -1339,11 +1360,15 @@ export default function DemoSearchPage() {
                   >
                     {!debugMode ? (
                       <div
-                        className="grid gap-4 md:items-start lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.1fr)_12rem_22rem_minmax(0,0.8fr)]"
+                        className={`grid gap-4 md:items-start ${
+                          shouldShowChapterMatchQuestion
+                            ? "lg:grid-cols-[minmax(0,1.1fr)_12rem_16rem_minmax(0,0.9fr)] xl:grid-cols-[minmax(0,1.1fr)_12rem_18rem_minmax(0,0.9fr)]"
+                            : "lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.1fr)_12rem_22rem_minmax(0,0.8fr)]"
+                        }`}
                       >
                         <div className="min-w-0 lg:col-start-1">
                           <a
-                            className="inline-flex items-center font-serif text-lg text-[#203327] transition hover:underline hover:decoration-[#9bc7c7] hover:underline-offset-4"
+                            className="inline-flex items-center font-serif text-lg text-[#2e5f7a] underline decoration-[#9bc7c7] underline-offset-4 transition hover:text-[#1f6e6e]"
                             href={getResultUrl(result)}
                             target="_blank"
                             rel="noreferrer"
@@ -1372,14 +1397,14 @@ export default function DemoSearchPage() {
                               ) : (
                                 <>
                                   <div className="mt-2 overflow-hidden rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
-                                    {documentSectionHeadings.map((item) => {
+                                    {visibleDocumentSectionHeadings.map((item) => {
                                       const isMatchedHeading =
                                         matchedSectionHeading.length > 0 &&
                                         normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
 
                                       return (
                                       <a
-                                        className={`block border-b px-4 py-3 text-xs last:border-b-0 ${
+                                        className={`block border-b px-4 py-3 text-xs last:border-b-0 hover:underline hover:decoration-[#9bc7c7] hover:underline-offset-4 ${
                                           isMatchedHeading
                                             ? "border-[#b7ddd1] bg-[#dff4ee] font-semibold text-[#184f4f]"
                                             : "border-[#dfe4db] bg-[#f8fbf8] text-[#435246]"
@@ -1394,6 +1419,22 @@ export default function DemoSearchPage() {
                                       );
                                     })}
                                   </div>
+                                  {documentSectionHeadings.length > CHAPTER_LIST_COLLAPSE_LIMIT ? (
+                                    <button
+                                      className="mt-2 inline-flex text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedChapterLists((current) => ({
+                                          ...current,
+                                          [resultKey]: !isChapterListExpanded,
+                                        }))
+                                      }
+                                    >
+                                      {isChapterListExpanded
+                                        ? "Visa färre kapitel"
+                                        : `Visa alla kapitel (${documentSectionHeadings.length})`}
+                                    </button>
+                                  ) : null}
                                 </>
                               )}
                             </div>
@@ -1411,8 +1452,8 @@ export default function DemoSearchPage() {
                         </div>
 
                         <fieldset className="w-full max-w-[10.5rem] self-start lg:col-start-2">
-                          <legend className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
-                            Relevans
+                          <legend className="text-xs font-semibold text-[#58635b]">
+                            Är dokumentet relevant eller inte?
                           </legend>
                           <div className="mt-3 overflow-hidden rounded-xl border border-[#d9ddd4] bg-white">
                             <label className="flex items-center gap-2 px-3 py-2 text-xs text-[#465048]">
@@ -1422,9 +1463,9 @@ export default function DemoSearchPage() {
                               disabled={hasSubmittedRatings}
                               name={`rating-${resultKey}`}
                               type="radio"
-                              onChange={() =>
-                                  setRatings((current) => ({ ...current, [resultKey]: "relevant" }))
-                                }
+                              onChange={() => {
+                                  setRatings((current) => ({ ...current, [resultKey]: "relevant" }));
+                                }}
                               />
                               Relevant
                             </label>
@@ -1435,19 +1476,101 @@ export default function DemoSearchPage() {
                               disabled={hasSubmittedRatings}
                               name={`rating-${resultKey}`}
                               type="radio"
-                              onChange={() =>
+                              onChange={() => {
                                   setRatings((current) => ({
                                     ...current,
                                     [resultKey]: "not_relevant",
-                                  }))
-                                }
+                                  }));
+                                  setChapterMatchRatings((current) => {
+                                    const next = { ...current };
+                                    delete next[resultKey];
+                                    return next;
+                                  });
+                                }}
                               />
                               Inte relevant
                             </label>
                           </div>
                         </fieldset>
 
-                        <label className="lg:col-start-3 xl:col-start-4">
+                        {shouldShowChapterMatchQuestion ? (
+                          <fieldset className="w-full self-start lg:col-start-3">
+                            <legend className="text-xs font-semibold uppercase tracking-[0.16em] text-[#58635b]">
+                              Valfri fråga
+                            </legend>
+                            <p className="mt-2 text-xs leading-5 text-[#5d685f]">
+                              Finns den relevanta delen i det föreslagna kapitlet?
+                            </p>
+                            <div
+                              className={`mt-3 overflow-hidden rounded-xl border ${
+                                selectedRating === "relevant"
+                                  ? "border-[#d9ddd4] bg-white"
+                                  : "border-[#e1e4dc] bg-[#f3f5f1]"
+                              }`}
+                            >
+                              <label
+                                className={`flex items-center gap-2 px-3 py-2 text-xs ${
+                                  selectedRating === "relevant" ? "text-[#465048]" : "text-[#8a8f86]"
+                                }`}
+                              >
+                                <input
+                                  checked={selectedChapterMatchRating === "yes"}
+                                  className="h-4 w-4 accent-[#1f6e6e]"
+                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                  name={`chapter-match-${resultKey}`}
+                                  type="radio"
+                                  onChange={() =>
+                                    setChapterMatchRatings((current) => ({ ...current, [resultKey]: "yes" }))
+                                  }
+                                />
+                                Ja
+                              </label>
+                              <label
+                                className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                  selectedRating === "relevant"
+                                    ? "border-[#d9ddd4] text-[#465048]"
+                                    : "border-[#e1e4dc] text-[#8a8f86]"
+                                }`}
+                              >
+                                <input
+                                  checked={selectedChapterMatchRating === "partial"}
+                                  className="h-4 w-4 accent-[#1f6e6e]"
+                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                  name={`chapter-match-${resultKey}`}
+                                  type="radio"
+                                  onChange={() =>
+                                    setChapterMatchRatings((current) => ({
+                                      ...current,
+                                      [resultKey]: "partial",
+                                    }))
+                                  }
+                                />
+                                Delvis
+                              </label>
+                              <label
+                                className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                  selectedRating === "relevant"
+                                    ? "border-[#d9ddd4] text-[#465048]"
+                                    : "border-[#e1e4dc] text-[#8a8f86]"
+                                }`}
+                              >
+                                <input
+                                  checked={selectedChapterMatchRating === "no"}
+                                  className="h-4 w-4 accent-[#1f6e6e]"
+                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                  name={`chapter-match-${resultKey}`}
+                                  type="radio"
+                                  onChange={() =>
+                                    setChapterMatchRatings((current) => ({ ...current, [resultKey]: "no" }))
+                                  }
+                                />
+                                Nej
+                              </label>
+                            </div>
+                          </fieldset>
+                        ) : null}
+
+                        <label className={shouldShowChapterMatchQuestion ? "lg:col-start-4" : "lg:col-start-3 xl:col-start-4"}>
                           <span className="text-xs text-[#2f3a31]">Valfri kommentar</span>
                           <textarea
                             className={`mt-2 min-h-24 w-full rounded-2xl border px-4 py-3 text-xs outline-none transition ${
