@@ -56,7 +56,6 @@ type DummyDoc = {
   headings?: Array<{
     heading: string;
     page?: number;
-    level?: number;
     heuristic?: boolean;
   }>;
 };
@@ -64,7 +63,6 @@ type DummyDoc = {
 type DocumentSectionHeading = {
   heading: string;
   page?: number;
-  level?: number;
   heuristic?: boolean;
 };
 
@@ -211,9 +209,8 @@ const getResultDocumentSectionHeadings = (result: SearchResult): DocumentSection
         ? item.heading.trim()
         : undefined;
     const page = typeof item.page === "number" && item.page > 0 ? item.page : undefined;
-    const level = typeof item.level === "number" && item.level > 0 ? item.level : 1;
     const heuristic = item.heuristic === true;
-    return heading ? [{ heading, page, level, heuristic }] : [];
+    return heading ? [{ heading, page, heuristic }] : [];
   });
 };
 
@@ -1392,12 +1389,7 @@ export default function DemoSearchPage() {
                                         rel="noreferrer"
                                         target="_blank"
                                       >
-                                        <span
-                                          className="block leading-5"
-                                          style={{ paddingLeft: `${Math.max((item.level ?? 1) - 1, 0) * 16}px` }}
-                                        >
-                                          {item.heading}
-                                        </span>
+                                        <span className="block leading-5">{item.heading}</span>
                                       </a>
                                       );
                                     })}
