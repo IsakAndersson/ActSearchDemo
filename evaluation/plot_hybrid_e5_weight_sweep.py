@@ -28,11 +28,17 @@ except ImportError:
 DEFAULT_QRELS_PATH = EVALUATION_DIR / "qrels_from_form_submissions_clean.csv"
 DEFAULT_OUTPUT_DIR = EVALUATION_DIR / "plots" / "hybrid_e5_weight_sweep"
 DEFAULT_WEIGHTS: Sequence[Tuple[float, float]] = (
+    (0.00, 1.00),
+    (0.10, 0.90),
+    (0.20, 0.80),
+    (0.30, 0.70),
+    (0.40, 0.60),
     (0.50, 0.50),
     (0.60, 0.40),
     (0.70, 0.30),
     (0.80, 0.20),
     (0.90, 0.10),
+    (1.00, 0.00),
 )
 VARIANT_SPECS: Sequence[Tuple[str, str]] = (
     ("query", "query_id"),
