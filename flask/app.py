@@ -449,6 +449,8 @@ def _evaluation_form_search_bucket(
 
     if bucket.startswith("hybrid_e5_"):
         candidate_k = max(top_k * 3, top_k)
+        hybrid_bm25_weight = _safe_float(defaults["hybrid_bm25_weight"], 1.0)
+        hybrid_e5_weight = _safe_float(defaults["hybrid_e5_weight"], 1.0)
         bm25_results = bm25_search(
             parsed_dir=defaults["parsed_dir"],
             query=query,
@@ -467,6 +469,8 @@ def _evaluation_form_search_bucket(
             bm25_results=bm25_results,
             e5_results=_best_chunk_per_document(e5_results, top_k=candidate_k),
             top_k=top_k,
+            bm25_weight=hybrid_bm25_weight,
+            e5_weight=hybrid_e5_weight,
         )
 
     raise ValueError(f"Unsupported evaluation search bucket: {bucket}")
@@ -555,6 +559,16 @@ def _safe_bool(value: str, fallback: bool) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     return fallback
+
+
+def _safe_float(value: Any, fallback: float) -> float:
+    text = _to_text(value)
+    if not text:
+        return fallback
+    try:
+        return float(text)
+    except ValueError:
+        return fallback
 
 
 def _docplus_live_config(top_k: int) -> Any:
@@ -838,6 +852,16 @@ def _defaults_from_payload(payload: Dict[str, Any]) -> Dict[str, str]:
             payload.get("bm25_use_chunking")
             or _get_env_default("DOCPLUS_BM25_USE_CHUNKING", "true")
         ),
+        "hybrid_bm25_weight": str(
+            payload.get("hybrid_bm25_weight")
+            or payload.get("bm25_weight")
+            or _get_env_default("DOCPLUS_HYBRID_BM25_WEIGHT", "1.0")
+        ),
+        "hybrid_e5_weight": str(
+            payload.get("hybrid_e5_weight")
+            or payload.get("e5_weight")
+            or _get_env_default("DOCPLUS_HYBRID_E5_WEIGHT", "1.0")
+        ),
     }
 
 
@@ -885,6 +909,8 @@ def search() -> Any:
             top_k = 5
             errors.append("Chunk fetch count must be an integer; defaulted to 5.")
         bm25_use_chunking = _safe_bool(defaults["bm25_use_chunking"], True)
+        hybrid_bm25_weight = _safe_float(defaults["hybrid_bm25_weight"], 1.0)
+        hybrid_e5_weight = _safe_float(defaults["hybrid_e5_weight"], 1.0)
 
         if method == "bm25":
             try:
@@ -974,6 +1000,8 @@ def search() -> Any:
                 bm25_results=bm25_results,
                 e5_results=e5_results,
                 top_k=None,
+                bm25_weight=hybrid_bm25_weight,
+                e5_weight=hybrid_e5_weight,
             )
             results = _enrich_results_with_document_section_headings(results)
         elif method == "docplus_live":

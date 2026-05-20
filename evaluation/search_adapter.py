@@ -69,6 +69,8 @@ class SearchConfig:
     bm25_overlap: int = 50
     bm25_include_title_chunk: bool = True
     bm25_use_chunking: bool = True
+    hybrid_bm25_weight: float = 1.0
+    hybrid_e5_weight: float = 1.0
 
 
 DEFAULT_CONFIG = SearchConfig(
@@ -102,6 +104,12 @@ DEFAULT_CONFIG = SearchConfig(
     bm25_use_chunking=_env_bool(
         "DOCPLUS_BM25_USE_CHUNKING",
         SearchConfig.bm25_use_chunking,
+    ),
+    hybrid_bm25_weight=float(
+        os.getenv("DOCPLUS_HYBRID_BM25_WEIGHT", str(SearchConfig.hybrid_bm25_weight))
+    ),
+    hybrid_e5_weight=float(
+        os.getenv("DOCPLUS_HYBRID_E5_WEIGHT", str(SearchConfig.hybrid_e5_weight))
     ),
 )
 
@@ -422,22 +430,24 @@ def hybrid_e5_search(
     top_k: int = 20,
     config: SearchConfig = DEFAULT_CONFIG,
     rrf_k: int = 60,
-    bm25_weight: float = 1.0,
-    dense_weight: float = 1.0,
+    bm25_weight: Optional[float] = None,
+    dense_weight: Optional[float] = None,
 ) -> SearchResults:
     if not query.strip() or top_k <= 0:
         return []
 
+    resolved_bm25_weight = config.hybrid_bm25_weight if bm25_weight is None else bm25_weight
+    resolved_dense_weight = config.hybrid_e5_weight if dense_weight is None else dense_weight
     candidate_k = max(top_k * 3, top_k)
     bm25_results = bm25_search(query=query, top_k=candidate_k, config=config)
     dense_results = dense_e5_search(query=query, top_k=candidate_k, config=config)
 
     fused_scores: Dict[str, float] = {}
     for rank, (doc_id, _) in enumerate(bm25_results, start=1):
-        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + bm25_weight / (rrf_k + rank)
+        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + resolved_bm25_weight / (rrf_k + rank)
 
     for rank, (doc_id, _) in enumerate(dense_results, start=1):
-        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + dense_weight / (rrf_k + rank)
+        fused_scores[doc_id] = fused_scores.get(doc_id, 0.0) + resolved_dense_weight / (rrf_k + rank)
 
     ranked = sorted(fused_scores.items(), key=lambda pair: pair[1], reverse=True)
     return ranked[:top_k]
