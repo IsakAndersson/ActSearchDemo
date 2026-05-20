@@ -490,6 +490,8 @@ def _read_document_section_headings(source_path: str) -> List[Dict[str, Any]]:
         heading = _to_text(section.get("heading") or section.get("title"))
         page_raw = section.get("page")
         page = page_raw if isinstance(page_raw, int) and page_raw > 0 else None
+        level_raw = section.get("level")
+        level = level_raw if isinstance(level_raw, int) and level_raw > 0 else 1
         source = _to_text(section.get("source")) or "unknown"
         key = (heading, page)
         if not heading or key in seen:
@@ -498,6 +500,7 @@ def _read_document_section_headings(source_path: str) -> List[Dict[str, Any]]:
             {
                 "heading": heading,
                 "page": page,
+                "level": level,
                 "heuristic": source in {"heuristic", "fallback", "toc_preface"},
             }
         )
