@@ -148,6 +148,26 @@ const getResultSectionHeading = (result: SearchResult): string | undefined => {
   return getMetadataValue(result.metadata, ["section_heading"]);
 };
 
+const getResultSectionPage = (result: SearchResult): number | undefined => {
+  const directPage =
+    typeof result.metadata?.section_page === "number" && result.metadata.section_page > 0
+      ? result.metadata.section_page
+      : undefined;
+  if (directPage) {
+    return directPage;
+  }
+
+  const rawPage = result.metadata?.section_page;
+  if (typeof rawPage === "string") {
+    const parsed = Number.parseInt(rawPage, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
+
 const getResultChunkText = (result: SearchResult): string => {
   const sectionText = getStringValue(result.section_text);
   if (sectionText) {
@@ -1295,7 +1315,18 @@ export default function DemoSearchPage() {
               const isRatingComplete = isAssessmentComplete(selectedRating);
               const resultComment = resultComments[resultKey] ?? "";
               const documentSectionHeadings = getResultDocumentSectionHeadings(result);
+              const hasHeuristicDocumentSectionHeadings = documentSectionHeadings.some(
+                (item) => item.heuristic,
+              );
+              const hasAnyDocumentSectionPages = documentSectionHeadings.some(
+                (item) => typeof item.page === "number" && item.page > 0,
+              );
+              const shouldShowDocumentSectionHeadings =
+                documentSectionHeadings.length > 0 &&
+                !hasHeuristicDocumentSectionHeadings &&
+                hasAnyDocumentSectionPages;
               const matchedSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result));
+              const matchedSectionPage = getResultSectionPage(result);
 
                 return (
                   <article
@@ -1311,63 +1342,72 @@ export default function DemoSearchPage() {
                         className="grid gap-4 md:items-start lg:grid-cols-[minmax(0,1.1fr)_12rem_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.1fr)_12rem_22rem_minmax(0,0.8fr)]"
                       >
                         <div className="min-w-0 lg:col-start-1">
-                          <h2 className="font-serif text-lg text-[#203327]">{getResultTitle(result)}</h2>
+                          <a
+                            className="inline-flex items-center font-serif text-lg text-[#203327] transition hover:underline hover:decoration-[#9bc7c7] hover:underline-offset-4"
+                            href={getResultUrl(result)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span>{getResultTitle(result)}</span>
+                          </a>
                           {showDemoResultDetails && documentSectionHeadings.length > 0 ? (
                             <div className="mt-3">
                               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
                                 Kapitel i dokumentet
                               </p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {documentSectionHeadings.map((item) => {
-                                  const isMatchedHeading =
-                                    matchedSectionHeading.length > 0 &&
-                                    normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
+                              {!shouldShowDocumentSectionHeadings ? (
+                                <div className="mt-2 rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8] px-4 py-3 text-xs text-[#556055]">
+                                  <p>Innehållsförteckning saknas.</p>
+                                  {matchedSectionPage ? (
+                                    <a
+                                      className="mt-2 inline-flex text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                                      href={buildPdfPageUrl(getResultUrl(result), matchedSectionPage)}
+                                      rel="noreferrer"
+                                      target="_blank"
+                                    >
+                                      Hoppa direkt till föreslaget segment
+                                    </a>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="mt-2 overflow-hidden rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
+                                    {documentSectionHeadings.map((item) => {
+                                      const isMatchedHeading =
+                                        matchedSectionHeading.length > 0 &&
+                                        normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
 
-                                  return (
-                                  <a
-                                    className={`rounded-full border px-3 py-1 text-xs ${
-                                      isMatchedHeading
-                                        ? "border-[#1f6e6e] bg-[#dff4ee] font-semibold text-[#184f4f]"
-                                        : "border-[#dfe4db] bg-[#f8fbf8] text-[#435246]"
-                                    }`}
-                                    href={buildPdfPageUrl(getResultUrl(result), item.page)}
-                                    key={`${resultKey}-${item.heading}-${item.page ?? "nopage"}`}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    {item.heading}
-                                    {item.page ? ` (s. ${item.page})` : ""}
-                                    {item.heuristic ? " • heuristisk" : ""}
-                                  </a>
-                                  );
-                                })}
-                              </div>
-                              <p className="mt-2 text-[11px] text-[#667166]">
-                                Markerad etikett = rubriken som träffen matchade mot. Heuristisk betyder att rubriken uppskattats från dokumenttexten.
+                                      return (
+                                      <a
+                                        className={`block border-b px-4 py-3 text-xs last:border-b-0 ${
+                                          isMatchedHeading
+                                            ? "border-[#b7ddd1] bg-[#dff4ee] font-semibold text-[#184f4f]"
+                                            : "border-[#dfe4db] bg-[#f8fbf8] text-[#435246]"
+                                        }`}
+                                        href={buildPdfPageUrl(getResultUrl(result), item.page)}
+                                        key={`${resultKey}-${item.heading}-${item.page ?? "nopage"}`}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        <span className="block leading-5">{item.heading}</span>
+                                      </a>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ) : null}
+                          {!showDemoResultDetails ? (
+                            <div className="mt-5 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4">
+                              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
+                                Förhandsvisning av underkapitel
+                              </p>
+                              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#314135]">
+                                {getResultChunkText(result)}
                               </p>
                             </div>
                           ) : null}
-                          {getResultSectionHeading(result) ? (
-                            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#6f7b72]">
-                              {getResultSectionHeading(result)}
-                            </p>
-                          ) : null}
-                          <a
-                            className="mt-4 inline-flex break-all text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
-                            href={getResultUrl(result)}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Öppna länk{" "}<span aria-hidden="true">{"\u2197"}</span>
-                          </a>
-                          <div className="mt-5 rounded-[1.25rem] border border-[#dfe4db] bg-[#f8fbf8] p-4">
-                            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
-                              Förhandsvisning av underkapitel
-                            </p>
-                            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#314135]">
-                              {getResultChunkText(result)}
-                            </p>
-                          </div>
                         </div>
 
                         <fieldset className="w-full max-w-[10.5rem] self-start lg:col-start-2">
