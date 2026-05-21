@@ -1403,6 +1403,9 @@ export default function DemoSearchPage() {
               const hasAnyDocumentSectionPages = documentSectionHeadings.some(
                 (item) => typeof item.page === "number" && item.page > 0,
               );
+              const hasAnyDocumentSectionIndexes = documentSectionHeadings.some(
+                (item) => typeof item.index === "number" && item.index >= 0,
+              );
               const preferredMatchResult =
                 getPreferredMatchForDocument(pipeline.byMethod, resultKey) ?? result;
               const shouldShowDocumentSectionHeadings =
@@ -1464,11 +1467,11 @@ export default function DemoSearchPage() {
                                 </div>
                               ) : (
                                 <>
-                                  <div className="mt-2 max-h-[26.5rem] overflow-y-scroll rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
+                                  <div className="always-visible-scrollbar mt-2 max-h-[26.5rem] overflow-y-scroll rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
                                     {documentSectionHeadings.map((item, chapterIndex) => {
                                       const normalizedItemHeading = normalizeHeadingForMatch(item.heading);
                                       const isMatchedHeading =
-                                        matchedSectionIndex !== undefined
+                                        matchedSectionIndex !== undefined && hasAnyDocumentSectionIndexes
                                           ? item.index === matchedSectionIndex
                                           : matchedSectionPage !== undefined
                                             ? matchedSectionHeading.length > 0 &&

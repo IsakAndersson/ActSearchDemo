@@ -17,3 +17,27 @@ body {
     radial-gradient(circle at 85% 0%, rgba(207, 238, 255, 0.55), transparent 34%),
     linear-gradient(180deg, #f6f9ff 0%, #edf3ff 100%);
 }
+
+.always-visible-scrollbar {
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+}
+
+.always-visible-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+
+.always-visible-scrollbar::-webkit-scrollbar-track {
+  background: #edf1eb;
+  border-left: 1px solid #dfe4db;
+}
+
+.always-visible-scrollbar::-webkit-scrollbar-thumb {
+  background: #b6c3b5;
+  border: 2px solid #edf1eb;
+  border-radius: 999px;
+}
+
+.always-visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #98ab98;
+}
