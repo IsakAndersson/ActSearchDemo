@@ -1482,9 +1482,9 @@ export default function DemoSearchPage() {
                             <span>{getResultTitle(result)}</span>
                           </a>
                           {showDemoResultDetails && isPreferredTitleMatch ? (
-                            <p className="mt-2 text-xs font-medium text-[#6a766d]">
+                            <div className="mt-3 inline-flex items-center rounded-full border border-[#b7ddd1] bg-[#dff4ee] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#184f4f]">
                               Match på titel
-                            </p>
+                            </div>
                           ) : null}
                           {showDemoResultDetails && documentSectionHeadings.length > 0 ? (
                             <div className="mt-3">
@@ -1706,72 +1706,78 @@ export default function DemoSearchPage() {
                             <p className="mt-2 text-xs leading-5 text-[#5d685f]">
                               Är det föreslagna kapitlet relevant?
                             </p>
-                            <div
-                              className={`mt-3 overflow-hidden rounded-xl border ${
-                                selectedRating === "relevant"
-                                  ? "border-[#d9ddd4] bg-white"
-                                  : "border-[#e1e4dc] bg-[#f3f5f1]"
-                              }`}
-                            >
-                              <label
-                                className={`flex items-center gap-2 px-3 py-2 text-xs ${
-                                  selectedRating === "relevant" ? "text-[#465048]" : "text-[#8a8f86]"
-                                }`}
-                              >
-                                <input
-                                  checked={selectedChapterMatchRating === "yes"}
-                                  className="h-4 w-4 accent-[#1f6e6e]"
-                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
-                                  name={`chapter-match-${resultKey}`}
-                                  type="radio"
-                                  onChange={() =>
-                                    setChapterMatchRatings((current) => ({ ...current, [resultKey]: "yes" }))
-                                  }
-                                />
-                                Ja
-                              </label>
-                              <label
-                                className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                            {isPreferredTitleMatch ? (
+                              <div className="mt-3 rounded-xl border border-[#b7ddd1] bg-[#dff4ee] px-3 py-3 text-xs font-semibold text-[#184f4f]">
+                                Match på titel
+                              </div>
+                            ) : (
+                              <div
+                                className={`mt-3 overflow-hidden rounded-xl border ${
                                   selectedRating === "relevant"
-                                    ? "border-[#d9ddd4] text-[#465048]"
-                                    : "border-[#e1e4dc] text-[#8a8f86]"
+                                    ? "border-[#d9ddd4] bg-white"
+                                    : "border-[#e1e4dc] bg-[#f3f5f1]"
                                 }`}
                               >
-                                <input
-                                  checked={selectedChapterMatchRating === "partial"}
-                                  className="h-4 w-4 accent-[#1f6e6e]"
-                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
-                                  name={`chapter-match-${resultKey}`}
-                                  type="radio"
-                                  onChange={() =>
-                                    setChapterMatchRatings((current) => ({
-                                      ...current,
-                                      [resultKey]: "partial",
-                                    }))
-                                  }
-                                />
-                                Delvis
-                              </label>
-                              <label
-                                className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
-                                  selectedRating === "relevant"
-                                    ? "border-[#d9ddd4] text-[#465048]"
-                                    : "border-[#e1e4dc] text-[#8a8f86]"
-                                }`}
-                              >
-                                <input
-                                  checked={selectedChapterMatchRating === "no"}
-                                  className="h-4 w-4 accent-[#1f6e6e]"
-                                  disabled={hasSubmittedRatings || selectedRating !== "relevant"}
-                                  name={`chapter-match-${resultKey}`}
-                                  type="radio"
-                                  onChange={() =>
-                                    setChapterMatchRatings((current) => ({ ...current, [resultKey]: "no" }))
-                                  }
-                                />
-                                Nej
-                              </label>
-                            </div>
+                                <label
+                                  className={`flex items-center gap-2 px-3 py-2 text-xs ${
+                                    selectedRating === "relevant" ? "text-[#465048]" : "text-[#8a8f86]"
+                                  }`}
+                                >
+                                  <input
+                                    checked={selectedChapterMatchRating === "yes"}
+                                    className="h-4 w-4 accent-[#1f6e6e]"
+                                    disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                    name={`chapter-match-${resultKey}`}
+                                    type="radio"
+                                    onChange={() =>
+                                      setChapterMatchRatings((current) => ({ ...current, [resultKey]: "yes" }))
+                                    }
+                                  />
+                                  Ja
+                                </label>
+                                <label
+                                  className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                    selectedRating === "relevant"
+                                      ? "border-[#d9ddd4] text-[#465048]"
+                                      : "border-[#e1e4dc] text-[#8a8f86]"
+                                  }`}
+                                >
+                                  <input
+                                    checked={selectedChapterMatchRating === "partial"}
+                                    className="h-4 w-4 accent-[#1f6e6e]"
+                                    disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                    name={`chapter-match-${resultKey}`}
+                                    type="radio"
+                                    onChange={() =>
+                                      setChapterMatchRatings((current) => ({
+                                        ...current,
+                                        [resultKey]: "partial",
+                                      }))
+                                    }
+                                  />
+                                  Delvis
+                                </label>
+                                <label
+                                  className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                    selectedRating === "relevant"
+                                      ? "border-[#d9ddd4] text-[#465048]"
+                                      : "border-[#e1e4dc] text-[#8a8f86]"
+                                  }`}
+                                >
+                                  <input
+                                    checked={selectedChapterMatchRating === "no"}
+                                    className="h-4 w-4 accent-[#1f6e6e]"
+                                    disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                    name={`chapter-match-${resultKey}`}
+                                    type="radio"
+                                    onChange={() =>
+                                      setChapterMatchRatings((current) => ({ ...current, [resultKey]: "no" }))
+                                    }
+                                  />
+                                  Nej
+                                </label>
+                              </div>
+                            )}
                           </fieldset>
                         ) : null}
 
