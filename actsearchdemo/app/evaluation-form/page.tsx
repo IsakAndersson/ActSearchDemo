@@ -248,6 +248,41 @@ const buildPdfPageUrl = (url: string, page: number | undefined): string => {
   return `${url}#page=${page}`;
 };
 
+const getMatchedChapterIndex = (
+  result: SearchResult,
+  documentSectionHeadings: DocumentSectionHeading[],
+): number | null => {
+  const matchedSectionIndex = getResultSectionIndex(result);
+  const matchedSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result));
+  const matchedSectionPage = getResultSectionPage(result);
+
+  if (matchedSectionIndex !== undefined) {
+    const byIndex = documentSectionHeadings.findIndex((item) => item.index === matchedSectionIndex);
+    return byIndex >= 0 ? byIndex : null;
+  }
+
+  if (matchedSectionPage !== undefined && matchedSectionHeading.length > 0) {
+    const byPageAndHeading = documentSectionHeadings.findIndex(
+      (item) =>
+        item.page === matchedSectionPage &&
+        normalizeHeadingForMatch(item.heading) === matchedSectionHeading,
+    );
+    return byPageAndHeading >= 0 ? byPageAndHeading : null;
+  }
+
+  if (matchedSectionHeading.length > 0) {
+    const exactHeadingMatches = documentSectionHeadings
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => normalizeHeadingForMatch(item.heading) === matchedSectionHeading);
+
+    if (exactHeadingMatches.length === 1) {
+      return exactHeadingMatches[0]?.index ?? null;
+    }
+  }
+
+  return null;
+};
+
 const EMPTY_BY_METHOD: Record<SearchMethod, SearchResult[]> = {
   bm25_query: [],
   bm25_information_need: [],
@@ -1411,22 +1446,20 @@ export default function DemoSearchPage() {
               const hasAnyDocumentSectionPages = documentSectionHeadings.some(
                 (item) => typeof item.page === "number" && item.page > 0,
               );
-              const hasAnyDocumentSectionIndexes = documentSectionHeadings.some(
-                (item) => typeof item.index === "number" && item.index >= 0,
-              );
               const preferredMatchResult =
                 getPreferredMatchForDocument(pipeline.byMethod, resultKey) ?? result;
               const shouldShowDocumentSectionHeadings =
                 documentSectionHeadings.length > 0 &&
                 !hasHeuristicDocumentSectionHeadings &&
                 hasAnyDocumentSectionPages;
-              const matchedSectionIndex = getResultSectionIndex(preferredMatchResult);
-              const matchedSectionHeading = normalizeHeadingForMatch(
-                getResultSectionHeading(preferredMatchResult),
-              );
               const matchedSectionPage = getResultSectionPage(preferredMatchResult);
+              const matchedChapterIndex = shouldShowDocumentSectionHeadings
+                ? getMatchedChapterIndex(preferredMatchResult, documentSectionHeadings)
+                : null;
+              const shouldShowMatchedChapterList =
+                shouldShowDocumentSectionHeadings && matchedChapterIndex !== null;
               const shouldShowChapterMatchQuestion =
-                showDemoResultDetails && shouldShowDocumentSectionHeadings;
+                showDemoResultDetails && shouldShowMatchedChapterList;
               const shouldShowSuggestedPageQuestion =
                 showDemoResultDetails && !shouldShowDocumentSectionHeadings && matchedSectionPage !== undefined;
 
@@ -1459,7 +1492,7 @@ export default function DemoSearchPage() {
                           {showDemoResultDetails &&
                           (documentSectionHeadings.length > 0 || matchedSectionPage !== undefined) ? (
                             <div className="mt-3">
-                              {shouldShowDocumentSectionHeadings ? (
+                              {shouldShowMatchedChapterList ? (
                                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
                                   Kapitel i dokumentet
                                 </p>
@@ -1559,24 +1592,15 @@ export default function DemoSearchPage() {
                                     </>
                                   ) : null}
                                 </div>
+                              ) : !shouldShowMatchedChapterList ? (
+                                <div className="mt-2 rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8] px-4 py-3 text-xs text-[#556055]">
+                                  <p>Ingen tydlig kapitelmatch hittades.</p>
+                                </div>
                               ) : (
                                 <>
                                   <div className="always-visible-scrollbar mt-2 max-h-[26.5rem] overflow-y-scroll rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
                                     {documentSectionHeadings.map((item, chapterIndex) => {
-                                      const normalizedItemHeading = normalizeHeadingForMatch(item.heading);
-                                      const isMatchedHeading =
-                                        matchedSectionIndex !== undefined && hasAnyDocumentSectionIndexes
-                                          ? item.index === matchedSectionIndex
-                                          : matchedSectionPage !== undefined
-                                            ? matchedSectionHeading.length > 0 &&
-                                              normalizedItemHeading === matchedSectionHeading &&
-                                              item.page === matchedSectionPage
-                                            : matchedSectionHeading.length > 0 &&
-                                              normalizedItemHeading === matchedSectionHeading &&
-                                              chapterIndex === documentSectionHeadings.findIndex(
-                                                (candidate) =>
-                                                  normalizeHeadingForMatch(candidate.heading) === matchedSectionHeading,
-                                              );
+                                      const isMatchedHeading = chapterIndex === matchedChapterIndex;
 
                                       return (
                                       <a
