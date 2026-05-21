@@ -55,6 +55,7 @@ type DummyDoc = {
   text: string;
   headings?: Array<{
     heading: string;
+    index?: number;
     page?: number;
     heuristic?: boolean;
   }>;
@@ -62,6 +63,7 @@ type DummyDoc = {
 
 type DocumentSectionHeading = {
   heading: string;
+  index?: number;
   page?: number;
   heuristic?: boolean;
 };
@@ -168,6 +170,25 @@ const getResultSectionPage = (result: SearchResult): number | undefined => {
   return undefined;
 };
 
+const getResultSectionIndex = (result: SearchResult): number | undefined => {
+  if (typeof result.section_index === "number" && result.section_index >= 0) {
+    return result.section_index;
+  }
+
+  const rawIndex = result.metadata?.section_index;
+  if (typeof rawIndex === "number" && rawIndex >= 0) {
+    return rawIndex;
+  }
+  if (typeof rawIndex === "string") {
+    const parsed = Number.parseInt(rawIndex, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
+
 const getResultChunkText = (result: SearchResult): string => {
   const sectionText = getStringValue(result.section_text);
   if (sectionText) {
@@ -208,9 +229,10 @@ const getResultDocumentSectionHeadings = (result: SearchResult): DocumentSection
       typeof item.heading === "string" && item.heading.trim().length > 0
         ? item.heading.trim()
         : undefined;
+    const index = typeof item.index === "number" && item.index >= 0 ? item.index : undefined;
     const page = typeof item.page === "number" && item.page > 0 ? item.page : undefined;
     const heuristic = item.heuristic === true;
-    return heading ? [{ heading, page, heuristic }] : [];
+    return heading ? [{ heading, index, page, heuristic }] : [];
   });
 };
 
@@ -1389,6 +1411,7 @@ export default function DemoSearchPage() {
                 hasAnyDocumentSectionPages;
               const shouldShowChapterMatchQuestion =
                 showDemoResultDetails && shouldShowDocumentSectionHeadings;
+              const matchedSectionIndex = getResultSectionIndex(preferredMatchResult);
               const matchedSectionHeading = normalizeHeadingForMatch(
                 getResultSectionHeading(preferredMatchResult),
               );
@@ -1441,11 +1464,22 @@ export default function DemoSearchPage() {
                                 </div>
                               ) : (
                                 <>
-                                  <div className="mt-2 max-h-[26.5rem] overflow-y-auto rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
+                                  <div className="mt-2 max-h-[26.5rem] overflow-y-scroll rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
                                     {documentSectionHeadings.map((item, chapterIndex) => {
+                                      const normalizedItemHeading = normalizeHeadingForMatch(item.heading);
                                       const isMatchedHeading =
-                                        matchedSectionHeading.length > 0 &&
-                                        normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
+                                        matchedSectionIndex !== undefined
+                                          ? item.index === matchedSectionIndex
+                                          : matchedSectionPage !== undefined
+                                            ? matchedSectionHeading.length > 0 &&
+                                              normalizedItemHeading === matchedSectionHeading &&
+                                              item.page === matchedSectionPage
+                                            : matchedSectionHeading.length > 0 &&
+                                              normalizedItemHeading === matchedSectionHeading &&
+                                              chapterIndex === documentSectionHeadings.findIndex(
+                                                (candidate) =>
+                                                  normalizeHeadingForMatch(candidate.heading) === matchedSectionHeading,
+                                              );
 
                                       return (
                                       <a
