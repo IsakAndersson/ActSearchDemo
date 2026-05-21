@@ -451,23 +451,29 @@ def _evaluation_form_search_bucket(
         candidate_k = max(top_k * 3, top_k)
         hybrid_bm25_weight = _safe_float(defaults["hybrid_bm25_weight"], 1.0)
         hybrid_e5_weight = _safe_float(defaults["hybrid_e5_weight"], 1.0)
-        bm25_results = bm25_search(
-            parsed_dir=defaults["parsed_dir"],
-            query=query,
+        bm25_results = _best_chunk_per_document(
+            bm25_search(
+                parsed_dir=defaults["parsed_dir"],
+                query=query,
+                top_k=candidate_k,
+                use_chunking=bm25_use_chunking,
+            ),
             top_k=candidate_k,
-            use_chunking=bm25_use_chunking,
         )
-        e5_results = query_index(
-            index_path=defaults["e5_index_path"],
-            metadata_path=defaults["e5_metadata_path"],
-            query=query,
-            model_name=defaults["e5_model_name"],
+        e5_results = _best_chunk_per_document(
+            query_index(
+                index_path=defaults["e5_index_path"],
+                metadata_path=defaults["e5_metadata_path"],
+                query=query,
+                model_name=defaults["e5_model_name"],
+                top_k=candidate_k,
+                device_preference=defaults["device"],
+            ),
             top_k=candidate_k,
-            device_preference=defaults["device"],
         )
-        return _rrf_hybrid(
+        return _rrf_hybrid_documents(
             bm25_results=bm25_results,
-            e5_results=_best_chunk_per_document(e5_results, top_k=candidate_k),
+            e5_results=e5_results,
             top_k=top_k,
             bm25_weight=hybrid_bm25_weight,
             e5_weight=hybrid_e5_weight,

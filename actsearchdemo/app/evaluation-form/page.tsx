@@ -20,6 +20,7 @@ type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
 type ChapterMatchRating = "yes" | "partial" | "no";
+type SuggestedPageRating = "yes" | "partial" | "no";
 type ViewMode = "normal" | "demo";
 
 type SearchResult = {
@@ -725,6 +726,7 @@ export default function DemoSearchPage() {
   const [useDummyData, setUseDummyData] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
   const [chapterMatchRatings, setChapterMatchRatings] = useState<Record<string, ChapterMatchRating>>({});
+  const [suggestedPageRatings, setSuggestedPageRatings] = useState<Record<string, SuggestedPageRating>>({});
   const [resultComments, setResultComments] = useState<Record<string, string>>({});
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
   const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
@@ -778,6 +780,7 @@ export default function DemoSearchPage() {
     setHasSubmittedRatings(false);
     setRatings({});
     setChapterMatchRatings({});
+    setSuggestedPageRatings({});
     setResultComments({});
 
     try {
@@ -859,6 +862,7 @@ export default function DemoSearchPage() {
       const resultKey = getResultDocumentKey(result);
       const selectedRating = ratings[resultKey] ?? null;
       const selectedChapterMatchRating = chapterMatchRatings[resultKey] ?? null;
+      const selectedSuggestedPageRating = suggestedPageRatings[resultKey] ?? null;
       const resultComment = resultComments[resultKey] ?? "";
       const preferredMatchResult =
         getPreferredMatchForDocument(pipeline.byMethod, resultKey) ?? result;
@@ -868,6 +872,7 @@ export default function DemoSearchPage() {
         assessment: {
           rating: selectedRating,
           relevant_scope: selectedChapterMatchRating,
+          suggested_page_relevance: selectedSuggestedPageRating,
           relevant_section: getResultSectionHeading(preferredMatchResult) ?? "",
           highlighted_match_source: getPreferredMatchSource(preferredMatchResult),
           highlighted_match_method: preferredMatchResult.result_method ?? null,
@@ -930,6 +935,7 @@ export default function DemoSearchPage() {
       setPipeline(EMPTY_PIPELINE);
       setRatings({});
       setChapterMatchRatings({});
+      setSuggestedPageRatings({});
       setResultComments({});
       autoScrolledChapterListsRef.current = {};
       setSubmitError(null);
@@ -951,6 +957,7 @@ export default function DemoSearchPage() {
     setPipeline(EMPTY_PIPELINE);
     setRatings({});
     setChapterMatchRatings({});
+    setSuggestedPageRatings({});
     setResultComments({});
     autoScrolledChapterListsRef.current = {};
     requestAnimationFrame(() => {
@@ -1394,6 +1401,7 @@ export default function DemoSearchPage() {
               const resultKey = getResultDocumentKey(result);
               const selectedRating = ratings[resultKey];
               const selectedChapterMatchRating = chapterMatchRatings[resultKey];
+              const selectedSuggestedPageRating = suggestedPageRatings[resultKey];
               const isRatingComplete = isAssessmentComplete(selectedRating);
               const resultComment = resultComments[resultKey] ?? "";
               const documentSectionHeadings = getResultDocumentSectionHeadings(result);
@@ -1412,13 +1420,15 @@ export default function DemoSearchPage() {
                 documentSectionHeadings.length > 0 &&
                 !hasHeuristicDocumentSectionHeadings &&
                 hasAnyDocumentSectionPages;
-              const shouldShowChapterMatchQuestion =
-                showDemoResultDetails && shouldShowDocumentSectionHeadings;
               const matchedSectionIndex = getResultSectionIndex(preferredMatchResult);
               const matchedSectionHeading = normalizeHeadingForMatch(
                 getResultSectionHeading(preferredMatchResult),
               );
               const matchedSectionPage = getResultSectionPage(preferredMatchResult);
+              const shouldShowChapterMatchQuestion =
+                showDemoResultDetails && shouldShowDocumentSectionHeadings;
+              const shouldShowSuggestedPageQuestion =
+                showDemoResultDetails && !shouldShowDocumentSectionHeadings && matchedSectionPage !== undefined;
 
                 return (
                   <article
@@ -1455,14 +1465,95 @@ export default function DemoSearchPage() {
                                 <div className="mt-2 rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8] px-4 py-3 text-xs text-[#556055]">
                                   <p>Innehållsförteckning saknas.</p>
                                   {matchedSectionPage ? (
-                                    <a
-                                      className="mt-2 inline-flex text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
-                                      href={buildPdfPageUrl(getResultUrl(result), matchedSectionPage)}
-                                      rel="noreferrer"
-                                      target="_blank"
-                                    >
-                                      Hoppa direkt till föreslaget segment
-                                    </a>
+                                    <>
+                                      <a
+                                        className="mt-2 inline-flex text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
+                                        href={buildPdfPageUrl(getResultUrl(result), matchedSectionPage)}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        Hoppa till föreslagen sida
+                                      </a>
+                                      {shouldShowSuggestedPageQuestion ? (
+                                        <div className="mt-3">
+                                          <p className="text-xs leading-5 text-[#5d685f]">
+                                            Var den föreslagna sidan relevant?
+                                          </p>
+                                          <div
+                                            className={`mt-2 overflow-hidden rounded-xl border ${
+                                              selectedRating === "relevant"
+                                                ? "border-[#d9ddd4] bg-white"
+                                                : "border-[#e1e4dc] bg-[#f3f5f1]"
+                                            }`}
+                                          >
+                                            <label
+                                              className={`flex items-center gap-2 px-3 py-2 text-xs ${
+                                                selectedRating === "relevant" ? "text-[#465048]" : "text-[#8a8f86]"
+                                              }`}
+                                            >
+                                              <input
+                                                checked={selectedSuggestedPageRating === "yes"}
+                                                className="h-4 w-4 accent-[#1f6e6e]"
+                                                disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                                name={`suggested-page-${resultKey}`}
+                                                type="radio"
+                                                onChange={() =>
+                                                  setSuggestedPageRatings((current) => ({
+                                                    ...current,
+                                                    [resultKey]: "yes",
+                                                  }))
+                                                }
+                                              />
+                                              Ja
+                                            </label>
+                                            <label
+                                              className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                                selectedRating === "relevant"
+                                                  ? "border-[#d9ddd4] text-[#465048]"
+                                                  : "border-[#e1e4dc] text-[#8a8f86]"
+                                              }`}
+                                            >
+                                              <input
+                                                checked={selectedSuggestedPageRating === "partial"}
+                                                className="h-4 w-4 accent-[#1f6e6e]"
+                                                disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                                name={`suggested-page-${resultKey}`}
+                                                type="radio"
+                                                onChange={() =>
+                                                  setSuggestedPageRatings((current) => ({
+                                                    ...current,
+                                                    [resultKey]: "partial",
+                                                  }))
+                                                }
+                                              />
+                                              Delvis
+                                            </label>
+                                            <label
+                                              className={`flex items-center gap-2 border-t px-3 py-2 text-xs ${
+                                                selectedRating === "relevant"
+                                                  ? "border-[#d9ddd4] text-[#465048]"
+                                                  : "border-[#e1e4dc] text-[#8a8f86]"
+                                              }`}
+                                            >
+                                              <input
+                                                checked={selectedSuggestedPageRating === "no"}
+                                                className="h-4 w-4 accent-[#1f6e6e]"
+                                                disabled={hasSubmittedRatings || selectedRating !== "relevant"}
+                                                name={`suggested-page-${resultKey}`}
+                                                type="radio"
+                                                onChange={() =>
+                                                  setSuggestedPageRatings((current) => ({
+                                                    ...current,
+                                                    [resultKey]: "no",
+                                                  }))
+                                                }
+                                              />
+                                              Nej
+                                            </label>
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                    </>
                                   ) : null}
                                 </div>
                               ) : (
@@ -1565,6 +1656,11 @@ export default function DemoSearchPage() {
                                     delete next[resultKey];
                                     return next;
                                   });
+                                  setSuggestedPageRatings((current) => {
+                                    const next = { ...current };
+                                    delete next[resultKey];
+                                    return next;
+                                  });
                                 }}
                               />
                               Inte relevant
@@ -1578,7 +1674,7 @@ export default function DemoSearchPage() {
                               Valfri fråga
                             </legend>
                             <p className="mt-2 text-xs leading-5 text-[#5d685f]">
-                              Finns den relevanta delen i det föreslagna kapitlet?
+                              Är det föreslagna kapitlet relevant?
                             </p>
                             <div
                               className={`mt-3 overflow-hidden rounded-xl border ${
