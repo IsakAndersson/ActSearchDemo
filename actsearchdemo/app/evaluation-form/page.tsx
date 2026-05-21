@@ -690,6 +690,7 @@ export default function DemoSearchPage() {
   const router = useRouter();
   const stepOneRef = useRef<HTMLElement | null>(null);
   const stepTwoRef = useRef<HTMLElement | null>(null);
+  const autoScrolledChapterListsRef = useRef<Record<string, boolean>>({});
   const [informationNeed, setInformationNeed] = useState("");
   const [query, setQuery] = useState("");
   const [comment, setComment] = useState("");
@@ -812,6 +813,7 @@ export default function DemoSearchPage() {
       setRunId(nextRunId);
       setSubmittedQuery(trimmedQuery);
       setPipeline(buildPipeline(trimmedQuery, nextRunId, payload.results_by_method));
+      autoScrolledChapterListsRef.current = {};
       setSearchErrors(payload.errors ?? []);
       requestAnimationFrame(() => {
         stepTwoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -907,6 +909,7 @@ export default function DemoSearchPage() {
       setRatings({});
       setChapterMatchRatings({});
       setResultComments({});
+      autoScrolledChapterListsRef.current = {};
       setSubmitError(null);
 
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -927,6 +930,7 @@ export default function DemoSearchPage() {
     setRatings({});
     setChapterMatchRatings({});
     setResultComments({});
+    autoScrolledChapterListsRef.current = {};
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -1454,7 +1458,12 @@ export default function DemoSearchPage() {
                                         key={`${resultKey}-${item.heading}-${item.page ?? "nopage"}`}
                                         rel="noreferrer"
                                         ref={(node) => {
-                                          if (node && isMatchedHeading) {
+                                          if (
+                                            node &&
+                                            isMatchedHeading &&
+                                            !autoScrolledChapterListsRef.current[resultKey]
+                                          ) {
+                                            autoScrolledChapterListsRef.current[resultKey] = true;
                                             node.scrollIntoView({ block: "center" });
                                           }
                                         }}
