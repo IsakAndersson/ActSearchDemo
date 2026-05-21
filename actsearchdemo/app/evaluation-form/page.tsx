@@ -16,8 +16,6 @@ const METHODS = [
   "hybrid_e5_information_need",
 ] as const;
 const DEFAULT_TOP_K = 5;
-const CHAPTER_LIST_COLLAPSE_LIMIT = 10;
-
 type SearchMethod = (typeof METHODS)[number];
 type SearchApiMethod = "evaluation_form_search";
 type RelevanceRating = "relevant" | "not_relevant";
@@ -643,6 +641,51 @@ const isAssessmentComplete = (
   return rating === "not_relevant" || isRelevantLikeRating(rating);
 };
 
+const PREFERRED_MATCH_METHOD_GROUPS: SearchMethod[][] = [
+  ["hybrid_e5_query", "hybrid_e5_information_need"],
+  ["dense_e5_query", "dense_e5_information_need"],
+  ["bm25_query", "bm25_information_need"],
+];
+
+const getPreferredMatchForDocument = (
+  byMethod: Record<SearchMethod, SearchResult[]>,
+  documentKey: string,
+): SearchResult | undefined => {
+  for (const methods of PREFERRED_MATCH_METHOD_GROUPS) {
+    const candidates = methods.flatMap((method) =>
+      (byMethod[method] ?? [])
+        .map((result, index) => ({ result, rank: index + 1 }))
+        .filter(({ result }) => getResultDocumentKey(result) === documentKey),
+    );
+
+    if (candidates.length > 0) {
+      candidates.sort((left, right) => left.rank - right.rank);
+      return candidates[0]?.result;
+    }
+  }
+
+  return undefined;
+};
+
+const getPreferredMatchSource = (
+  result: SearchResult | undefined,
+): "hybrid" | "dense" | "bm25" | null => {
+  const method = result?.result_method;
+  if (!method) {
+    return null;
+  }
+  if (method.startsWith("hybrid_e5_")) {
+    return "hybrid";
+  }
+  if (method.startsWith("dense_e5_")) {
+    return "dense";
+  }
+  if (method.startsWith("bm25_")) {
+    return "bm25";
+  }
+  return null;
+};
+
 export default function DemoSearchPage() {
   const router = useRouter();
   const stepOneRef = useRef<HTMLElement | null>(null);
@@ -659,7 +702,6 @@ export default function DemoSearchPage() {
   const [useDummyData, setUseDummyData] = useState(false);
   const [ratings, setRatings] = useState<Record<string, RelevanceRating>>({});
   const [chapterMatchRatings, setChapterMatchRatings] = useState<Record<string, ChapterMatchRating>>({});
-  const [expandedChapterLists, setExpandedChapterLists] = useState<Record<string, boolean>>({});
   const [resultComments, setResultComments] = useState<Record<string, string>>({});
   const [hasSubmittedRatings, setHasSubmittedRatings] = useState(false);
   const [isSubmittingToBackend, setIsSubmittingToBackend] = useState(false);
@@ -713,7 +755,6 @@ export default function DemoSearchPage() {
     setHasSubmittedRatings(false);
     setRatings({});
     setChapterMatchRatings({});
-    setExpandedChapterLists({});
     setResultComments({});
 
     try {
@@ -795,13 +836,18 @@ export default function DemoSearchPage() {
       const selectedRating = ratings[resultKey] ?? null;
       const selectedChapterMatchRating = chapterMatchRatings[resultKey] ?? null;
       const resultComment = resultComments[resultKey] ?? "";
+      const preferredMatchResult =
+        getPreferredMatchForDocument(pipeline.byMethod, resultKey) ?? result;
 
       return {
         ...result,
         assessment: {
           rating: selectedRating,
           relevant_scope: selectedChapterMatchRating,
-          relevant_section: "",
+          relevant_section: getResultSectionHeading(preferredMatchResult) ?? "",
+          highlighted_match_source: getPreferredMatchSource(preferredMatchResult),
+          highlighted_match_method: preferredMatchResult.result_method ?? null,
+          highlighted_match_page: getResultSectionPage(preferredMatchResult) ?? null,
           comment: resultComment,
         },
       };
@@ -860,7 +906,6 @@ export default function DemoSearchPage() {
       setPipeline(EMPTY_PIPELINE);
       setRatings({});
       setChapterMatchRatings({});
-      setExpandedChapterLists({});
       setResultComments({});
       setSubmitError(null);
 
@@ -881,7 +926,6 @@ export default function DemoSearchPage() {
     setPipeline(EMPTY_PIPELINE);
     setRatings({});
     setChapterMatchRatings({});
-    setExpandedChapterLists({});
     setResultComments({});
     requestAnimationFrame(() => {
       stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1333,21 +1377,18 @@ export default function DemoSearchPage() {
               const hasAnyDocumentSectionPages = documentSectionHeadings.some(
                 (item) => typeof item.page === "number" && item.page > 0,
               );
+              const preferredMatchResult =
+                getPreferredMatchForDocument(pipeline.byMethod, resultKey) ?? result;
               const shouldShowDocumentSectionHeadings =
                 documentSectionHeadings.length > 0 &&
                 !hasHeuristicDocumentSectionHeadings &&
                 hasAnyDocumentSectionPages;
-              const isChapterListExpanded = expandedChapterLists[resultKey] === true;
-              const visibleDocumentSectionHeadings =
-                shouldShowDocumentSectionHeadings &&
-                !isChapterListExpanded &&
-                documentSectionHeadings.length > CHAPTER_LIST_COLLAPSE_LIMIT
-                  ? documentSectionHeadings.slice(0, CHAPTER_LIST_COLLAPSE_LIMIT)
-                  : documentSectionHeadings;
               const shouldShowChapterMatchQuestion =
                 showDemoResultDetails && shouldShowDocumentSectionHeadings;
-              const matchedSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result));
-              const matchedSectionPage = getResultSectionPage(result);
+              const matchedSectionHeading = normalizeHeadingForMatch(
+                getResultSectionHeading(preferredMatchResult),
+              );
+              const matchedSectionPage = getResultSectionPage(preferredMatchResult);
 
                 return (
                   <article
@@ -1396,8 +1437,8 @@ export default function DemoSearchPage() {
                                 </div>
                               ) : (
                                 <>
-                                  <div className="mt-2 overflow-hidden rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
-                                    {visibleDocumentSectionHeadings.map((item) => {
+                                  <div className="mt-2 max-h-[26.5rem] overflow-y-auto rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
+                                    {documentSectionHeadings.map((item, chapterIndex) => {
                                       const isMatchedHeading =
                                         matchedSectionHeading.length > 0 &&
                                         normalizeHeadingForMatch(item.heading) === matchedSectionHeading;
@@ -1412,29 +1453,21 @@ export default function DemoSearchPage() {
                                         href={buildPdfPageUrl(getResultUrl(result), item.page)}
                                         key={`${resultKey}-${item.heading}-${item.page ?? "nopage"}`}
                                         rel="noreferrer"
+                                        ref={(node) => {
+                                          if (node && isMatchedHeading) {
+                                            node.scrollIntoView({ block: "center" });
+                                          }
+                                        }}
                                         target="_blank"
                                       >
-                                        <span className="block leading-5">{item.heading}</span>
+                                        <span className="block leading-5">
+                                          {chapterIndex + 1}. {item.heading}
+                                          {isMatchedHeading ? ' \u2190' : ""}
+                                        </span>
                                       </a>
                                       );
                                     })}
                                   </div>
-                                  {documentSectionHeadings.length > CHAPTER_LIST_COLLAPSE_LIMIT ? (
-                                    <button
-                                      className="mt-2 inline-flex text-xs font-medium text-[#1f6e6e] underline decoration-[#9bc7c7] underline-offset-4"
-                                      type="button"
-                                      onClick={() =>
-                                        setExpandedChapterLists((current) => ({
-                                          ...current,
-                                          [resultKey]: !isChapterListExpanded,
-                                        }))
-                                      }
-                                    >
-                                      {isChapterListExpanded
-                                        ? "Visa färre kapitel"
-                                        : `Visa alla kapitel (${documentSectionHeadings.length})`}
-                                    </button>
-                                  ) : null}
                                 </>
                               )}
                             </div>
