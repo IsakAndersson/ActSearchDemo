@@ -1483,7 +1483,7 @@ export default function DemoSearchPage() {
                           </a>
                           {showDemoResultDetails && isPreferredTitleMatch ? (
                             <div className="mt-3 inline-flex items-center rounded-full border border-[#b7ddd1] bg-[#dff4ee] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#184f4f]">
-                              Match på titel
+                              Match på dokumenttitel
                             </div>
                           ) : null}
                           {showDemoResultDetails && documentSectionHeadings.length > 0 ? (
@@ -1708,7 +1708,7 @@ export default function DemoSearchPage() {
                             </p>
                             {isPreferredTitleMatch ? (
                               <div className="mt-3 rounded-xl border border-[#b7ddd1] bg-[#dff4ee] px-3 py-3 text-xs font-semibold text-[#184f4f]">
-                                Match på titel
+                                Match på dokumenttitel
                               </div>
                             ) : (
                               <div
