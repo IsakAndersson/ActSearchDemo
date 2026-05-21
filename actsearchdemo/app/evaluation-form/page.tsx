@@ -705,6 +705,21 @@ const PREFERRED_MATCH_METHOD_GROUPS: SearchMethod[][] = [
   ["bm25_query", "bm25_information_need"],
 ];
 
+const getPreferredMatchCandidateScore = (result: SearchResult): number => {
+  const hasSectionIndex = getResultSectionIndex(result) !== undefined;
+  const hasSectionPage = getResultSectionPage(result) !== undefined;
+  const hasSectionHeading = normalizeHeadingForMatch(getResultSectionHeading(result)).length > 0;
+  const chunkType = getStringValue(result.chunk_type)?.toLocaleLowerCase("sv-SE");
+  const isTitleChunk = chunkType === "title";
+
+  return (
+    (hasSectionIndex ? 8 : 0) +
+    (hasSectionPage ? 4 : 0) +
+    (hasSectionHeading ? 2 : 0) +
+    (isTitleChunk ? -1 : 0)
+  );
+};
+
 const getPreferredMatchForDocument = (
   byMethod: Record<SearchMethod, SearchResult[]>,
   documentKey: string,
@@ -717,7 +732,15 @@ const getPreferredMatchForDocument = (
     );
 
     if (candidates.length > 0) {
-      candidates.sort((left, right) => left.rank - right.rank);
+      candidates.sort((left, right) => {
+        const scoreDifference =
+          getPreferredMatchCandidateScore(right.result) -
+          getPreferredMatchCandidateScore(left.result);
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+        return left.rank - right.rank;
+      });
       return candidates[0]?.result;
     }
   }
