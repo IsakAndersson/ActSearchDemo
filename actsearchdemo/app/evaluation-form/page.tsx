@@ -1589,6 +1589,21 @@ export default function DemoSearchPage() {
                               ) : (
                                 <>
                                   <div className="always-visible-scrollbar mt-2 max-h-[26.5rem] overflow-y-scroll rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8]">
+                                    <a
+                                      className={`block border-b px-4 py-3 text-xs hover:underline hover:decoration-[#9bc7c7] hover:underline-offset-4 ${
+                                        isPreferredTitleMatch
+                                          ? "border-[#b7ddd1] bg-[#dff4ee] font-semibold text-[#184f4f]"
+                                          : "border-[#dfe4db] bg-[#f8fbf8] text-[#435246]"
+                                      }`}
+                                      href={getResultUrl(result)}
+                                      rel="noreferrer"
+                                      target="_blank"
+                                    >
+                                      <span className="block truncate leading-5">
+                                        {getResultTitle(result)}
+                                        {isPreferredTitleMatch ? " \u2190" : ""}
+                                      </span>
+                                    </a>
                                     {documentSectionHeadings.map((item, chapterIndex) => {
                                       const normalizedItemHeading = normalizeHeadingForMatch(item.heading);
                                       const isMatchedHeading =
