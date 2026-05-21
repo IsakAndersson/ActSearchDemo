@@ -1456,11 +1456,14 @@ export default function DemoSearchPage() {
                           >
                             <span>{getResultTitle(result)}</span>
                           </a>
-                          {showDemoResultDetails && documentSectionHeadings.length > 0 ? (
+                          {showDemoResultDetails &&
+                          (documentSectionHeadings.length > 0 || matchedSectionPage !== undefined) ? (
                             <div className="mt-3">
-                              <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
-                                Kapitel i dokumentet
-                              </p>
+                              {shouldShowDocumentSectionHeadings ? (
+                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#667166]">
+                                  Kapitel i dokumentet
+                                </p>
+                              ) : null}
                               {!shouldShowDocumentSectionHeadings ? (
                                 <div className="mt-2 rounded-[1.1rem] border border-[#dfe4db] bg-[#f8fbf8] px-4 py-3 text-xs text-[#556055]">
                                   <p>Innehållsförteckning saknas.</p>
