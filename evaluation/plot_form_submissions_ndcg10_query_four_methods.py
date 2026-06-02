@@ -106,7 +106,7 @@ def main() -> None:
     parser.add_argument(
         "--top-k",
         type=int,
-        default=100,
+        default=20,
         help="Top-k documents to retrieve for each method.",
     )
     args = parser.parse_args()
