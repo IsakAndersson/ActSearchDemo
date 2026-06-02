@@ -21,20 +21,19 @@ DEFAULT_OUTPUT_PATH = (
     EVALUATION_DIR / "plots" / "chunk250_overlap50_title_on_method_comparison.png"
 )
 SUMMARY_FILE_NAME = "evaluation_summary.csv"
-DEFAULT_METHODS = ("bm25", "hybrid", "hybrid_e5")
+DEFAULT_METHODS = ("bm25", "dense_e5", "hybrid_e5")
 METRIC_SPECS = (
     ("average_score", "RR@20"),
     ("average_ndcg@10", "nDCG@10"),
-    ("average_recall@10", "Recall@10"),
 )
 METHOD_LABELS = {
     "bm25": "BM25",
-    "hybrid": "Hybrid",
+    "dense_e5": "Dense E5",
     "hybrid_e5": "Hybrid E5",
 }
 METHOD_COLORS = {
     "bm25": "#2f7f5f",
-    "hybrid": "#3269a8",
+    "dense_e5": "#3269a8",
     "hybrid_e5": "#b15d2a",
 }
 
@@ -199,7 +198,7 @@ def _plot(df: pd.DataFrame, output_path: Path) -> None:
         ax.bar_label(bars, labels=[f"{value:.3f}" for value in values], padding=3, fontsize=9)
         ax.tick_params(axis="x", rotation=20)
 
-    fig.suptitle("Chunk 250, overlap 50, title chunk: method comparison")
+    fig.suptitle("Chunk 250, overlap 50")
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
@@ -209,7 +208,7 @@ def _plot(df: pd.DataFrame, output_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Plot a bar chart comparing BM25, hybrid, and hybrid_e5 runs for "
+            "Plot a bar chart comparing BM25, dense_e5, and hybrid_e5 runs for "
             "chunk_size=250, chunk_overlap=50, include_title_chunk=True."
         )
     )
@@ -254,7 +253,6 @@ def main() -> None:
                 "experiment",
                 "average_score",
                 "average_ndcg@10",
-                "average_recall@10",
                 "evaluated_at_cet",
                 "source_file",
             ]
