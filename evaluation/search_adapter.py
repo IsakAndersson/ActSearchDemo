@@ -52,24 +52,18 @@ class SearchConfig:
     metadata_path: str = str(FLASK_DIR / "output" / "vector_index" / "docplus_metadata.jsonl")
     model_name: str = "KBLab/bert-base-swedish-cased"
     e5_index_path: str = str(
-        PROJECT_ROOT
-        / "evaluation"
-        / "experiments"
-        / "hybrid-e5-small"
-        / "indexes"
-        / "hybrid_e5"
-        / "intfloat-multilingual-e5-large-instruct"
-        / "docpluss.faiss"
+        Path(
+            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/hybrid-e5-small/"
+            "indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/"
+            "chunk_150__overlap_25__title_on__text/docplus.faiss"
+        )
     )
     e5_metadata_path: str = str(
-        PROJECT_ROOT
-        / "evaluation"
-        / "experiments"
-        / "hybrid-e5-small"
-        / "indexes"
-        / "hybrid_e5"
-        / "intfloat-multilingual-e5-large-instruct"
-        / "docplus_metadata.jsonl"
+        Path(
+            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/hybrid-e5-small/"
+            "indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/"
+            "chunk_150__overlap_25__title_on__text/docplus_metadata.jsonl"
+        )
     )
     e5_model_name: str = "intfloat/multilingual-e5-large-instruct"
     device: str = "auto"
