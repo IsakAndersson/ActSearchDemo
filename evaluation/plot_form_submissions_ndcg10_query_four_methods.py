@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 try:
+    from .search_adapter import DEFAULT_CONFIG
     from .plot_form_submissions_grouped_metrics import (
         DEFAULT_OUTPUT_DIR,
         DEFAULT_QRELS_PATH,
@@ -23,6 +24,7 @@ try:
         _load_clean_form_submissions_qrels,
     )
 except ImportError:
+    from search_adapter import DEFAULT_CONFIG
     from plot_form_submissions_grouped_metrics import (
         DEFAULT_OUTPUT_DIR,
         DEFAULT_QRELS_PATH,
@@ -111,6 +113,21 @@ def main() -> None:
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "form_submissions_ndcg10_query_four_methods.csv"
+    png_path = output_dir / "form_submissions_ndcg10_query_four_methods.png"
+
+    print(f"Using E5 index: {DEFAULT_CONFIG.e5_index_path}", flush=True)
+    print(f"Using E5 metadata: {DEFAULT_CONFIG.e5_metadata_path}", flush=True)
+    if os.getenv("DOCPLUS_E5_INDEX_PATH"):
+        print(
+            f"DOCPLUS_E5_INDEX_PATH override is set: {os.getenv('DOCPLUS_E5_INDEX_PATH')}",
+            flush=True,
+        )
+    if os.getenv("DOCPLUS_E5_METADATA_PATH"):
+        print(
+            f"DOCPLUS_E5_METADATA_PATH override is set: {os.getenv('DOCPLUS_E5_METADATA_PATH')}",
+            flush=True,
+        )
 
     qrels_bundle, query_queries, info_need_queries = _load_clean_form_submissions_qrels(
         Path(args.qrels_path).resolve()
@@ -142,8 +159,11 @@ def main() -> None:
         .reset_index(drop=True)
     )
 
-    csv_path = output_dir / "form_submissions_ndcg10_query_four_methods.csv"
-    png_path = output_dir / "form_submissions_ndcg10_query_four_methods.png"
+    if csv_path.exists():
+        csv_path.unlink()
+    if png_path.exists():
+        png_path.unlink()
+
     filtered_scores_df.to_csv(csv_path, index=False)
     _plot_scores(filtered_scores_df, png_path)
 
