@@ -61,8 +61,8 @@ EXTENDED_METHOD_ORDER = ["bm25", "dense_e5", "hybrid_e5", "sqlite_fts", "docplus
 METRIC_SPECS: Sequence[Tuple[str, object, str, str]] = (
     ("NDCG@10 (query)", nDCG @ 10, "query", "ndcg10_query"),
     ("NDCG@10 (info need)", nDCG @ 10, "information_need", "ndcg10_information_need"),
-    ("MRR (query)", RR @ 100, "query", "rr100_query"),
-    ("MRR (info need)", RR @ 100, "information_need", "rr100_information_need"),
+    ("RR@20 (query)", RR @ 20, "query", "rr20_query"),
+    ("RR@20 (info need)", RR @ 20, "information_need", "rr20_information_need"),
 )
 
 
@@ -466,13 +466,13 @@ def main() -> None:
     parser.add_argument(
         "--top-k",
         type=int,
-        default=100,
-        help="Top-k documents to retrieve for each method. Must be >= 100 for MRR@100.",
+        default=20,
+        help="Top-k documents to retrieve for each method. Must be >= 20 for RR@20.",
     )
     args = parser.parse_args()
 
-    if args.top_k < 100:
-        raise ValueError("--top-k must be at least 100 to compute MRR@100 correctly.")
+    if args.top_k < 20:
+        raise ValueError("--top-k must be at least 20 to compute RR@20 correctly.")
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
