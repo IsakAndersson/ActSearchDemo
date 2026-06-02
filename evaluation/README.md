@@ -302,7 +302,45 @@ python evaluation/evaluation_sweep.py \
 ```
 
 Vector methods (`dense`, `dense_e5`, `hybrid`, `hybrid_e5`) build one vector index per parameter combination before evaluation.  
+Before building, vector sweeps scan existing experiment indexes and reuse any matching
+FAISS index with the same model, parsed directory, text source, chunk size, overlap, and
+title-chunk setting. This lets `dense_e5` reuse indexes from `hybrid_e5`, and `dense`
+reuse indexes from `hybrid`. Use `--no-reuse-vector-indexes` to force a rebuild.
 `bm25` runs the same parameter grid without FAISS index building.
+
+To sweep against an existing qrels CSV exported from `/evaluation-form`:
+
+```bash
+python evaluation/evaluation_sweep.py \
+  --method hybrid_e5 \
+  --experiment-name form_submissions_clean_hybrid_e5_sweep \
+  --qrels-source form_submissions \
+  --qrels-path evaluation/qrels_from_form_submissions_clean.csv \
+  --chunk-sizes 250,500 \
+  --overlaps 50 \
+  --include-title-chunk true,false \
+  --top-k 20
+```
+
+To export the latest form submissions immediately before the sweep and exclude known test
+submissions:
+
+```bash
+python evaluation/evaluation_sweep.py \
+  --method hybrid_e5 \
+  --experiment-name form_submissions_latest_hybrid_e5_sweep \
+  --qrels-source form_submissions \
+  --exclude-submission-ids 6,7,15 \
+  --form-query-type form_submissions_clean \
+  --include-qrels-metadata \
+  --chunk-sizes 250,500 \
+  --overlaps 50 \
+  --include-title-chunk true,false \
+  --top-k 20
+```
+
+When fresh form qrels are exported without `--qrels-path`, the CSV and audit are written
+under `evaluation/experiments/<experiment>/qrels/`.
 
 Sweep output structure:
 
@@ -313,15 +351,24 @@ Sweep output structure:
 
 Key flags:
 
-- `--method`: `bm25`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`
+- `--method`: `bm25`, `sqlite_fts`, `dense`, `dense_e5`, `hybrid`, `hybrid_e5`
 - `--model-name`: optional vector model override
 - `--profile`: optional profile key (used when `--model-name` is omitted)
 - `--chunk-sizes`: comma-separated ints
 - `--overlaps`: comma-separated ints
 - `--include-title-chunk`: comma-separated booleans (`true,false`)
 - `--text-source`: `text` or `cleaned_text` for vector index builds
+- `--no-reuse-vector-indexes`: force vector index rebuilds
+- `--vector-index-search-roots`: comma-separated directories to scan for reusable vector indexes
 - `--parsed-dir`: parsed JSON directory (default `flask/output/parsed`)
 - `--experiments-root`: default `evaluation/experiments`
+- `--qrels-source`: `google_sheet` or `form_submissions`
+- `--qrels-path`: existing form qrels CSV, or destination for freshly exported form qrels
+- `--exclude-submission-ids`: comma-separated submission ids excluded from fresh form qrels
+- `--form-db-path`: optional SQLite path for fresh form qrels
+- `--include-non-relevant`: include explicit `relevance=0` rows in fresh form qrels
+- `--include-qrels-metadata`: include submission provenance in fresh form qrels
+- `--form-query-type`: query type label for fresh form qrels
 
 ## Visualize All Evaluation Results
 
@@ -343,7 +390,9 @@ It writes to `evaluation/plots/all_results/`:
 - `all_evaluation_summary.csv`: normalized run-level results with timestamps and metadata
 - `all_evaluation_results.csv`: normalized per-query-type results with timestamps and metadata
 - `all_run_total_hits.csv`: total hit counts per run across all query types
+- `experiment_metric_comparison.csv`: best run per experiment with tracked summary metrics
 - `all_results_report.html`: HTML report linking the generated plots and metadata tables
+- `experiment_metric_comparison.png`
 - `average_rr20_over_time.png`
 - `average_rank_over_time.png`
 - `top_runs_by_average_rr20.png`
@@ -365,6 +414,39 @@ Useful flags:
 - `--max-table-rows`: maximum rows shown in the HTML tables; full data is still written to CSV
 - `--experiments-root`: alternate experiments directory
 - `--qrels-source` / `--qrels-path`: qrels source used for total-hit counting
+
+## Compare Experiment Model/Parameter Metrics
+
+For a focused graph of the three main score metrics across models and parameter values:
+
+```bash
+./.venv/bin/python evaluation/plot_experiment_model_parameter_metrics.py
+```
+
+The script reads `evaluation/experiments/*/results/aggregate/evaluation_summary.csv`,
+selects the best run for each model and parameter combination by nDCG@10, and writes to
+`evaluation/plots/experiment_model_parameter_metrics/`:
+
+- `experiment_model_parameter_metrics_rr20.png`
+- `experiment_model_parameter_metrics_ndcg10.png`
+- `experiment_model_parameter_metrics_recall10.png`
+- `report_title_chunk_model_parameter_metrics_rr20.png`
+- `report_title_chunk_model_parameter_metrics_ndcg10.png`
+- `report_title_chunk_model_parameter_metrics_recall10.png`
+- `experiment_model_parameter_metrics_all_runs.csv`
+- `experiment_model_parameter_metrics_best.csv`
+- `experiment_model_parameter_metrics_plotted.csv`
+- `experiment_model_parameter_metrics_report_title_chunk.csv`
+
+The `report_title_chunk_*` plots exclude runs without a title chunk and use compact row
+labels with only model, chunk size, and overlap.
+
+Useful flags:
+
+- `--top-n`: number of best model/parameter combinations to plot (`0` for all)
+- `--methods`: optional comma-separated method filter, for example `bm25,dense_e5,hybrid_e5`
+- `--experiments-root`: alternate experiments directory
+- `--output-dir`: alternate output directory
 
 ## Search Adapter
 

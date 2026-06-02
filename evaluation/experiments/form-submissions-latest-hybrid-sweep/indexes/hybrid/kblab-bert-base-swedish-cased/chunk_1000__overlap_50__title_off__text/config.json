@@ -1,0 +1,11 @@
+{
+  "method": "hybrid",
+  "model_name": "KBLab/bert-base-swedish-cased",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "text_source": "text",
+  "chunk_size": 1000,
+  "chunk_overlap": 50,
+  "include_title_chunk": false,
+  "index_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-sweep/indexes/hybrid/kblab-bert-base-swedish-cased/chunk_1000__overlap_50__title_off__text/docplus.faiss",
+  "metadata_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-sweep/indexes/hybrid/kblab-bert-base-swedish-cased/chunk_1000__overlap_50__title_off__text/docplus_metadata.jsonl"
+}

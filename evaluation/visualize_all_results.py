@@ -178,7 +178,11 @@ def _coerce_types(df: pd.DataFrame) -> pd.DataFrame:
     for column in [
         "average_rank",
         "average_score",
+        "average_ndcg@10",
+        "average_recall@10",
         "RR@20",
+        "nDCG@10",
+        "Recall@10",
         "top_k",
         "num_queries_total",
         "num_query_types",
@@ -223,6 +227,80 @@ def _drop_duplicate_metric_rows(df: pd.DataFrame, metric_columns: Iterable[str])
         if column in df.columns
     ]
     return df.drop_duplicates(subset=candidate_columns, keep="first").reset_index(drop=True)
+
+
+def _available_summary_metrics(summary_df: pd.DataFrame) -> list[tuple[str, str, bool]]:
+    candidates = [
+        ("average_score", "Average RR@20", True),
+        ("average_ndcg@10", "Average nDCG@10", True),
+        ("average_recall@10", "Average Recall@10", True),
+        ("average_rank", "Average rank", False),
+    ]
+    return [
+        (column, label, higher_is_better)
+        for column, label, higher_is_better in candidates
+        if column in summary_df.columns and summary_df[column].notna().any()
+    ]
+
+
+def _build_experiment_metric_comparison_df(
+    summary_df: pd.DataFrame,
+    sort_metric: str = "average_ndcg@10",
+) -> pd.DataFrame:
+    metrics = _available_summary_metrics(summary_df)
+    if summary_df.empty or not metrics or "experiment" not in summary_df.columns:
+        return pd.DataFrame()
+
+    plot_df = summary_df.copy()
+    if "source_kind" in plot_df.columns:
+        plot_df = plot_df[plot_df["source_kind"].astype(str).str.startswith("experiment")]
+    plot_df["experiment"] = plot_df["experiment"].fillna("").astype(str).str.strip()
+    plot_df = plot_df[plot_df["experiment"] != ""]
+    if plot_df.empty:
+        return pd.DataFrame()
+
+    metric_columns = [column for column, _, _ in metrics]
+    metric_for_selection = sort_metric if sort_metric in metric_columns else metric_columns[0]
+    selection_ascending = metric_for_selection == "average_rank"
+    sort_columns = [metric_for_selection]
+    ascending = [selection_ascending]
+    if "evaluated_at_cet" in plot_df.columns:
+        sort_columns.append("evaluated_at_cet")
+        ascending.append(False)
+
+    best_rows = (
+        plot_df.dropna(subset=[metric_for_selection])
+        .sort_values(sort_columns, ascending=ascending, kind="stable")
+        .drop_duplicates(subset=["experiment"], keep="first")
+    )
+    if best_rows.empty:
+        return pd.DataFrame()
+
+    output_columns = [
+        column
+        for column in [
+            "experiment",
+            "method",
+            "model_name",
+            "config_slug",
+            "evaluated_at_cet",
+            "qrels_source",
+            "qrels_path",
+            "chunk_size",
+            "chunk_overlap",
+            "include_title_chunk",
+            "text_source",
+            *metric_columns,
+            "run_label",
+            "source_file",
+        ]
+        if column in best_rows.columns
+    ]
+    return best_rows[output_columns].sort_values(
+        metric_for_selection,
+        ascending=selection_ascending,
+        kind="stable",
+    ).reset_index(drop=True)
 
 
 def _format_timestamp(value: object) -> str:
@@ -432,6 +510,68 @@ def _plot_parameter_scatter(summary_df: pd.DataFrame, output_path: Path) -> None
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180)
+    plt.close(fig)
+
+
+def _plot_experiment_metric_comparison(
+    comparison_df: pd.DataFrame,
+    output_path: Path,
+) -> None:
+    metrics = _available_summary_metrics(comparison_df)
+    if comparison_df.empty or not metrics or "experiment" not in comparison_df.columns:
+        return
+
+    plot_df = comparison_df.copy()
+    experiment_labels = plot_df["experiment"].astype(str).tolist()
+    fig_height = max(6.5, len(plot_df) * 0.48)
+    fig_width = max(13, len(metrics) * 4.0)
+    fig, axes = plt.subplots(1, len(metrics), figsize=(fig_width, fig_height), sharey=True)
+    if len(metrics) == 1:
+        axes = [axes]
+
+    colors = {
+        "average_score": "#2f7f5f",
+        "average_ndcg@10": "#3269a8",
+        "average_recall@10": "#7b4fa3",
+        "average_rank": "#b15d2a",
+    }
+    y_positions = list(range(len(plot_df)))
+
+    for axis, (column, label, higher_is_better) in zip(axes, metrics):
+        values = plot_df[column].astype(float)
+        axis.barh(
+            y_positions,
+            values,
+            color=colors.get(column, "#4b5563"),
+            edgecolor="#25313d",
+            alpha=0.88,
+        )
+        axis.set_title(label)
+        axis.set_xlabel(label)
+        axis.grid(axis="x", color="#d9d9d9", linewidth=0.8)
+        axis.set_axisbelow(True)
+        if higher_is_better and values.max() <= 1.05:
+            axis.set_xlim(left=0, right=max(1.0, float(values.max()) * 1.08))
+        else:
+            axis.set_xlim(left=0)
+
+        text_offset = max(float(values.max()) * 0.015, 0.01) if len(values) else 0.01
+        for y_index, value in enumerate(values):
+            axis.text(
+                float(value) + text_offset,
+                y_index,
+                f"{float(value):.3f}" if column != "average_rank" else f"{float(value):.2f}",
+                va="center",
+                fontsize=8,
+            )
+
+    axes[0].set_yticks(y_positions)
+    axes[0].set_yticklabels(experiment_labels, fontsize=8)
+    axes[0].invert_yaxis()
+    fig.suptitle("Best Run Per Experiment: Tracked Performance Metrics", y=0.995)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -800,6 +940,7 @@ def main() -> None:
 
     qrels_df = _build_qrels_table(args.qrels_source, args.qrels_path)
     total_hits_df = _build_total_hits_df(run_df, qrels_df)
+    experiment_comparison_df = _build_experiment_metric_comparison_df(summary_df)
     form_grouped_metrics_df = _load_optional_csv(
         FORM_SUBMISSIONS_GROUPED_METRICS_DIR / "form_submissions_grouped_metrics.csv"
     )
@@ -838,11 +979,14 @@ def main() -> None:
     summary_csv = output_dir / "all_evaluation_summary.csv"
     results_csv = output_dir / "all_evaluation_results.csv"
     total_hits_csv = output_dir / "all_run_total_hits.csv"
+    experiment_comparison_csv = output_dir / "experiment_metric_comparison.csv"
     summary_df.to_csv(summary_csv, index=False)
     results_df.to_csv(results_csv, index=False)
     total_hits_df.to_csv(total_hits_csv, index=False)
+    experiment_comparison_df.to_csv(experiment_comparison_csv, index=False)
 
     image_paths = [
+        output_dir / "experiment_metric_comparison.png",
         output_dir / "average_rr20_over_time.png",
         output_dir / "average_rank_over_time.png",
         output_dir / "top_runs_by_average_rr20.png",
@@ -850,12 +994,13 @@ def main() -> None:
         output_dir / "average_rr20_by_chunk_size.png",
         output_dir / "total_hits_all_runs.png",
     ]
-    _plot_metric_over_time(summary_df, "average_score", "Average RR@20", image_paths[0])
-    _plot_metric_over_time(summary_df, "average_rank", "Average rank", image_paths[1])
-    _plot_best_runs(summary_df, image_paths[2], top_n=args.top_n)
-    _plot_query_type_heatmap(results_df, image_paths[3], top_n=args.top_n)
-    _plot_parameter_scatter(summary_df, image_paths[4])
-    _plot_total_hits(total_hits_df, image_paths[5], top_n=args.top_n)
+    _plot_experiment_metric_comparison(experiment_comparison_df, image_paths[0])
+    _plot_metric_over_time(summary_df, "average_score", "Average RR@20", image_paths[1])
+    _plot_metric_over_time(summary_df, "average_rank", "Average rank", image_paths[2])
+    _plot_best_runs(summary_df, image_paths[3], top_n=args.top_n)
+    _plot_query_type_heatmap(results_df, image_paths[4], top_n=args.top_n)
+    _plot_parameter_scatter(summary_df, image_paths[5])
+    _plot_total_hits(total_hits_df, image_paths[6], top_n=args.top_n)
 
     report_path = _write_html_report(
         summary_df=summary_df,
@@ -872,7 +1017,14 @@ def main() -> None:
         max_table_rows=args.max_table_rows,
     )
 
-    written = [summary_csv, results_csv, total_hits_csv, report_path, *[path for path in image_paths if path.exists()]]
+    written = [
+        summary_csv,
+        results_csv,
+        total_hits_csv,
+        experiment_comparison_csv,
+        report_path,
+        *[path for path in image_paths if path.exists()],
+    ]
     for path in written:
         print(f"Wrote {path}")
 

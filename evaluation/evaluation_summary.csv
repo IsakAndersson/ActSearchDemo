@@ -43,3 +43,5 @@ average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_ty
 2.317073170731707,0.7006292017161582,2026-05-18T12:38:02+01:00,20,46,1,form_submissions,form_submissions,/home/isak/Repos/ActSearchDemo/evaluation/qrels_from_form_submissions_clean.csv,form_submissions_clean_dense_e5,dense_e5
 average_rank,average_score,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,qrels_path,experiment,method
 1.8333333333333333,0.6382505175983436,2026-05-18T12:38:39+01:00,20,46,1,form_submissions,form_submissions,/home/isak/Repos/ActSearchDemo/evaluation/qrels_from_form_submissions_clean.csv,form_submissions_clean_bm25,bm25
+average_score,average_rank,average_ndcg@10,average_recall@10,evaluated_at_cet,top_k,num_queries_total,num_query_types,qrels_source,data_source,qrels_path,experiment,method
+0.7279677113010448,2.230769230769231,0.6098861861245471,0.7249118165784834,2026-06-01T08:14:43+01:00,20,54,1,form_submissions,form_submissions,/home/isak/Repos/ActSearchDemo/evaluation/qrels_from_form_submissions_clean.csv,form_submissions_clean_hybrid_e5,hybrid_e5

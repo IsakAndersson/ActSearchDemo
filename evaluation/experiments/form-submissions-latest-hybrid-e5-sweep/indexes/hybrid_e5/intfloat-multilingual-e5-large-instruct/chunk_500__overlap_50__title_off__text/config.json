@@ -1,0 +1,11 @@
+{
+  "method": "hybrid_e5",
+  "model_name": "intfloat/multilingual-e5-large-instruct",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "text_source": "text",
+  "chunk_size": 500,
+  "chunk_overlap": 50,
+  "include_title_chunk": false,
+  "index_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/chunk_500__overlap_50__title_off__text/docplus.faiss",
+  "metadata_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/chunk_500__overlap_50__title_off__text/docplus_metadata.jsonl"
+}

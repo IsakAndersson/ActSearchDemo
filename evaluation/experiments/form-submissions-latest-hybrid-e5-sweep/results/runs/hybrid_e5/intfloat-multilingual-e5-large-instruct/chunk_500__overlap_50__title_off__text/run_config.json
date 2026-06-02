@@ -1,0 +1,42 @@
+{
+  "search_config": {
+    "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+    "sqlite_fts_path": "/home/isak/Repos/ActSearchDemo/flask/output/sqlite_fts/docplus_fts.sqlite3",
+    "index_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus.faiss",
+    "metadata_path": "/home/isak/Repos/ActSearchDemo/flask/output/vector_index/docplus_metadata.jsonl",
+    "model_name": "KBLab/bert-base-swedish-cased",
+    "e5_index_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/chunk_500__overlap_50__title_off__text/docplus.faiss",
+    "e5_metadata_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/chunk_500__overlap_50__title_off__text/docplus_metadata.jsonl",
+    "e5_model_name": "intfloat/multilingual-e5-large-instruct",
+    "device": "auto",
+    "live_base_url": "https://publikdocplus.regionuppsala.se/",
+    "live_search_path": "/Home/Search",
+    "live_timeout_seconds": 20,
+    "live_max_pages": 1,
+    "live_user_agent": "ActSearchEvaluation/1.0",
+    "sts_live_base_url": "https://sts.search.datatovalue.se/",
+    "sts_live_search_path": "/",
+    "sts_live_timeout_seconds": 20,
+    "sts_live_max_pages": 1,
+    "sts_live_user_agent": "ActSearchEvaluation/1.0",
+    "bm25_max_chars": 500,
+    "bm25_overlap": 50,
+    "bm25_include_title_chunk": false,
+    "bm25_use_chunking": true,
+    "hybrid_bm25_weight": 1.0,
+    "hybrid_e5_weight": 1.0
+  },
+  "run_metadata": {
+    "method": "hybrid_e5",
+    "model_name": "intfloat/multilingual-e5-large-instruct",
+    "experiment": "form-submissions-latest-hybrid-e5-sweep",
+    "config_slug": "chunk_500__overlap_50__title_off__text",
+    "text_source": "text",
+    "qrels_source": "form_submissions",
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "include_title_chunk": false,
+    "index_dir": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/chunk_500__overlap_50__title_off__text",
+    "qrels_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/qrels/qrels_from_form_submissions.csv"
+  }
+}

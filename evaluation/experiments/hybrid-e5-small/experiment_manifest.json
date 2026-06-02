@@ -1,0 +1,31 @@
+{
+  "created_at_utc": "2026-06-02T05:55:01+00:00",
+  "method": "hybrid_e5",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "top_k": 20,
+  "chunk_sizes": [
+    150
+  ],
+  "overlaps": [
+    25
+  ],
+  "include_title_chunk": [
+    true
+  ],
+  "batch_size": 8,
+  "device": "auto",
+  "model_name": "intfloat/multilingual-e5-large-instruct",
+  "text_source": "text",
+  "qrels_source": "form_submissions",
+  "qrels_path": "/home/isak/Repos/ActSearchDemo/evaluation/qrels_from_form_submissions_clean.csv",
+  "reuse_vector_indexes": true,
+  "vector_index_search_roots": [
+    "/home/isak/Repos/ActSearchDemo/evaluation/experiments"
+  ],
+  "form_db_path": "/home/isak/Repos/ActSearchDemo/flask/output/form_submissions/form_submissions.sqlite3",
+  "exclude_submission_ids": [],
+  "include_non_relevant": false,
+  "include_qrels_metadata": false,
+  "form_query_type": null,
+  "form_audit_output": null
+}

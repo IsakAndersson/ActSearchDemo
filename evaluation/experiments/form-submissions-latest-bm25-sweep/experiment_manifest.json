@@ -1,0 +1,37 @@
+{
+  "created_at_utc": "2026-06-02T05:23:46+00:00",
+  "method": "bm25",
+  "parsed_dir": "/home/isak/Repos/ActSearchDemo/flask/output/parsed",
+  "top_k": 20,
+  "chunk_sizes": [
+    100,
+    150,
+    250,
+    500,
+    1000
+  ],
+  "overlaps": [
+    50
+  ],
+  "include_title_chunk": [
+    true
+  ],
+  "batch_size": 8,
+  "device": "auto",
+  "model_name": null,
+  "text_source": "text",
+  "qrels_source": "form_submissions",
+  "qrels_path": "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-bm25-sweep/qrels/qrels_from_form_submissions.csv",
+  "form_db_path": "/home/isak/Repos/ActSearchDemo/flask/output/form_submissions/form_submissions.sqlite3",
+  "exclude_submission_ids": [
+    1,
+    2,
+    6,
+    7,
+    15
+  ],
+  "include_non_relevant": false,
+  "include_qrels_metadata": true,
+  "form_query_type": "form_submissions_clean",
+  "form_audit_output": null
+}
