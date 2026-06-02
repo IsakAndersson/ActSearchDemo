@@ -33,7 +33,7 @@ except ImportError:
 
 
 METHOD_ORDER: Sequence[str] = ("bm25", "dense_e5", "hybrid_e5", "docplus_live")
-METRIC_ORDER: Sequence[str] = ("NDCG@10 (query)", "NDCG@10 (info need)")
+METRIC_ORDER: Sequence[str] = ("NDCG@10 (query)",)
 COLOR_MAP = {
     "bm25": "#4c78a8",
     "dense_e5": "#f58518",
@@ -89,7 +89,7 @@ def _plot_ndcg_bars(
     ax.set_xticklabels(METRIC_ORDER, rotation=15, ha="right")
     ax.set_ylabel("Score")
     ax.set_ylim(0, 1.08)
-    ax.set_title("Form submissions: nDCG@10 by retrieval method")
+    ax.set_title("Form submissions: nDCG@10 for queries by retrieval method")
     ax.grid(axis="y", color="#d9d9d9", linewidth=0.8)
     ax.set_axisbelow(True)
     ax.legend(loc="upper right")
