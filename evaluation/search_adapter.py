@@ -53,16 +53,16 @@ class SearchConfig:
     model_name: str = "KBLab/bert-base-swedish-cased"
     e5_index_path: str = str(
         Path(
-            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/hybrid-e5-small/"
+            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/"
             "indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/"
-            "chunk_150__overlap_25__title_on__text/docplus.faiss"
+            "chunk_250__overlap_50__title_on__text/docplus.faiss"
         )
     )
     e5_metadata_path: str = str(
         Path(
-            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/hybrid-e5-small/"
+            "/home/isak/Repos/ActSearchDemo/evaluation/experiments/form-submissions-latest-hybrid-e5-sweep/"
             "indexes/hybrid_e5/intfloat-multilingual-e5-large-instruct/"
-            "chunk_150__overlap_25__title_on__text/docplus_metadata.jsonl"
+            "chunk_250__overlap_50__title_on__text/docplus_metadata.jsonl"
         )
     )
     e5_model_name: str = "intfloat/multilingual-e5-large-instruct"
