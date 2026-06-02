@@ -46,7 +46,7 @@ VARIANT_SPECS: Sequence[Tuple[str, str]] = (
 )
 METRIC_SPECS: Sequence[Tuple[str, object, str, str]] = (
     ("ndcg@10", nDCG @ 10, "nDCG@10", "#1f77b4"),
-    ("rr@100", RR @ 100, "RR@100", "#d62728"),
+    ("rr@20", RR @ 20, "RR@20", "#d62728"),
     ("recall@20", Recall @ 20, "Recall@20", "#2ca02c"),
 )
 VARIANT_LINESTYLES = {
@@ -228,13 +228,13 @@ def main() -> None:
     parser.add_argument(
         "--top-k",
         type=int,
-        default=100,
-        help="Top-k documents to retrieve. Must be at least 100 for RR@100.",
+        default=20,
+        help="Top-k documents to retrieve. Must be at least 20 for RR@20.",
     )
     args = parser.parse_args()
 
-    if args.top_k < 100:
-        raise ValueError("--top-k must be at least 100 to compute RR@100 correctly.")
+    if args.top_k < 20:
+        raise ValueError("--top-k must be at least 20 to compute RR@20 correctly.")
 
     output_dir = Path(args.output_dir).resolve()
     qrels_path = str(Path(args.qrels_path).resolve())
